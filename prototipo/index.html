@@ -1,0 +1,1141 @@
+<title>CheckObra</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: app de una columna pensada para el pulgar y con guantes (operario); en pantallas anchas el panel admin abre a dos columnas.
+   Identidad: chapa de obra — gris acero, amarillo de seguridad para la acción principal, tipografía condensada de cartelería. */
+:root{
+  --bg:#eef0ec; --surface:#ffffff; --sunk:#e3e6e0; --ink:#1a1e22; --muted:#59616a; --line:#d2d6cf;
+  --accent:#f0a500; --accent-ink:#1a1e22; --accent-soft:#fff1cc;
+  --ok:#1d7f46; --ok-soft:#dcf1e3; --warn:#9a5b00; --warn-soft:#fbead0; --bad:#b3261e; --bad-soft:#f9dedc;
+  --shadow:0 1px 2px rgba(20,24,28,.08),0 4px 14px rgba(20,24,28,.06);
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111417; --surface:#1a1f24; --sunk:#14181c; --ink:#e9ece7; --muted:#9aa2aa; --line:#2b3239;
+  --accent:#f5b72e; --accent-ink:#15181b; --accent-soft:#3a2f12;
+  --ok:#4cc27e; --ok-soft:#173326; --warn:#e9a647; --warn-soft:#3a2b14; --bad:#f2766d; --bad-soft:#3d1c1a;
+  --shadow:0 1px 2px rgba(0,0,0,.4); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111417; --surface:#1a1f24; --sunk:#14181c; --ink:#e9ece7; --muted:#9aa2aa; --line:#2b3239;
+  --accent:#f5b72e; --accent-ink:#15181b; --accent-soft:#3a2f12;
+  --ok:#4cc27e; --ok-soft:#173326; --warn:#e9a647; --warn-soft:#3a2b14; --bad:#f2766d; --bad-soft:#3d1c1a;
+  --shadow:0 1px 2px rgba(0,0,0,.4); color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-tap-highlight-color:transparent}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--ink)}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;letter-spacing:.01em;text-wrap:balance;margin:0;line-height:1.1}
+h1{font-size:2rem} h2{font-size:1.4rem} h3{font-size:1.15rem}
+p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.mono,.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:.92em}
+.eyebrow{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.09em;font-size:.85rem;color:var(--muted);font-weight:600}
+.muted{color:var(--muted)}
+.small{font-size:.875rem}
+
+.wrap{max-width:640px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 120px;display:flex;flex-direction:column;gap:18px}
+.wrap.wide{max-width:1120px}
+
+/* barra superior */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--ink);color:var(--bg)}
+.top-in{max-width:1120px;margin:0 auto;display:flex;align-items:center;gap:12px;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.brand{display:flex;align-items:center;gap:8px;font-family:var(--f-display);font-size:1.35rem;font-weight:700;letter-spacing:.02em}
+.brand svg{flex:none}
+.who{margin-left:auto;text-align:right;line-height:1.15;min-width:0}
+.who b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+.who span{font-size:.78rem;opacity:.7;text-transform:uppercase;letter-spacing:.07em}
+.top .btn-s{background:transparent;border:1px solid color-mix(in srgb,var(--bg) 35%,transparent);color:var(--bg);border-radius:8px;padding:8px 12px;min-height:40px;cursor:pointer}
+.conn{width:10px;height:10px;border-radius:50%;flex:none;background:var(--muted)}
+.conn.ok{background:var(--ok)} .conn.lento{background:var(--accent)} .conn.local{background:var(--accent)} .conn.error{background:var(--bad)}
+.banner{max-width:1120px;margin:0 auto;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));font-size:.9rem;background:var(--warn-soft);color:var(--warn)}
+.banner-band{background:var(--warn-soft)}
+
+/* botones */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:0 20px;border-radius:var(--r);border:1.5px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer;text-decoration:none;color:var(--ink);text-align:center}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.dark{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.danger{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn.ghost{background:transparent}
+.btn.block{width:100%}
+.btn.sm{min-height:40px;padding:0 14px;font-size:.92rem}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row > .btn{flex:1 1 140px}
+.row > .btn.sm{flex:0 0 auto}
+.fl .crit,.badbox .crit{align-self:flex-start}
+
+/* tarjetas y chips */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow);min-width:0}
+.card.flat{box-shadow:none}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 9px;border-radius:999px;white-space:nowrap;background:var(--sunk);color:var(--muted)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)} .chip.warn{background:var(--warn-soft);color:var(--warn)} .chip.bad{background:var(--bad-soft);color:var(--bad)} .chip.acc{background:var(--accent-soft);color:var(--warn)}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.chip.plain::before{display:none}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}
+.kv dt{color:var(--muted);font-size:.9rem}
+.kv dd{margin:0;font-weight:500;min-width:0;overflow-wrap:anywhere}
+
+/* formularios */
+label.f{display:flex;flex-direction:column;gap:6px;font-weight:600}
+label.f small{font-weight:400;color:var(--muted)}
+.inp,select.inp,textarea.inp{width:100%;min-height:52px;padding:12px 14px;border-radius:var(--r);border:1.5px solid var(--line);background:var(--surface);font-size:1.05rem}
+textarea.inp{min-height:84px;resize:vertical}
+.inp:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.err{color:var(--bad);font-weight:600;font-size:.92rem}
+.check{display:flex;gap:12px;align-items:flex-start;font-weight:500;cursor:pointer;padding:6px 0}
+.check input{width:24px;height:24px;flex:none;accent-color:var(--accent);margin-top:1px}
+
+/* login */
+.login{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding-block:40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.login-brand{text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px}
+.login-brand h1{font-size:2.6rem}
+.dots{display:flex;gap:14px;justify-content:center}
+.dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--ink);display:block}
+.dots i.on{background:var(--ink)}
+.dots.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.keypad{display:grid;grid-template-columns:repeat(3,76px);gap:12px}
+.key{height:68px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);font-family:var(--f-display);font-size:1.9rem;font-weight:600;cursor:pointer}
+.key:active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.key.fn{font-family:var(--f-body);font-size:.9rem;font-weight:600;color:var(--muted)}
+.hint{font-size:.88rem;color:var(--muted);text-align:center;max-width:32ch}
+
+/* home operario */
+.start{display:flex;flex-direction:column;align-items:flex-start;gap:6px;width:100%;padding:22px;border-radius:16px;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer;text-align:left;box-shadow:var(--shadow)}
+.start b{font-family:var(--f-display);font-size:2rem;line-height:1}
+.on-card{border-left:6px solid var(--ok)}
+.list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.li{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:14px 16px;border-top:1px solid var(--line);align-items:center;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%;cursor:pointer;color:var(--ink)}
+.li:first-child{border-top:0}
+.li:hover{background:var(--sunk)}
+.li .t{font-weight:600;min-width:0}
+.li .s{font-size:.86rem;color:var(--muted);grid-column:1;min-width:0}
+.li .chip{grid-row:1/span 2;grid-column:2}
+.empty{padding:22px;text-align:center;color:var(--muted);border:1.5px dashed var(--line);border-radius:14px}
+
+/* flujo */
+.steps{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.steps span{height:5px;border-radius:3px;background:var(--line)}
+.steps span.done{background:var(--ink)} .steps span.cur{background:var(--accent)}
+.step-head{display:flex;flex-direction:column;gap:6px}
+.flow-nav{position:fixed;left:0;right:0;bottom:0;z-index:8;background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(8px);border-top:1px solid var(--line);padding-top:12px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.flow-nav .in{max-width:640px;margin:0 auto;display:grid;grid-template-columns:1fr 2fr;gap:10px}
+
+.eq-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.eq{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:14px;border-radius:12px;border:2px solid var(--line);background:var(--surface);cursor:pointer;text-align:left;min-width:0;color:var(--ink)}
+.eq .code{font-family:var(--f-mono);font-size:.82rem;color:var(--muted)}
+.eq .nm{font-family:var(--f-display);font-size:1.2rem;font-weight:700;line-height:1.1}
+.eq .meta{font-size:.82rem;color:var(--muted)}
+.eq.sel{border-color:var(--accent);background:var(--accent-soft)}
+.eq[disabled]{opacity:.6;cursor:not-allowed}
+.eq .chip{margin-top:4px}
+
+.gps-box{display:flex;flex-direction:column;gap:6px;padding:16px;border-radius:12px;background:var(--ok-soft);color:var(--ok)}
+.gps-box .num{font-size:1.1rem;color:var(--ink)}
+.photo{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:220px;border:2px dashed var(--line);border-radius:14px;background:var(--surface);cursor:pointer;padding:16px;text-align:center;position:relative;overflow:hidden}
+.photo img{border-radius:10px;max-height:60vh;width:auto}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+
+.cl-head{position:sticky;top:calc(env(safe-area-inset-top,0px) + 60px);z-index:5;background:var(--bg);padding-block:10px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ink);transition:width .2s}
+.sec{display:flex;flex-direction:column;gap:0;border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.sec h3{padding:14px 16px;background:var(--sunk);display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.sec h3 .num{font-size:.8rem;color:var(--muted);font-weight:500}
+.item{padding:14px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.item[data-v="falla"]{background:var(--bad-soft)}
+.item[data-v="ok"] .it-t{color:var(--muted)}
+.it-t{font-weight:500}
+.crit{display:inline-block;font-size:.68rem;font-weight:700;letter-spacing:.08em;background:var(--bad);color:#fff;border-radius:4px;padding:1px 6px;margin-right:6px;vertical-align:2px}
+.seg{display:grid;grid-template-columns:1fr 1fr .7fr;gap:8px}
+.seg button{min-height:48px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);font-weight:700;cursor:pointer;color:var(--ink)}
+.seg button.on.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.seg button.on.falla{background:var(--bad);border-color:var(--bad);color:#fff}
+.seg button.on.na{background:var(--muted);border-color:var(--muted);color:var(--surface)}
+.seg button[disabled]{opacity:.35;cursor:not-allowed}
+.falla-box{display:flex;flex-direction:column;gap:8px}
+.falla-box .thumb{max-width:160px;border-radius:8px}
+.item.miss{outline:3px solid var(--accent);outline-offset:-3px}
+
+.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.sum div{background:var(--sunk);border-radius:10px;padding:10px;text-align:center}
+.sum b{display:block;font-family:var(--f-display);font-size:1.8rem;line-height:1}
+.sum span{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.warnbox{padding:14px 16px;border-radius:12px;background:var(--warn-soft);color:var(--warn);font-weight:500}
+.badbox{padding:14px 16px;border-radius:12px;background:var(--bad-soft);color:var(--bad);font-weight:500}
+.sig-wrap{border:1.5px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;position:relative;touch-action:none}
+.sig-wrap canvas{display:block;width:100%;height:180px}
+.sig-wrap .base{position:absolute;left:16px;right:16px;bottom:36px;border-top:1px dashed #9aa;pointer-events:none}
+.sig-wrap .x{position:absolute;left:16px;bottom:40px;color:#9aa;font-family:var(--f-display);font-size:1.3rem;pointer-events:none}
+
+.verdict{border-radius:16px;padding:26px 22px;display:flex;flex-direction:column;gap:10px;color:#fff}
+.verdict.apto{background:var(--ok)} .verdict.observaciones{background:#9a5b00} .verdict.no_apto{background:var(--bad)}
+.verdict h1{font-size:2.6rem}
+
+/* admin */
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.tab{flex:none;min-height:44px;padding:0 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer;color:var(--ink)}
+.tab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:2px}
+.kpi b{font-family:var(--f-display);font-size:2.4rem;line-height:1}
+.kpi span{font-size:.85rem;color:var(--muted)}
+.kpi.bad b{color:var(--bad)} .kpi.warn b{color:var(--warn)}
+.cols{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;align-items:start}
+.att{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+.att:first-child{border-top:0}
+.att .sev{width:10px;height:36px;border-radius:3px;background:var(--muted)}
+.att .sev.bad{background:var(--bad)} .att .sev.warn{background:var(--accent)}
+.att .t{font-weight:600} .att .s{font-size:.86rem;color:var(--muted)}
+.att > div{min-width:0}
+.filters{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.filters label{font-size:.82rem;font-weight:600;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+.filters .inp{min-height:44px;padding:8px 10px;font-size:.95rem}
+.jrow{display:grid;grid-template-columns:96px 1.2fr 1fr 1fr auto;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);cursor:pointer;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%;color:var(--ink)}
+.jrow:first-child{border-top:0}
+.jrow:hover{background:var(--sunk)}
+.jrow > *{min-width:0}
+.jrow .d{font-family:var(--f-mono);font-size:.85rem;line-height:1.3}
+.jrow .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jrow .s{font-size:.84rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flags{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.det-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.det-grid img{border-radius:10px;width:100%}
+.fl{display:flex;flex-direction:column;gap:6px;padding:12px 0;border-top:1px solid var(--line)}
+.fl:first-child{border-top:0}
+.allitems{display:flex;flex-direction:column;font-size:.92rem}
+.allitems div{display:grid;grid-template-columns:1fr auto;gap:10px;padding:6px 0;border-top:1px dashed var(--line)}
+details summary{cursor:pointer;font-weight:600;min-height:40px;display:flex;align-items:center}
+.eqrow{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:start;padding:14px 16px;border-top:1px solid var(--line)}
+.eqrow:first-child{border-top:0}
+.eqrow > div{min-width:0}
+.eqcode{font-family:var(--f-mono);font-weight:500;background:var(--sunk);border-radius:6px;padding:4px 8px;font-size:.85rem}
+.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.modal{position:fixed;inset:0;z-index:30;background:rgba(10,12,14,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.modal .card{max-width:720px;width:100%;max-height:86vh;overflow:auto}
+
+#toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:40;background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:600;max-width:min(92vw,520px);text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+
+@media (max-width:860px){
+  .cols,.det-grid{grid-template-columns:1fr}
+  .filters{grid-template-columns:repeat(2,1fr)}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .jrow{grid-template-columns:1fr auto;gap:2px 12px}
+  .jrow .d{grid-column:1/-1;color:var(--muted)}
+  .jrow .flags{grid-row:2/span 3;grid-column:2;align-self:center}
+}
+@media (max-width:480px){
+  h1{font-size:1.75rem}
+  .form-grid{grid-template-columns:1fr}
+  .keypad{grid-template-columns:repeat(3,72px)}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div id="app"></div>
+<div id="toast" hidden></div>
+
+<script>
+'use strict';
+/* ==================== Plantillas de checklist ==================== */
+const C = 1; // ítem crítico: si falla, el equipo queda bloqueado
+const MANG = ['Mangueras y acoples hidráulicos sin fisuras, roces ni pérdidas', C];
+const BLQ = {
+  doc: ['Documentación', [
+    ['Operador habilitado y capacitado para este equipo', C],
+    ['Seguro del equipo vigente'],
+    ['Manual del operador y tabla de cargas en cabina'],
+    ['Service / mantenimiento al día según registro'],
+    ['Matafuego cargado, precintado y con tarjeta vigente', C],
+    ['Botiquín de primeros auxilios completo']]],
+  fluidos: ['Motor y fluidos (con motor frío)', [
+    ['Aceite de motor en nivel'],
+    ['Refrigerante en nivel'],
+    ['Aceite hidráulico en nivel'],
+    ['Combustible suficiente para la jornada'],
+    ['Sin pérdidas de aceite, combustible o refrigerante', C],
+    ['Filtro de aire / indicador de restricción en verde'],
+    ['Correas sin fisuras y con tensión correcta'],
+    ['Batería con bornes ajustados y sin sulfato']]],
+  cabina: ['Cabina y elementos de seguridad', [
+    ['Cinturón de seguridad en buen estado y abrocha', C],
+    ['Estructura ROPS/FOPS sin daños ni modificaciones', C],
+    ['Asiento firme y regulado'],
+    ['Vidrios sin roturas que impidan la visión'],
+    ['Espejos limpios y bien orientados'],
+    ['Escalones y pasamanos firmes y limpios de barro o aceite'],
+    ['Tablero sin testigos de falla al arrancar', C],
+    ['Bocina funciona', C],
+    ['Alarma de retroceso funciona', C],
+    ['Luces de trabajo y baliza funcionan'],
+    ['Limpiaparabrisas funciona'],
+    ['Cabina ordenada, sin objetos sueltos bajo los pedales']]],
+  prueba: ['Prueba de funcionamiento', [
+    ['Frenos de servicio responden', C],
+    ['Freno de estacionamiento retiene el equipo', C],
+    ['Dirección / mandos de traslación responden', C],
+    ['Comandos hidráulicos responden sin tirones'],
+    ['Palanca de bloqueo de mandos funciona', C],
+    ['Sin ruidos, vibraciones ni humo anormales']]],
+  entorno: ['Revisión del lugar de trabajo', [
+    ['Área de trabajo libre de personal no autorizado'],
+    ['Líneas eléctricas aéreas identificadas y a distancia segura', C],
+    ['Servicios enterrados marcados (gas, agua, fibra)'],
+    ['Terreno firme y lejos de bordes de zanja o talud'],
+    ['Señalización y vallado colocados'],
+    ['Comunicación con señalero / radio acordada']]],
+};
+const maq = (id, nombre, ...esp) => ({ id, nombre, medidor: 'horas', secciones: [BLQ.doc, BLQ.fluidos, ...esp, BLQ.cabina, BLQ.prueba, BLQ.entorno] });
+const PLANTILLAS = [
+  maq('excavadora', 'Excavadora',
+    ['Tren de rodaje y estructura', [['Tensión de orugas correcta'], ['Zapatas y bulones completos'], ['Rodillos, rueda guía y cadena sin daños'], ['Mandos finales sin pérdidas'], ['Giro de tornamesa sin juego anormal'], ['Contrapeso firme']]],
+    ['Equipo de trabajo', [['Balde, dientes y cuchillas en buen estado'], ['Pasadores y bujes trabados y engrasados'], ['Enganche rápido trabado con su seguro', C], ['Cilindros sin pérdidas ni rayas en el vástago'], MANG, ['Pluma y brazo sin fisuras visibles']]]),
+  maq('retroexcavadora', 'Retroexcavadora',
+    ['Ruedas y chasis', [['Neumáticos con presión correcta y sin cortes'], ['Tuercas de rueda completas y ajustadas'], ['Estabilizadores bajan y retienen', C], ['Traba de giro del brazo colocada para traslado', C]]],
+    ['Equipo de trabajo', [['Pala frontal y cuchilla en buen estado'], ['Balde retro y dientes en buen estado'], ['Pasadores y bujes trabados y engrasados'], ['Cilindros sin pérdidas'], MANG]]),
+  maq('cargadora', 'Cargadora frontal',
+    ['Ruedas y chasis', [['Neumáticos con presión correcta y sin cortes'], ['Tuercas de rueda completas y ajustadas'], ['Articulación central sin juego y traba de transporte presente', C], ['Ejes y diferenciales sin pérdidas']]],
+    ['Equipo de trabajo', [['Balde y cuchilla en buen estado'], ['Brazos de levante sin fisuras'], ['Pasadores trabados y engrasados'], ['Enganche rápido trabado', C], MANG]]),
+  maq('motoniveladora', 'Motoniveladora',
+    ['Ruedas y tándem', [['Neumáticos con presión correcta y sin cortes'], ['Tuercas de rueda completas y ajustadas'], ['Tándem sin pérdidas'], ['Articulación sin juego']]],
+    ['Equipo de trabajo', [['Cuchilla y cantoneras en buen estado'], ['Círculo y cremallera sin daños'], ['Escarificador / ripper con dientes completos'], ['Cilindros sin pérdidas'], MANG]]),
+  maq('topadora', 'Topadora',
+    ['Tren de rodaje', [['Tensión de orugas correcta'], ['Zapatas y bulones completos'], ['Rodillos y rueda guía sin daños'], ['Rueda motriz y segmentos sin desgaste excesivo']]],
+    ['Equipo de trabajo', [['Hoja y cantoneras en buen estado'], ['Brazos de empuje y muñones sin fisuras'], ['Ripper y dientes en buen estado'], ['Cilindros sin pérdidas'], MANG]]),
+  maq('rodillo', 'Rodillo compactador',
+    ['Tambor y ruedas', [['Tambor sin daños'], ['Raspadores ajustados'], ['Neumáticos con presión correcta (si tiene)'], ['Articulación central sin juego y traba presente', C]]],
+    ['Sistemas', [['Vibración enciende y corta'], ['Rociadores de agua y tanque cargado'], ['Parada de emergencia / hombre muerto funciona', C], MANG]]),
+  maq('minicargadora', 'Minicargadora',
+    ['Ruedas u orugas', [['Neumáticos u orugas en buen estado'], ['Tuercas de rueda completas y ajustadas']]],
+    ['Equipo y seguridad', [['Barra de seguridad y sensor de asiento bloquean los mandos', C], ['Puerta o rejilla delantera en su lugar'], ['Implemento enganchado con las trabas cerradas', C], ['Traba de brazos para servicio presente'], ['Cilindros sin pérdidas'], MANG]]),
+  maq('telescopico', 'Manipulador telescópico',
+    ['Ruedas y chasis', [['Neumáticos con presión correcta y sin cortes'], ['Tuercas de rueda completas y ajustadas'], ['Estabilizadores bajan y retienen', C], ['Nivelación de chasis funciona']]],
+    ['Pluma y carga', [['Pluma sin fisuras; las secciones deslizan sin ruido'], ['Horquillas sin fisuras y trabadas', C], ['Implemento correcto y trabado', C], ['Indicador de momento de carga funciona', C], ['Tabla de cargas legible en cabina'], ['Cadenas o cables de extensión en buen estado'], MANG]]),
+  { id: 'camioneta', nombre: 'Camioneta', medidor: 'km', secciones: [
+    ['Documentación', [['Licencia de conducir vigente y categoría correcta', C], ['Cédula del vehículo'], ['Seguro y comprobante de pago vigentes', C], ['VTV / RTO vigente'], ['Matafuego cargado y vigente', C], ['Botiquín completo']]],
+    ['Exterior', [['Neumáticos con presión y dibujo correctos', C], ['Rueda de auxilio, gato y llave de rueda'], ['Luces altas, bajas, giros, freno y retroceso', C], ['Espejos sanos y regulados'], ['Parabrisas sin roturas en el campo visual'], ['Carga en caja asegurada'], ['Balizas triangulares (2)'], ['Pértiga con banderín y luz (en obra minera)']]],
+    ['Motor y fluidos', [['Aceite de motor en nivel'], ['Refrigerante en nivel'], ['Líquido de frenos en nivel'], ['Agua del lavaparabrisas'], ['Combustible suficiente'], ['Sin pérdidas debajo del vehículo', C]]],
+    ['Cabina', [['Cinturones de seguridad funcionan', C], ['Bocina funciona', C], ['Tablero sin testigos de falla', C], ['Limpiaparabrisas funciona'], ['Radio o celular cargado para comunicación'], ['Kit antiderrame']]],
+    ['Prueba de manejo', [['Frenos responden de forma pareja', C], ['Freno de mano retiene', C], ['Dirección sin juego ni ruidos', C]]],
+  ]},
+  { id: 'volcador', nombre: 'Camión volcador', medidor: 'km', secciones: [
+    ['Documentación', [['Licencia profesional vigente', C], ['Habilitación de carga (RUTA) vigente'], ['Seguro vigente', C], ['RTO vigente'], ['Matafuego cargado y vigente', C], ['Botiquín completo']]],
+    ['Neumáticos y chasis', [['Neumáticos con presión correcta y sin cortes', C], ['Tuercas de rueda completas'], ['Elásticos sin hojas rotas'], ['Guardabarros y paragolpes firmes']]],
+    ['Motor y fluidos', [['Aceite de motor en nivel'], ['Refrigerante en nivel'], ['Combustible y urea (AdBlue) suficientes'], ['Sin pérdidas de fluidos', C], ['Correas en buen estado']]],
+    ['Frenos de aire', [['Presión de aire carga en tiempo normal', C], ['Tanques de aire purgados'], ['Frenos de servicio responden', C], ['Freno de estacionamiento retiene', C], ['Freno motor funciona']]],
+    ['Caja volcadora', [['Caja apoyada y traba de vuelco colocada', C], ['Cilindro de vuelco sin pérdidas'], ['Compuerta trasera y trabas en buen estado'], ['Lona o cobertor de carga'], ['Puntal de seguridad presente para mantenimiento']]],
+    ['Cabina', [['Cinturón de seguridad funciona', C], ['Bocina funciona', C], ['Alarma de retroceso funciona', C], ['Luces y baliza funcionan', C], ['Espejos sanos y regulados'], ['Tablero sin testigos de falla', C], ['Tacógrafo funcionando']]],
+  ]},
+];
+const TPL = Object.fromEntries(PLANTILLAS.map(t => [t.id, t]));
+const tplItems = t => t.secciones.flatMap(([sec, items], si) => items.map(([txt, crit], ii) => ({ id: si + '.' + ii, sec, txt, crit: !!crit })));
+const RES = { apto: ['Apto', 'ok'], observaciones: ['Apto con observaciones', 'warn'], no_apto: ['No apto · bloqueado', 'bad'] };
+const MIN_CHECK_S = 120;
+
+/* ==================== Utilidades ==================== */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const fFecha = ms => { const d = new Date(ms); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; };
+const fHora = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const dayKey = ms => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const fDur = s => s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${pad(s % 60)} s`;
+const fNum = n => n == null || n === '' ? '—' : Number(n).toLocaleString('es-AR', { maximumFractionDigits: 1 });
+const unidad = m => m === 'km' ? 'km' : 'h';
+const rid = () => Math.random().toString(36).slice(2, 8);
+const fechaLarga = () => new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+const ls = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+};
+let toastT;
+function toast(msg, ms = 3200) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
+const mapsUrl = g => `https://www.google.com/maps?q=${g.lat},${g.lng}`;
+
+/* ==================== Datos (nube compartida o local) ==================== */
+const LOCAL_DEMO = {
+  config: { app: { adminPin: '0000', empresa: 'Concivi', obras: ['Ruta 5 · Tramo Norte (ejemplo)', 'Planta de áridos (ejemplo)', 'Barrio Los Álamos (ejemplo)'] } },
+  operarios: { 'op-1': { nombre: 'Operario de prueba', pin: '1234', activo: true } },
+  equipos: {
+    'EX-01': { codigo: 'EX-01', nombre: 'Excavadora CAT 320', tipo: 'excavadora', identificacion: 'Serie de ejemplo', ultimoMedidor: 4820, estado: 'operativo', activo: true },
+    'CM-09': { codigo: 'CM-09', nombre: 'Camioneta Hilux', tipo: 'camioneta', identificacion: 'Patente de ejemplo', ultimoMedidor: 81240, estado: 'operativo', activo: true },
+  },
+  jornadas: {},
+};
+const store = {
+  db: null, mode: 'cargando', subs: {},
+  async init() {
+    let db = null;
+    try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch (e) { db = null; }
+    if (db) { this.db = db; this.mode = 'nube'; }
+    else {
+      this.mode = 'local';
+      for (const [k, v] of Object.entries(LOCAL_DEMO)) if (!ls.get('co_' + k)) ls.set('co_' + k, v);
+    }
+  },
+  watch(coll, cb) {
+    if (this.mode === 'nube') {
+      let q = this.db.collection(coll);
+      if (coll === 'jornadas') q = q.orderBy('inicioMs', 'desc').limit(500);
+      return q.onSnapshot(s => cb(s.docs.map(d => ({ id: d.id, ...d.data() })), s.metadata), e => dbError(e));
+    }
+    const emit = () => cb(Object.entries(ls.get('co_' + coll, {})).map(([id, v]) => ({ id, ...v })), { fromCache: false });
+    (this.subs[coll] ||= []).push(emit); emit();
+    return () => {};
+  },
+  async raw(op, coll, id, data) {
+    if (this.mode === 'nube') {
+      const ref = this.db.collection(coll).doc(id);
+      return op === 'set' ? ref.set(data) : op === 'update' ? ref.update(data) : ref.delete();
+    }
+    const all = ls.get('co_' + coll, {});
+    if (op === 'set') all[id] = data;
+    else if (op === 'update') all[id] = deepMerge(all[id] || {}, data);
+    else delete all[id];
+    if (!ls.set('co_' + coll, all)) throw { code: 'quota_exceeded', message: 'Sin espacio en el teléfono' };
+    (this.subs[coll] || []).forEach(f => f());
+  },
+};
+function deepMerge(a, b) { const o = { ...a }; for (const [k, v] of Object.entries(b)) o[k] = v && typeof v === 'object' && !Array.isArray(v) && a[k] && typeof a[k] === 'object' ? deepMerge(a[k], v) : v; return o; }
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, j) => setTimeout(() => j({ code: 'timeout' }), ms))]);
+
+/* Guardado con bandeja de salida: si no hay señal, queda en el teléfono y se reenvía después. */
+const OUTBOX = 'co_outbox';
+async function save(op, coll, id, data) {
+  try { await withTimeout(store.raw(op, coll, id, data), 12000); return true; }
+  catch (e) {
+    if (e && (e.code === 'invalid_argument' || e.code === 'quota_exceeded' || e.code === 'revoked' || e.code === 'not_granted')) { writeErr(e); return false; }
+    const ob = ls.get(OUTBOX, []); ob.push({ op, coll, id, data, ts: Date.now() });
+    if (ls.set(OUTBOX, ob)) { S.pend = ob.length; toast('Sin señal: quedó guardado en el teléfono y se envía apenas haya conexión.', 4500); return true; }
+    writeErr(e); return false;
+  }
+}
+let flushing = false;
+async function flushOutbox() {
+  if (flushing) return; const ob = ls.get(OUTBOX, []); if (!ob.length) { S.pend = 0; return; }
+  flushing = true;
+  while (ob.length) {
+    const x = ob[0];
+    try { await withTimeout(store.raw(x.op, x.coll, x.id, x.data), 12000); ob.shift(); ls.set(OUTBOX, ob); }
+    catch (e) { if (e && e.code === 'invalid_argument') { ob.shift(); ls.set(OUTBOX, ob); continue; } break; }
+  }
+  S.pend = ob.length; flushing = false;
+  if (!ob.length) toast('Datos pendientes enviados.');
+  render();
+}
+function writeErr(e) {
+  const c = e && e.code;
+  if (c === 'invalid_argument') toast('No se pudo guardar: tu acceso es de solo lectura. Pedile al dueño de la app permiso de Colaborador.', 6000);
+  else if (c === 'quota_exceeded') toast('No se pudo guardar: la base de datos está llena. Borrá jornadas viejas desde Administración.', 6000);
+  else toast('No se pudo guardar. Probá de nuevo en un momento.', 5000);
+}
+function dbError(e) { S.conn = 'error'; render(); }
+
+/* ==================== Estado ==================== */
+const S = {
+  equipos: [], operarios: [], jornadas: [], config: null, got: new Set(),
+  conn: 'cargando', pend: 0,
+  user: null, view: 'login', pin: '', pinErr: false,
+  flow: null, resultId: null, cierre: null, opDetail: null,
+  adm: { tab: 'resumen', detail: null, f: null, liberar: null, nota: '', addEq: null, addOp: null, nuevaObra: '', confirm: null, csv: null, newPin: '' },
+};
+const cfg = () => S.config || { adminPin: '0000', obras: [], empresa: 'Concivi' };
+const eqById = id => S.equipos.find(e => e.id === id);
+const draftKey = () => 'co_draft_' + (S.user ? S.user.id : '');
+
+async function boot() {
+  render();
+  await store.init();
+  S.conn = store.mode === 'local' ? 'local' : 'cargando';
+  const timer = setTimeout(() => { if (S.conn === 'cargando') { S.conn = 'lento'; render(); } }, 10000);
+  const got = (k, meta) => { S.got.add(k); if (store.mode === 'nube' && meta && !meta.fromCache && S.conn !== 'error') { S.conn = 'ok'; clearTimeout(timer); } schedule(); };
+  store.watch('config', (d, m) => { S.config = d.find(x => x.id === 'app') || null; got('config', m); });
+  store.watch('operarios', (d, m) => { S.operarios = d; got('operarios', m); });
+  store.watch('equipos', (d, m) => { S.equipos = d.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '')); got('equipos', m); });
+  store.watch('jornadas', (d, m) => { S.jornadas = d.sort((a, b) => b.inicioMs - a.inicioMs); got('jornadas', m); });
+  S.pend = ls.get(OUTBOX, []).length;
+  if (S.pend) setTimeout(flushOutbox, 3000);
+  addEventListener('online', flushOutbox);
+  setInterval(() => { if (ls.get(OUTBOX, []).length) flushOutbox(); }, 45000);
+}
+
+/* Render diferido si el usuario está escribiendo, para no perder el foco. */
+let pendingRender = false;
+function schedule() {
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && $('#app').contains(a)) { pendingRender = true; return; }
+  render();
+}
+document.addEventListener('focusout', () => setTimeout(() => { if (pendingRender) { pendingRender = false; render(); } }, 0));
+
+let lastKey = '';
+function render() {
+  const key = viewKey(), y = scrollY;
+  let h;
+  if (S.view === 'login') h = vLogin();
+  else h = vTop() + (S.user.rol === 'op' ? vOp() : vAdmin());
+  $('#app').innerHTML = h;
+  if (key === lastKey) scrollTo(0, y); else scrollTo(0, 0);
+  lastKey = key;
+  if ($('#sig')) initFirma();
+}
+const viewKey = () => [S.view, S.user && S.user.rol, S.flow && S.flow.step, S.resultId, !!S.cierre, S.opDetail, S.adm.tab, S.adm.detail].join('|');
+
+/* ==================== Vistas: comunes ==================== */
+const MARK = `<svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="5" fill="var(--accent)"/><path d="M7 13.5l4 4 8-9" fill="none" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+function connInfo() {
+  const p = S.pend ? ` · ${S.pend} pendiente${S.pend > 1 ? 's' : ''} de envío` : '';
+  return {
+    cargando: ['cargando', 'Conectando…'], ok: ['ok', 'Sincronizado' + p], lento: ['lento', 'Sin conexión con la base' + p],
+    local: ['local', 'Modo local: los datos quedan solo en este dispositivo' + p], error: ['error', 'Se perdió la conexión con la base de datos' + p],
+  }[S.conn];
+}
+function vTop() {
+  const [c, t] = connInfo();
+  const ban = S.conn === 'lento' ? 'No se puede llegar a la base de datos. Lo que ves puede estar desactualizado; lo que cargues se guarda en el teléfono.'
+    : S.conn === 'error' ? 'Se cortó la conexión con la base de datos. Recargá la página para reconectar.'
+    : S.conn === 'local' ? 'Modo local: esta vista no tiene la base compartida. Los datos quedan solo en este dispositivo.'
+    : S.pend ? `${S.pend} registro${S.pend > 1 ? 's' : ''} esperando señal para enviarse.` : '';
+  return `<header class="top"><div class="top-in">
+    <div class="brand">${MARK}<span>CheckObra</span></div>
+    <div class="who"><b>${esc(S.user.nombre)}</b><span>${S.user.rol === 'op' ? 'Operario' : 'Administración'}</span></div>
+    <span class="conn ${c}" title="${esc(t)}" aria-label="${esc(t)}"></span>
+    <button class="btn-s" data-act="logout">Salir</button>
+  </div></header>${ban ? `<div class="banner-band"><div class="banner">${esc(ban)}</div></div>` : ''}`;
+}
+function chipRes(r) { const [t, c] = RES[r] || ['—', '']; return `<span class="chip ${c}">${t}</span>`; }
+function chipEstado(e) {
+  if (e.estado === 'bloqueado') return '<span class="chip bad">Bloqueado</span>';
+  if (e.estado === 'fuera') return '<span class="chip">Fuera de servicio</span>';
+  const ab = S.jornadas.find(j => j.equipoId === e.id && j.estado === 'abierta');
+  if (ab) return '<span class="chip acc">En uso</span>';
+  return '<span class="chip ok">Operativo</span>';
+}
+
+/* ==================== Login ==================== */
+function vLogin() {
+  const ready = S.got.has('operarios') && S.got.has('config');
+  const dots = [0, 1, 2, 3].map(i => `<i class="${i < S.pin.length ? 'on' : ''}"></i>`).join('');
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'].map(k =>
+    k === 'del' ? `<button class="key fn" data-act="pin" data-k="del" aria-label="Borrar">Borrar</button>`
+    : k === 'ok' ? `<button class="key fn" data-act="pin" data-k="clr" aria-label="Limpiar">Limpiar</button>`
+    : `<button class="key" data-act="pin" data-k="${k}">${k}</button>`).join('');
+  return `<main class="login">
+    <div class="login-brand">${MARK.replace('width="26" height="26"', 'width="54" height="54"')}<h1>CheckObra</h1><p class="muted">Control pre-operacional de equipos · ${esc(cfg().empresa || 'Concivi')}</p></div>
+    <p class="eyebrow">Ingresá tu PIN</p>
+    <div class="dots ${S.pinErr ? 'shake' : ''}" aria-live="polite">${dots}</div>
+    ${S.pinErr ? '<p class="err">PIN incorrecto o usuario inactivo</p>' : ''}
+    <div class="keypad">${keys}</div>
+    <p class="hint">${ready ? 'PIN de prueba: operario 1234 · administración 0000' : 'Cargando usuarios…'}</p>
+  </main>`;
+}
+function pinKey(k) {
+  S.pinErr = false;
+  if (k === 'del') S.pin = S.pin.slice(0, -1);
+  else if (k === 'clr') S.pin = '';
+  else if (S.pin.length < 4) S.pin += k;
+  if (S.pin.length === 4) {
+    const pin = S.pin; S.pin = '';
+    if (pin === String(cfg().adminPin || '0000')) { S.user = { rol: 'admin', id: 'admin', nombre: 'Supervisor' }; S.view = 'app'; }
+    else {
+      const o = S.operarios.find(o => String(o.pin) === pin && o.activo !== false);
+      if (o) { S.user = { rol: 'op', id: o.id, nombre: o.nombre }; S.view = 'app'; }
+      else S.pinErr = true;
+    }
+  }
+  render();
+}
+
+/* ==================== Operario ==================== */
+function vOp() {
+  if (S.flow) return vFlow();
+  if (S.resultId) return vResult();
+  if (S.cierre) return vCierre();
+  if (S.opDetail) return `<main class="wrap"><button class="btn ghost sm" data-act="opBack" style="align-self:flex-start">← Volver</button>${vDetalle(S.jornadas.find(j => j.id === S.opDetail), false)}</main>`;
+  return vOpHome();
+}
+function vOpHome() {
+  const abierta = S.jornadas.find(j => j.operarioId === S.user.id && j.estado === 'abierta');
+  const draft = ls.get(draftKey(), null);
+  const mias = S.jornadas.filter(j => j.operarioId === S.user.id).slice(0, 8);
+  let main;
+  if (abierta) {
+    main = `<section class="card on-card"><p class="eyebrow">Jornada en curso</p>
+      <h2>${esc(abierta.equipoCodigo)} · ${esc(abierta.equipoNombre)}</h2>
+      <dl class="kv"><dt>Obra</dt><dd>${esc(abierta.obra)}</dd><dt>Desde</dt><dd class="num">${fHora(abierta.inicioMs)} h</dd>
+      <dt>${abierta.medidor === 'km' ? 'Odómetro' : 'Horómetro'} inicial</dt><dd class="num">${fNum(abierta.medIni)} ${unidad(abierta.medidor)}</dd>
+      <dt>Checklist</dt><dd>${chipRes(abierta.resultado)}</dd></dl>
+      <button class="btn dark block" data-act="abrirCierre" data-id="${abierta.id}">Cerrar jornada</button></section>`;
+  } else if (draft && draft.equipoId) {
+    const e = eqById(draft.equipoId);
+    main = `<section class="card"><p class="eyebrow">Checklist sin terminar</p><h2>${esc(e ? e.codigo + ' · ' + e.nombre : 'Equipo')}</h2>
+      <p class="muted">Quedó guardado en este teléfono. Podés seguir desde donde lo dejaste.</p>
+      <div class="row"><button class="btn primary" data-act="seguirDraft">Continuar</button><button class="btn ghost" data-act="descartarDraft">${S.adm.confirm === 'draft' ? 'Tocá de nuevo para descartar' : 'Descartar'}</button></div></section>`;
+  } else {
+    main = `<button class="start" data-act="nuevaJornada"><span class="eyebrow" style="color:inherit;opacity:.75">Antes de operar</span><b>Iniciar jornada</b><span>Elegí el equipo, registrá ubicación y foto, y completá el checklist.</span></button>`;
+  }
+  const lista = mias.length ? `<div class="list">${mias.map(j => `<button class="li" data-act="opVer" data-id="${j.id}">
+      <span class="t">${esc(j.equipoCodigo)} · ${esc(j.equipoNombre)}</span>${chipRes(j.resultado)}
+      <span class="s">${fFecha(j.inicioMs)} ${fHora(j.inicioMs)} · ${esc(j.obra)}${j.estado === 'abierta' ? ' · en curso' : ''}</span></button>`).join('')}</div>`
+    : `<div class="empty">Todavía no registraste jornadas. Tu historial va a aparecer acá.</div>`;
+  return `<main class="wrap"><section><p class="eyebrow">${esc(fechaLarga())}</p><h1>Hola, ${esc(S.user.nombre.split(' ')[0])}</h1></section>
+    ${main}<h2>Tus últimas jornadas</h2>${lista}</main>`;
+}
+
+/* ---------- Flujo de inicio ---------- */
+const STEPS = ['Equipo y obra', 'Ubicación', 'Foto con el equipo', 'Checklist', 'Firma y envío'];
+function newFlow() { return { step: 0, equipoId: '', obra: '', medIni: '', gps: null, gpsErr: '', gpsBusy: false, ubicRef: '', selfie: null, resp: {}, t0: null, tAcum: 0, firma: null, decl: false, motivoRapido: '', err: '' }; }
+let draftT;
+function saveDraft() {
+  clearTimeout(draftT);
+  draftT = setTimeout(() => {
+    if (!S.flow) return;
+    const { gpsBusy, err, ...d } = S.flow;
+    if (d.t0) { d.tAcum = d.tAcum + (Date.now() - d.t0); d.t0 = null; } // el tiempo fuera de la app no cuenta
+    ls.set(draftKey(), d);
+  }, 400);
+}
+
+function vFlow() {
+  const f = S.flow;
+  const steps = STEPS.map((_, i) => `<span class="${i < f.step ? 'done' : i === f.step ? 'cur' : ''}"></span>`).join('');
+  const body = [stEquipo, stGps, stFoto, stChecklist, stFirma][f.step]();
+  const nextLbl = f.step === 4 ? 'Enviar checklist' : 'Siguiente';
+  return `<main class="wrap"><div class="step-head"><div class="steps">${steps}</div><p class="eyebrow">Paso ${f.step + 1} de 5 · ${STEPS[f.step]}</p></div>
+    ${body}${f.err ? `<p class="err" role="alert">${esc(f.err)}</p>` : ''}</main>
+    <nav class="flow-nav"><div class="in"><button class="btn" data-act="flowBack">${f.step ? 'Atrás' : 'Cancelar'}</button><button class="btn primary" data-act="flowNext" id="nextBtn">${nextLbl}</button></div></nav>`;
+}
+function stEquipo() {
+  const f = S.flow;
+  const eqs = S.equipos.filter(e => e.activo !== false);
+  const grid = eqs.length ? `<div class="eq-grid">${eqs.map(e => {
+    const ab = S.jornadas.find(j => j.equipoId === e.id && j.estado === 'abierta');
+    const dis = e.estado === 'bloqueado' || e.estado === 'fuera' || !!ab;
+    const t = TPL[e.tipo];
+    return `<button class="eq ${f.equipoId === e.id ? 'sel' : ''}" data-act="pickEq" data-id="${esc(e.id)}" ${dis ? 'disabled' : ''} aria-pressed="${f.equipoId === e.id}">
+      <span class="code">${esc(e.codigo)}</span><span class="nm">${esc(e.nombre)}</span><span class="meta">${esc(t ? t.nombre : e.tipo)}</span>
+      ${chipEstado(e)}${ab ? `<span class="meta">Lo usa ${esc(ab.operarioNombre)}</span>` : ''}${e.estado === 'bloqueado' ? `<span class="meta">Avisá al supervisor</span>` : ''}</button>`;
+  }).join('')}</div>` : `<div class="empty">No hay equipos cargados. Pedile al supervisor que los dé de alta.</div>`;
+  const e = eqById(f.equipoId), t = e && TPL[e.tipo];
+  const obras = cfg().obras || [];
+  return `<h1>¿Con qué equipo trabajás hoy?</h1>${grid}
+    <label class="f">Obra o frente de trabajo
+      <select class="inp" data-bind="obra" id="f-obra"><option value="">Elegí la obra</option>${obras.map(o => `<option ${o === f.obra ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>
+    ${e ? `<label class="f">${t && t.medidor === 'km' ? 'Odómetro inicial (km)' : 'Horómetro inicial (horas)'}
+      <input class="inp num" id="f-med" type="number" inputmode="decimal" step="0.1" data-bind="medIni" value="${esc(f.medIni)}" placeholder="${e.ultimoMedidor != null ? e.ultimoMedidor : ''}">
+      <small>Último registrado: <span class="num">${fNum(e.ultimoMedidor)} ${unidad(t && t.medidor)}</span></small></label>` : ''}`;
+}
+function stGps() {
+  const f = S.flow, g = f.gps;
+  const box = g ? `<div class="gps-box"><b>Ubicación registrada</b><span class="num">${g.lat.toFixed(6)}, ${g.lng.toFixed(6)}</span>
+      <span>Precisión ±${Math.round(g.acc)} m · ${fHora(g.ts)} h</span><a href="${mapsUrl(g)}" target="_blank" rel="noopener" style="color:inherit;font-weight:600">Ver en el mapa ↗</a></div>
+      <button class="btn" data-act="gps">Volver a tomar</button>`
+    : `<button class="btn primary block" data-act="gps" ${f.gpsBusy ? 'disabled' : ''}>${f.gpsBusy ? 'Buscando señal GPS…' : 'Tomar ubicación GPS'}</button>`;
+  return `<h1>¿Dónde estás?</h1><p class="muted">Se guarda el punto donde se hizo el control del equipo.</p>${box}
+    ${f.gpsErr ? `<div class="warnbox">${esc(f.gpsErr)}</div>
+      <label class="f">Referencia del lugar <small>Obligatoria si no hay GPS. Ej.: "Obrador km 12, playa de equipos".</small>
+      <input class="inp" id="f-ref" data-bind="ubicRef" value="${esc(f.ubicRef)}" maxlength="120"></label>` : ''}`;
+}
+function stFoto() {
+  const f = S.flow;
+  return `<h1>Foto con el equipo</h1><p class="muted">Sacate una foto en la que se vea el equipo. Se le agrega fecha, hora, equipo y ubicación.</p>
+    <label class="photo" for="f-selfie">${f.selfie ? `<img src="${f.selfie}" alt="Foto del operario con el equipo">` : `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="4"/></svg><b>Abrir cámara</b>`}
+      <input class="vh" type="file" id="f-selfie" accept="image/*" capture="user" data-file="selfie"></label>
+    ${f.selfie ? '<label class="btn" for="f-selfie">Sacar otra</label>' : ''}`;
+}
+function itemHtml(it, r) {
+  const v = r && r.v;
+  return `<div class="item" id="it-${it.id.replace('.', '-')}" data-v="${v || ''}">
+    <div class="it-t">${it.crit ? '<span class="crit">CRÍTICO</span>' : ''}${esc(it.txt)}</div>
+    <div class="seg" role="group" aria-label="${esc(it.txt)}">
+      <button class="${v === 'ok' ? 'on ok' : ''}" data-act="resp" data-id="${it.id}" data-v="ok" aria-pressed="${v === 'ok'}">Bien</button>
+      <button class="${v === 'falla' ? 'on falla' : ''}" data-act="resp" data-id="${it.id}" data-v="falla" aria-pressed="${v === 'falla'}">Falla</button>
+      <button class="${v === 'na' ? 'on na' : ''}" data-act="resp" data-id="${it.id}" data-v="na" ${it.crit ? 'disabled title="Un punto crítico no puede quedar como No aplica"' : ''} aria-pressed="${v === 'na'}">N/A</button>
+    </div>
+    ${v === 'falla' ? `<div class="falla-box">
+      <textarea class="inp" id="n-${it.id}" data-nota="${it.id}" placeholder="¿Qué encontraste? (obligatorio)" maxlength="300">${esc(r.nota || '')}</textarea>
+      ${r.foto ? `<img class="thumb" src="${r.foto}" alt="Foto de la falla">` : ''}
+      <label class="btn sm" for="ff-${it.id}">${r.foto ? 'Cambiar foto' : 'Agregar foto de la falla'}</label>
+      <input class="vh" type="file" id="ff-${it.id}" accept="image/*" capture="environment" data-file="falla" data-id="${it.id}"></div>` : ''}
+  </div>`;
+}
+function clStats() {
+  const e = eqById(S.flow.equipoId), items = tplItems(TPL[e.tipo]), r = S.flow.resp;
+  const done = items.filter(i => r[i.id] && r[i.id].v).length;
+  const fallas = items.filter(i => r[i.id] && r[i.id].v === 'falla');
+  return { items, done, total: items.length, fallas, crit: fallas.filter(i => i.crit) };
+}
+function clHead() {
+  const s = clStats();
+  return `<div class="cl-head" id="clhead"><div class="row" style="justify-content:space-between"><b class="num">${s.done} / ${s.total} revisados</b>
+    <span>${s.fallas.length ? `<span class="chip ${s.crit.length ? 'bad' : 'warn'}">${s.fallas.length} falla${s.fallas.length > 1 ? 's' : ''}${s.crit.length ? ` · ${s.crit.length} crítica${s.crit.length > 1 ? 's' : ''}` : ''}</span>` : '<span class="chip ok">Sin fallas</span>'}</span></div>
+    <div class="bar"><i style="width:${(s.done / s.total * 100).toFixed(1)}%"></i></div></div>`;
+}
+function stChecklist() {
+  const f = S.flow, e = eqById(f.equipoId), t = TPL[e.tipo];
+  if (!f.t0) f.t0 = Date.now();
+  const its = tplItems(t);
+  const secs = t.secciones.map(([sec, items], si) => `<section class="sec"><h3>${esc(sec)} <span class="num">${items.length} puntos</span></h3>
+    ${its.filter(i => i.id.startsWith(si + '.')).map(i => itemHtml(i, f.resp[i.id])).join('')}</section>`).join('');
+  return `<div><h1>${esc(t.nombre)}</h1><p class="muted">${esc(e.codigo)} · ${esc(e.nombre)}. Revisá cada punto con el equipo apagado, salvo la prueba de funcionamiento.</p></div>
+    ${clHead()}${secs}`;
+}
+function setResp(id, v) {
+  const f = S.flow; const cur = f.resp[id] || {};
+  f.resp[id] = v === 'falla' ? { ...cur, v } : { v };
+  const it = tplItems(TPL[eqById(f.equipoId).tipo]).find(i => i.id === id);
+  const el = $('#it-' + id.replace('.', '-'));
+  el.outerHTML = itemHtml(it, f.resp[id]);
+  $('#clhead').outerHTML = clHead();
+  if (v === 'falla') setTimeout(() => { const n = $('#n-' + CSS.escape(id)); n && n.focus(); }, 30);
+  saveDraft();
+}
+function resultado(s) { return s.crit.length ? 'no_apto' : s.fallas.length ? 'observaciones' : 'apto'; }
+function checklistSecs() { const f = S.flow; return Math.round((f.tAcum + (f.t0 ? Date.now() - f.t0 : 0)) / 1000); }
+function stFirma() {
+  const f = S.flow, s = clStats(), r = resultado(s), dur = f.durS ?? checklistSecs();
+  const rapido = dur < MIN_CHECK_S;
+  return `<h1>Revisá y firmá</h1>
+    <div class="sum"><div><b>${s.total - s.fallas.length}</b><span>Bien / N/A</span></div><div><b style="color:var(--warn)">${s.fallas.length - s.crit.length}</b><span>Fallas</span></div><div><b style="color:var(--bad)">${s.crit.length}</b><span>Críticas</span></div></div>
+    ${r === 'no_apto' ? `<div class="badbox"><b>El equipo no puede operar.</b> Hay fallas en puntos críticos. Al enviar, el equipo queda bloqueado hasta que el supervisor lo libere.<ul style="margin:8px 0 0;padding-left:18px">${s.crit.map(i => `<li>${esc(i.txt)}</li>`).join('')}</ul></div>`
+      : r === 'observaciones' ? `<div class="warnbox">El equipo puede operar, con ${s.fallas.length} observación${s.fallas.length > 1 ? 'es' : ''} que le llegan al supervisor.</div>` : ''}
+    ${rapido ? `<div class="warnbox"><b>Completaste el checklist en ${fDur(dur)}.</b> Una revisión real lleva al menos ${MIN_CHECK_S / 60} minutos. Queda registrado para el supervisor.
+      <label class="f" style="margin-top:10px;color:var(--ink)">¿Por qué fue tan rápido? <small>Opcional</small><input class="inp" id="f-rap" data-bind="motivoRapido" value="${esc(f.motivoRapido)}" maxlength="140"></label></div>` : ''}
+    <label class="check"><input type="checkbox" id="f-decl" data-bind="decl" ${f.decl ? 'checked' : ''}><span>Declaro que revisé personalmente cada punto de este checklist y que la información es verdadera.</span></label>
+    <div><p class="eyebrow" style="margin-bottom:6px">Firma</p><div class="sig-wrap"><canvas id="sig" aria-label="Firmá con el dedo"></canvas><span class="x">✕</span><span class="base"></span></div>
+    <div class="row" style="justify-content:space-between;margin-top:6px"><span class="small muted">Firmá con el dedo</span><button class="btn ghost sm" data-act="sigClear">Borrar firma</button></div></div>`;
+}
+
+/* firma */
+function initFirma() {
+  const c = $('#sig'), ctx = c.getContext('2d'), dpr = Math.min(2, devicePixelRatio || 1);
+  const w = c.clientWidth, h = c.clientHeight; c.width = w * dpr; c.height = h * dpr; ctx.scale(dpr, dpr);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+  ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111827';
+  if (S.flow.firma) { const im = new Image(); im.onload = () => ctx.drawImage(im, 0, 0, w, h); im.src = S.flow.firma; }
+  let drawing = false, last = null;
+  const pt = e => { const b = c.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  c.onpointerdown = e => { drawing = true; last = pt(e); c.setPointerCapture(e.pointerId); ctx.beginPath(); ctx.arc(last[0], last[1], 1.2, 0, 7); ctx.fillStyle = '#111827'; ctx.fill(); };
+  c.onpointermove = e => { if (!drawing) return; const p = pt(e); ctx.beginPath(); ctx.moveTo(last[0], last[1]); ctx.lineTo(p[0], p[1]); ctx.stroke(); last = p; };
+  c.onpointerup = c.onpointercancel = () => { if (!drawing) return; drawing = false; S.flow.firma = c.toDataURL('image/png'); saveDraft(); };
+}
+
+/* fotos */
+function loadImg(src) { return new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; }); }
+async function compress(src, max, q, marca) {
+  const im = await loadImg(src);
+  const sc = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+  const w = Math.round(im.naturalWidth * sc), h = Math.round(im.naturalHeight * sc);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d'); x.drawImage(im, 0, 0, w, h);
+  if (marca) {
+    const fs = Math.max(12, Math.round(w * 0.034)), lh = fs * 1.3, bh = lh * marca.length + fs * 0.9;
+    x.fillStyle = 'rgba(0,0,0,.62)'; x.fillRect(0, h - bh, w, bh);
+    x.fillStyle = '#f5b72e'; x.fillRect(0, h - bh, Math.max(4, w * 0.012), bh);
+    x.font = `600 ${fs}px Barlow, Arial, sans-serif`; x.textBaseline = 'top';
+    marca.forEach((l, i) => { x.fillStyle = i === 0 ? '#f5b72e' : '#fff'; x.fillText(l, fs * 0.9, h - bh + fs * 0.45 + i * lh, w - fs * 1.4); });
+  }
+  return c.toDataURL('image/jpeg', q);
+}
+async function onFile(input) {
+  const file = input.files && input.files[0]; if (!file) return;
+  const url = URL.createObjectURL(file);
+  try {
+    const f = S.flow, e = eqById(f.equipoId), now = Date.now();
+    if (input.dataset.file === 'selfie') {
+      const g = f.gps;
+      const marca = [`CheckObra · ${e.codigo} ${e.nombre}`, `${S.user.nombre} · ${fFecha(now)} ${fHora(now)} h`,
+        g ? `GPS ${g.lat.toFixed(5)}, ${g.lng.toFixed(5)} ±${Math.round(g.acc)} m` : `Sin GPS · ${f.ubicRef}`, f.obra];
+      f.selfie = await compress(url, 720, 0.62, marca); f.selfieMs = now; f.err = '';
+      render();
+    } else {
+      const id = input.dataset.id;
+      f.resp[id].foto = await compress(url, 480, 0.55, [`${e.codigo} · ${fFecha(now)} ${fHora(now)} h`]);
+      const it = tplItems(TPL[e.tipo]).find(i => i.id === id);
+      $('#it-' + id.replace('.', '-')).outerHTML = itemHtml(it, f.resp[id]);
+    }
+    saveDraft();
+  } catch (err) { toast('No se pudo leer la foto. Probá sacarla de nuevo.'); }
+  finally { URL.revokeObjectURL(url); }
+}
+
+/* gps */
+function tomarGps() {
+  const f = S.flow; f.gpsErr = '';
+  if (!navigator.geolocation) { f.gpsErr = 'Este dispositivo no ofrece GPS al navegador. Escribí una referencia del lugar.'; render(); return; }
+  f.gpsBusy = true; render();
+  navigator.geolocation.getCurrentPosition(p => {
+    f.gpsBusy = false; f.gps = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, ts: Date.now() }; f.gpsErr = ''; saveDraft(); render();
+  }, err => {
+    f.gpsBusy = false;
+    f.gpsErr = err.code === 1 ? 'La ubicación está bloqueada para esta página (en la vista de claude.ai el navegador no la permite). Escribí una referencia del lugar para seguir.'
+      : err.code === 3 ? 'No se encontró señal GPS a tiempo. Probá al aire libre o escribí una referencia del lugar.'
+      : 'No se pudo obtener la ubicación. Escribí una referencia del lugar.';
+    render();
+  }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+}
+
+function flowNext() {
+  const f = S.flow; f.err = '';
+  if (f.step === 0) {
+    const e = eqById(f.equipoId);
+    if (!e) f.err = 'Elegí el equipo.';
+    else if (!f.obra) f.err = 'Elegí la obra.';
+    else if (f.medIni === '' || isNaN(+f.medIni) || +f.medIni < 0) f.err = `Cargá el ${TPL[e.tipo].medidor === 'km' ? 'odómetro' : 'horómetro'} inicial.`;
+    else if (e.ultimoMedidor != null && +f.medIni < +e.ultimoMedidor) f.err = `El valor es menor al último registrado (${fNum(e.ultimoMedidor)}). Revisá el número.`;
+  } else if (f.step === 1) { if (!f.gps && (f.ubicRef || '').trim().length < 3) f.err = f.gpsErr ? 'Escribí una referencia del lugar.' : 'Tomá la ubicación GPS.'; }
+  else if (f.step === 2) { if (!f.selfie) f.err = 'Falta la foto con el equipo.'; }
+  else if (f.step === 3) {
+    const s = clStats();
+    const miss = s.items.find(i => !(f.resp[i.id] && f.resp[i.id].v)) || s.fallas.find(i => !(f.resp[i.id].nota || '').trim());
+    if (miss) {
+      const sinNota = f.resp[miss.id] && f.resp[miss.id].v === 'falla';
+      f.err = sinNota ? 'Describí la falla marcada.' : `Faltan ${s.total - s.done} punto${s.total - s.done > 1 ? 's' : ''} por revisar.`;
+      toast(f.err);
+      const el = $('#it-' + miss.id.replace('.', '-')); el.classList.add('miss'); el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    f.durS = checklistSecs(); f.tAcum = f.durS * 1000; f.t0 = null;
+  } else if (f.step === 4) { return enviar(); }
+  if (!f.err) { f.step++; saveDraft(); }
+  render();
+}
+function flowBack() {
+  const f = S.flow;
+  if (f.step === 0) { S.flow = null; render(); return; }
+  if (f.step === 3 && f.t0) { f.tAcum += Date.now() - f.t0; f.t0 = null; }
+  if (f.step === 4) { delete f.durS; f.t0 = Date.now(); }
+  f.step--; f.err = ''; saveDraft(); render();
+}
+
+async function fitSize(j) {
+  const size = () => JSON.stringify(j).length;
+  if (size() < 240000) return;
+  for (const fl of j.fallas) if (fl.foto) fl.foto = await compress(fl.foto, 320, 0.45);
+  if (size() < 240000) return;
+  j.selfie = await compress(j.selfie, 520, 0.5);
+  for (const fl of j.fallas) if (size() >= 240000 && fl.foto) { fl.foto = null; fl.fotoOmitida = true; }
+}
+let sending = false;
+async function enviar() {
+  const f = S.flow;
+  if (!f.decl) { f.err = 'Marcá la declaración para enviar.'; render(); return; }
+  if (!f.firma) { f.err = 'Falta tu firma.'; render(); return; }
+  if (sending) return; sending = true;
+  const btn = $('#nextBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+  const e = eqById(f.equipoId), t = TPL[e.tipo], s = clStats(), r = resultado(s), now = Date.now();
+  const id = `${dayKey(now).replace(/-/g, '')}-${e.id}-${rid()}`;
+  const respuestas = {}; s.items.forEach(i => respuestas[i.id] = f.resp[i.id].v);
+  const j = {
+    estado: r === 'no_apto' ? 'rechazada' : 'abierta', resultado: r,
+    operarioId: S.user.id, operarioNombre: S.user.nombre,
+    equipoId: e.id, equipoCodigo: e.codigo, equipoNombre: e.nombre, plantilla: t.id, plantillaNombre: t.nombre, medidor: t.medidor,
+    obra: f.obra, medIni: +f.medIni, inicioMs: now, gps: f.gps, ubicRef: f.gps ? '' : f.ubicRef.trim(),
+    selfie: f.selfie, selfieMs: f.selfieMs || now,
+    respuestas, totalItems: s.total,
+    fallas: s.fallas.map(i => ({ id: i.id, sec: i.sec, txt: i.txt, critico: i.crit, nota: f.resp[i.id].nota.trim(), foto: f.resp[i.id].foto || null })),
+    nFallas: s.fallas.length, nCriticas: s.crit.length, fallasResueltas: s.fallas.length === 0,
+    durChecklistS: f.durS, rapido: f.durS < MIN_CHECK_S, motivoRapido: f.motivoRapido || '',
+    firma: f.firma, declaracion: true,
+  };
+  await fitSize(j);
+  const ok = await save('set', 'jornadas', id, j);
+  if (!ok) { sending = false; render(); return; }
+  const upd = { ultimoMedidor: j.medIni, ultimoChecklistMs: now, ultimoOperario: S.user.nombre, ultimoResultado: r };
+  if (r === 'no_apto') Object.assign(upd, { estado: 'bloqueado', motivo: s.crit.map(i => i.txt).join(' · '), bloqueoJornada: id, bloqueoMs: now });
+  await save('update', 'equipos', e.id, upd);
+  ls.del(draftKey()); S.flow = null; S.resultId = id; S.localJ = j; sending = false;
+  render();
+}
+function vResult() {
+  const j = S.jornadas.find(x => x.id === S.resultId) || S.localJ;
+  const r = j.resultado;
+  const txt = r === 'apto' ? 'Podés operar el equipo. Al terminar el día, cerrá la jornada desde la pantalla de inicio.'
+    : r === 'observaciones' ? 'Podés operar con precaución. El supervisor recibe las fallas que marcaste.'
+    : 'No operes este equipo. Quedó bloqueado y el supervisor ya lo ve en su panel. Avisale por radio o teléfono.';
+  return `<main class="wrap"><section class="verdict ${r}"><p class="eyebrow" style="color:inherit;opacity:.8">${esc(j.equipoCodigo)} · ${fHora(j.inicioMs)} h</p>
+    <h1>${RES[r][0]}</h1><p>${txt}</p></section>
+    ${j.fallas.length ? `<section class="card flat"><h3>Fallas registradas</h3>${j.fallas.map(fl => `<div class="fl">${fl.critico ? '<span class="crit">CRÍTICO</span>' : ''}<b>${esc(fl.txt)}</b><span class="muted">${esc(fl.nota)}</span></div>`).join('')}</section>` : ''}
+    <button class="btn dark block" data-act="volverHome">Volver al inicio</button></main>`;
+}
+
+/* ---------- Cierre de jornada ---------- */
+function vCierre() {
+  const j = S.jornadas.find(x => x.id === S.cierre.id); if (!j) return '<main class="wrap"><div class="empty">No se encontró la jornada.</div></main>';
+  const c = S.cierre, u = unidad(j.medidor);
+  return `<main class="wrap"><section><p class="eyebrow">Cierre de jornada</p><h1>${esc(j.equipoCodigo)} · ${esc(j.equipoNombre)}</h1>
+    <p class="muted">Desde las ${fHora(j.inicioMs)} h en ${esc(j.obra)}. ${j.medidor === 'km' ? 'Odómetro' : 'Horómetro'} inicial: <span class="num">${fNum(j.medIni)} ${u}</span></p></section>
+    <label class="f">${j.medidor === 'km' ? 'Odómetro final (km)' : 'Horómetro final (horas)'}<input class="inp num" id="c-med" type="number" inputmode="decimal" step="0.1" data-cbind="medFin" value="${esc(c.medFin)}"></label>
+    <label class="f">Combustible cargado hoy (litros) <small>Opcional</small><input class="inp num" id="c-comb" type="number" inputmode="decimal" data-cbind="litros" value="${esc(c.litros)}"></label>
+    <section class="card flat"><h3>Al dejar el equipo</h3>
+      <label class="check"><input type="checkbox" id="c-1" data-cbind="k1" ${c.k1 ? 'checked' : ''}><span>Estacionado en terreno firme y nivelado, fuera de la circulación</span></label>
+      <label class="check"><input type="checkbox" id="c-2" data-cbind="k2" ${c.k2 ? 'checked' : ''}><span>Implemento apoyado en el piso y freno de estacionamiento puesto</span></label>
+      <label class="check"><input type="checkbox" id="c-3" data-cbind="k3" ${c.k3 ? 'checked' : ''}><span>Motor apagado, llave retirada y cabina cerrada</span></label></section>
+    <label class="check"><input type="checkbox" id="c-falla" data-cbind="falla" ${c.falla ? 'checked' : ''}><span><b>Apareció una falla durante el trabajo</b></span></label>
+    <label class="f">Novedades del día <small>${c.falla ? 'Describí la falla (obligatorio)' : 'Opcional'}</small><textarea class="inp" id="c-nov" data-cbind="novedades" maxlength="500">${esc(c.novedades)}</textarea></label>
+    ${c.err ? `<p class="err" role="alert">${esc(c.err)}</p>` : ''}
+    <div class="row"><button class="btn" data-act="cancelCierre">Cancelar</button><button class="btn dark" data-act="enviarCierre">Cerrar jornada</button></div></main>`;
+}
+async function enviarCierre() {
+  const c = S.cierre, j = S.jornadas.find(x => x.id === c.id); c.err = '';
+  if (c.medFin === '' || isNaN(+c.medFin)) c.err = 'Cargá el valor final.';
+  else if (+c.medFin < +j.medIni) c.err = `El valor final no puede ser menor al inicial (${fNum(j.medIni)}).`;
+  else if (+c.medFin - +j.medIni > (j.medidor === 'km' ? 1500 : 24)) c.err = 'La diferencia es demasiado grande para una jornada. Revisá el número.';
+  else if (!(c.k1 && c.k2 && c.k3)) c.err = 'Confirmá los tres puntos de cómo dejaste el equipo.';
+  else if (c.falla && !(c.novedades || '').trim()) c.err = 'Describí la falla que apareció.';
+  if (c.err) { render(); return; }
+  const now = Date.now();
+  const ok = await save('update', 'jornadas', j.id, { estado: 'cerrada', finMs: now, medFin: +c.medFin, uso: Math.round((+c.medFin - +j.medIni) * 10) / 10, litros: c.litros === '' ? null : +c.litros, novedades: (c.novedades || '').trim(), fallaCierre: !!c.falla, fallaCierreResuelta: !c.falla });
+  if (!ok) return;
+  await save('update', 'equipos', j.equipoId, { ultimoMedidor: +c.medFin });
+  S.cierre = null; toast('Jornada cerrada. ¡Buen descanso!'); render();
+}
+
+/* ==================== Detalle de jornada (admin y operario) ==================== */
+function vDetalle(j, admin) {
+  if (!j) return '<div class="empty">No se encontró la jornada.</div>';
+  const t = TPL[j.plantilla], u = unidad(j.medidor);
+  const flags = [j.ejemplo ? '<span class="chip plain">Ejemplo</span>' : '', j.rapido ? `<span class="chip warn">Checklist en ${fDur(j.durChecklistS)}</span>` : '', !j.gps ? '<span class="chip warn">Sin GPS</span>' : '', j.fallaCierre ? '<span class="chip warn">Falla al cierre</span>' : ''].join('');
+  const fallas = (j.fallas || []).map(fl => `<div class="fl">${fl.critico ? '<span class="crit">CRÍTICO</span>' : ''}<b>${esc(fl.txt)}</b><span class="small muted">${esc(fl.sec)}</span><span>${esc(fl.nota)}</span>
+    ${fl.foto ? `<img src="${fl.foto}" alt="Foto de la falla" style="max-width:260px;border-radius:8px">` : fl.fotoOmitida ? '<span class="small muted">La foto no entró en el registro por tamaño.</span>' : ''}</div>`).join('');
+  const resolver = admin && j.nFallas && !j.fallasResueltas ? `<button class="btn sm" data-act="resolver" data-id="${j.id}">Marcar fallas como reparadas</button>` : (j.nFallas && j.fallasResueltas ? `<span class="chip ok">Reparadas ${j.resueltasMs ? fFecha(j.resueltasMs) : ''}</span>` : '');
+  const all = t ? tplItems(t).map(i => { const v = j.respuestas && j.respuestas[i.id]; return `<div><span>${i.crit ? '<span class="crit">C</span>' : ''}${esc(i.txt)}</span><span class="chip ${v === 'ok' ? 'ok' : v === 'falla' ? 'bad' : 'plain'}">${v === 'ok' ? 'Bien' : v === 'falla' ? 'Falla' : v === 'na' ? 'N/A' : '—'}</span></div>`; }).join('') : '';
+  const borrar = admin ? `<button class="btn ghost sm" data-act="borrarJ" data-id="${j.id}">${S.adm.confirm === 'j-' + j.id ? 'Tocá de nuevo para borrar' : 'Borrar registro'}</button>` : '';
+  return `<section class="card"><div class="row" style="justify-content:space-between"><div><p class="eyebrow">${fFecha(j.inicioMs)} · ${fHora(j.inicioMs)} h</p><h1>${esc(j.equipoCodigo)} · ${esc(j.equipoNombre)}</h1></div>${chipRes(j.resultado)}</div>
+    ${flags ? `<div class="row">${flags}</div>` : ''}
+    <dl class="kv"><dt>Operario</dt><dd>${esc(j.operarioNombre)}</dd><dt>Obra</dt><dd>${esc(j.obra)}</dd><dt>Plantilla</dt><dd>${esc(j.plantillaNombre)} · ${j.totalItems} puntos</dd>
+      <dt>Checklist</dt><dd>${fDur(j.durChecklistS || 0)}${j.motivoRapido ? ` · "${esc(j.motivoRapido)}"` : ''}</dd>
+      <dt>Estado</dt><dd>${j.estado === 'abierta' ? 'Jornada en curso' : j.estado === 'cerrada' ? `Cerrada ${fHora(j.finMs)} h` : 'Rechazada: equipo bloqueado'}</dd>
+      <dt>${j.medidor === 'km' ? 'Odómetro' : 'Horómetro'}</dt><dd class="num">${fNum(j.medIni)} → ${j.medFin != null ? fNum(j.medFin) : '…'} ${u}${j.uso != null ? ` (${fNum(j.uso)} ${u})` : ''}</dd>
+      ${j.litros != null ? `<dt>Combustible</dt><dd class="num">${fNum(j.litros)} L</dd>` : ''}
+      <dt>Ubicación</dt><dd>${j.gps ? `<span class="num">${j.gps.lat.toFixed(5)}, ${j.gps.lng.toFixed(5)}</span> ±${Math.round(j.gps.acc)} m · <a href="${mapsUrl(j.gps)}" target="_blank" rel="noopener">Ver mapa ↗</a>` : `Sin GPS · ${esc(j.ubicRef || '—')}`}</dd>
+    </dl>${j.novedades ? `<div class="${j.fallaCierre ? 'warnbox' : 'card flat'}"><b>Novedades al cierre:</b> ${esc(j.novedades)}${admin && j.fallaCierre && !j.fallaCierreResuelta ? ` <button class="btn sm" data-act="resolverCierre" data-id="${j.id}">Marcar como atendida</button>` : ''}</div>` : ''}</section>
+    <div class="det-grid">
+      <section class="card flat"><div class="row" style="justify-content:space-between"><h3>Fallas (${j.nFallas || 0})</h3>${resolver}</div>${fallas || '<p class="muted">Sin fallas registradas.</p>'}
+        <details><summary>Ver los ${j.totalItems} puntos</summary><div class="allitems">${all}</div></details></section>
+      <section class="card flat"><h3>Foto y firma</h3>${j.selfie ? `<img src="${j.selfie}" alt="Foto del operario con el equipo">` : '<div class="empty">Sin foto (registro de ejemplo)</div>'}
+        ${j.firma ? `<div style="background:#fff;border-radius:10px;padding:6px"><img src="${j.firma}" alt="Firma del operario"></div>` : ''}<p class="small muted">Firmó la declaración jurada de revisión personal.</p>${borrar}</section>
+    </div>`;
+}
+
+/* ==================== Administración ==================== */
+function vAdmin() {
+  const a = S.adm;
+  if (a.detail) return `<main class="wrap wide"><button class="btn ghost sm" data-act="admBack" style="align-self:flex-start">← Volver</button>${vDetalle(S.jornadas.find(j => j.id === a.detail), true)}</main>`;
+  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['equipos', 'Equipos'], ['personal', 'Personal y obras']]
+    .map(([k, l]) => `<button class="tab ${a.tab === k ? 'on' : ''}" data-act="tab" data-k="${k}">${l}</button>`).join('');
+  const body = { resumen: aResumen, jornadas: aJornadas, equipos: aEquipos, personal: aPersonal }[a.tab]();
+  return `<main class="wrap wide"><section><p class="eyebrow">${esc(fechaLarga())}</p><h1>Panel de ${esc(cfg().empresa || 'Concivi')}</h1></section><nav class="tabs">${tabs}</nav>${body}${a.csv != null ? csvModal() : ''}</main>`;
+}
+function aResumen() {
+  const hoy = dayKey(Date.now()), js = S.jornadas, eqs = S.equipos.filter(e => e.activo !== false);
+  const jh = js.filter(j => dayKey(j.inicioMs) === hoy);
+  const abiertas = js.filter(j => j.estado === 'abierta');
+  const bloq = eqs.filter(e => e.estado === 'bloqueado');
+  const pend = js.filter(j => (j.nFallas && !j.fallasResueltas) || (j.fallaCierre && !j.fallaCierreResuelta));
+  const att = [];
+  bloq.forEach(e => att.push(['bad', `${e.codigo} bloqueado`, `${e.motivo || 'Falla crítica'} · desde ${e.bloqueoMs ? fFecha(e.bloqueoMs) + ' ' + fHora(e.bloqueoMs) : '—'}`, `<button class="btn sm" data-act="tab" data-k="equipos">Liberar</button>`]));
+  pend.filter(j => j.resultado !== 'no_apto' || j.fallaCierre).forEach(j => att.push(['warn', `${j.equipoCodigo} · ${j.fallaCierre && !j.fallaCierreResuelta ? 'falla al cierre' : j.nFallas + ' observación' + (j.nFallas > 1 ? 'es' : '')}`, `${j.operarioNombre} · ${fFecha(j.inicioMs)} · ${(j.fallas || []).map(f => f.txt).slice(0, 2).join(', ') || j.novedades || ''}`, `<button class="btn sm" data-act="ver" data-id="${j.id}">Ver</button>`]));
+  js.filter(j => j.rapido && dayKey(j.inicioMs) === hoy).forEach(j => att.push(['warn', `Checklist muy rápido · ${j.equipoCodigo}`, `${j.operarioNombre} lo completó en ${fDur(j.durChecklistS)}`, `<button class="btn sm" data-act="ver" data-id="${j.id}">Ver</button>`]));
+  abiertas.filter(j => Date.now() - j.inicioMs > 14 * 3600e3).forEach(j => att.push(['warn', `Jornada sin cerrar · ${j.equipoCodigo}`, `${j.operarioNombre} · abierta desde ${fFecha(j.inicioMs)} ${fHora(j.inicioMs)}`, `<button class="btn sm" data-act="ver" data-id="${j.id}">Ver</button>`]));
+  const sinCheck = eqs.filter(e => e.estado !== 'fuera' && e.estado !== 'bloqueado' && !jh.some(j => j.equipoId === e.id));
+  const hayEj = js.some(j => j.ejemplo);
+  const loading = !S.got.has('jornadas');
+  return `<div class="kpis">
+      <div class="kpi"><b>${jh.length}</b><span>Checklists hoy</span></div>
+      <div class="kpi"><b>${abiertas.length}</b><span>Equipos trabajando ahora</span></div>
+      <div class="kpi ${bloq.length ? 'bad' : ''}"><b>${bloq.length}</b><span>Equipos bloqueados</span></div>
+      <div class="kpi ${pend.length ? 'warn' : ''}"><b>${pend.length}</b><span>Fallas sin reparar</span></div></div>
+    <div class="cols">
+      <section class="card"><h2>Requiere atención</h2>${loading ? '<p class="muted">Cargando…</p>' : att.length ? `<div>${att.map(([s, t, d, b]) => `<div class="att"><span class="sev ${s}"></span><div><div class="t">${esc(t)}</div><div class="s">${esc(d)}</div></div>${b}</div>`).join('')}</div>` : '<div class="empty">Nada pendiente. Todos los equipos están en orden.</div>'}</section>
+      <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+        <section class="card"><h2>En obra ahora</h2>${abiertas.length ? `<div>${abiertas.map(j => `<button class="li" data-act="ver" data-id="${j.id}"><span class="t">${esc(j.equipoCodigo)} · ${esc(j.operarioNombre)}</span>${chipRes(j.resultado)}<span class="s">${esc(j.obra)} · desde ${fHora(j.inicioMs)} h</span></button>`).join('')}</div>` : '<p class="muted">Ningún equipo con jornada abierta.</p>'}</section>
+        <section class="card flat"><h3>Sin checklist hoy (${sinCheck.length})</h3><p class="small">${sinCheck.length ? sinCheck.map(e => `<span class="eqcode">${esc(e.codigo)}</span>`).join(' ') : 'Todos los equipos operativos ya tienen checklist.'}</p></section>
+        ${hayEj ? `<section class="card flat"><p class="small muted">Hay jornadas de ejemplo cargadas para mostrar el panel.</p><button class="btn sm" data-act="borrarEjemplos">${S.adm.confirm === 'ej' ? 'Tocá de nuevo para confirmar' : 'Borrar jornadas de ejemplo'}</button></section>` : ''}
+      </div></div>`;
+}
+function defFiltro() { const d = new Date(); d.setDate(d.getDate() - 6); return { desde: dayKey(d.getTime()), hasta: dayKey(Date.now()), equipo: '', operario: '', resultado: '' }; }
+function filtradas() {
+  const f = S.adm.f ||= defFiltro();
+  return S.jornadas.filter(j => { const k = dayKey(j.inicioMs); return (!f.desde || k >= f.desde) && (!f.hasta || k <= f.hasta) && (!f.equipo || j.equipoId === f.equipo) && (!f.operario || j.operarioId === f.operario) && (!f.resultado || j.resultado === f.resultado); });
+}
+function aJornadas() {
+  const f = S.adm.f ||= defFiltro(), rows = filtradas();
+  const ops = [...new Map(S.jornadas.map(j => [j.operarioId, j.operarioNombre])).entries()];
+  const opt = (v, l, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
+  return `<section class="card"><div class="filters">
+      <label>Desde<input class="inp" type="date" id="fl-desde" data-fbind="desde" value="${f.desde}"></label>
+      <label>Hasta<input class="inp" type="date" id="fl-hasta" data-fbind="hasta" value="${f.hasta}"></label>
+      <label>Equipo<select class="inp" id="fl-eq" data-fbind="equipo">${opt('', 'Todos', f.equipo)}${S.equipos.map(e => opt(e.id, e.codigo + ' · ' + e.nombre, f.equipo)).join('')}</select></label>
+      <label>Operario<select class="inp" id="fl-op" data-fbind="operario">${opt('', 'Todos', f.operario)}${ops.map(([id, n]) => opt(id, n, f.operario)).join('')}</select></label>
+      <label>Resultado<select class="inp" id="fl-res" data-fbind="resultado">${opt('', 'Todos', f.resultado)}${Object.entries(RES).map(([k, [l]]) => opt(k, l, f.resultado)).join('')}</select></label>
+    </div><div class="row" style="justify-content:space-between"><span class="muted">${rows.length} jornada${rows.length === 1 ? '' : 's'}</span><button class="btn sm dark" data-act="csv" ${rows.length ? '' : 'disabled'}>Exportar a Excel (CSV)</button></div></section>
+    ${rows.length ? `<div class="list">${rows.map(j => `<button class="jrow" data-act="ver" data-id="${j.id}">
+      <span class="d">${fFecha(j.inicioMs)}<br>${fHora(j.inicioMs)}${j.finMs ? '–' + fHora(j.finMs) : ''}</span>
+      <span><span class="t" style="display:block">${esc(j.equipoCodigo)} · ${esc(j.equipoNombre)}</span><span class="s" style="display:block">${esc(j.obra)}</span></span>
+      <span class="t">${esc(j.operarioNombre)}</span>
+      <span class="s">${j.nFallas ? `${j.nFallas} falla${j.nFallas > 1 ? 's' : ''}${j.nCriticas ? ` (${j.nCriticas} crít.)` : ''}` : 'Sin fallas'} · ${j.estado === 'abierta' ? 'en curso' : j.estado === 'cerrada' ? 'cerrada' : 'rechazada'}</span>
+      <span class="flags">${j.ejemplo ? '<span class="chip plain">Ejemplo</span>' : ''}${j.rapido ? '<span class="chip warn">Rápido</span>' : ''}${chipRes(j.resultado)}</span></button>`).join('')}</div>`
+      : '<div class="empty">No hay jornadas con estos filtros.</div>'}`;
+}
+function aEquipos() {
+  const a = S.adm;
+  const rows = S.equipos.map(e => {
+    const t = TPL[e.tipo];
+    const lib = a.liberar === e.id ? `<div style="grid-column:1/-1;display:flex;flex-direction:column;gap:8px"><label class="f">¿Qué se reparó? <textarea class="inp" id="lib-nota" data-abind="nota" placeholder="Ej.: se cambió la manguera del cilindro de pluma">${esc(a.nota)}</textarea></label>
+      <div class="row"><button class="btn sm" data-act="libCancel">Cancelar</button><button class="btn sm primary" data-act="libOk" data-id="${esc(e.id)}">Liberar equipo</button></div></div>` : '';
+    return `<div class="eqrow"><span class="eqcode">${esc(e.codigo)}</span><div><b>${esc(e.nombre)}</b> ${chipEstado(e)}
+      <div class="small muted">${esc(t ? t.nombre : e.tipo)} · ${esc(e.identificacion || '')} · <span class="num">${fNum(e.ultimoMedidor)} ${unidad(t && t.medidor)}</span></div>
+      <div class="small muted">${e.ultimoChecklistMs ? `Último checklist ${fFecha(e.ultimoChecklistMs)} ${fHora(e.ultimoChecklistMs)} · ${esc(e.ultimoOperario || '')}` : 'Sin checklists todavía'}</div>
+      ${e.estado === 'bloqueado' ? `<div class="small" style="color:var(--bad);font-weight:600">Motivo: ${esc(e.motivo || '')}</div>` : ''}
+      ${e.liberadoMs ? `<div class="small muted">Última liberación ${fFecha(e.liberadoMs)}: ${esc(e.liberadoNota || '')}</div>` : ''}</div>
+      <div class="row" style="justify-content:flex-end">${e.estado === 'bloqueado' ? `<button class="btn sm primary" data-act="libAbrir" data-id="${esc(e.id)}">Liberar</button>` : `<button class="btn sm ghost" data-act="toggleFuera" data-id="${esc(e.id)}">${e.estado === 'fuera' ? 'Volver a servicio' : 'Fuera de servicio'}</button>`}</div>${lib}</div>`;
+  }).join('');
+  const n = a.addEq;
+  const form = n ? `<section class="card"><h2>Nuevo equipo</h2><div class="form-grid">
+      <label class="f">Código interno<input class="inp" id="ne-cod" data-nbind="codigo" value="${esc(n.codigo)}" placeholder="EX-11" maxlength="12"></label>
+      <label class="f">Tipo<select class="inp" id="ne-tipo" data-nbind="tipo">${PLANTILLAS.map(t => `<option value="${t.id}" ${n.tipo === t.id ? 'selected' : ''}>${t.nombre}</option>`).join('')}</select></label>
+      <label class="f">Marca y modelo<input class="inp" id="ne-nom" data-nbind="nombre" value="${esc(n.nombre)}" placeholder="Excavadora CAT 320"></label>
+      <label class="f">Patente o N.º de serie<input class="inp" id="ne-id" data-nbind="identificacion" value="${esc(n.identificacion)}"></label>
+      <label class="f">${TPL[n.tipo].medidor === 'km' ? 'Odómetro actual (km)' : 'Horómetro actual (h)'}<input class="inp num" id="ne-med" type="number" inputmode="decimal" data-nbind="med" value="${esc(n.med)}"></label></div>
+      ${n.err ? `<p class="err">${esc(n.err)}</p>` : ''}<div class="row"><button class="btn sm" data-act="eqCancel">Cancelar</button><button class="btn sm primary" data-act="eqSave">Guardar equipo</button></div></section>` : '';
+  return `${form}<section class="card"><div class="row" style="justify-content:space-between"><h2>Flota (${S.equipos.length})</h2>${n ? '' : '<button class="btn sm dark" data-act="eqNuevo">Agregar equipo</button>'}</div>
+    ${S.equipos.length ? `<div>${rows}</div>` : '<div class="empty">Todavía no hay equipos. Agregá el primero.</div>'}</section>
+    <section class="card flat"><h3>Plantillas de checklist</h3><p class="small muted">${PLANTILLAS.map(t => `${t.nombre} (${tplItems(t).length} puntos, ${tplItems(t).filter(i => i.crit).length} críticos)`).join(' · ')}</p></section>`;
+}
+function aPersonal() {
+  const a = S.adm, n = a.addOp;
+  const ops = S.operarios.map(o => `<div class="eqrow"><span class="eqcode">PIN ${esc(String(o.pin).slice(0, 1))}•••</span><div><b>${esc(o.nombre)}</b> ${o.activo === false ? '<span class="chip">Inactivo</span>' : '<span class="chip ok">Activo</span>'}
+      <div class="small muted">${S.jornadas.filter(j => j.operarioId === o.id).length} jornadas registradas</div></div>
+      <button class="btn sm ghost" data-act="toggleOp" data-id="${esc(o.id)}">${o.activo === false ? 'Activar' : 'Desactivar'}</button></div>`).join('');
+  const form = n ? `<div class="form-grid"><label class="f">Nombre y apellido<input class="inp" id="no-nom" data-obind="nombre" value="${esc(n.nombre)}"></label>
+      <label class="f">PIN de 4 números<input class="inp num" id="no-pin" inputmode="numeric" maxlength="4" data-obind="pin" value="${esc(n.pin)}"></label></div>
+      ${n.err ? `<p class="err">${esc(n.err)}</p>` : ''}<div class="row"><button class="btn sm" data-act="opCancel">Cancelar</button><button class="btn sm primary" data-act="opSave">Guardar operario</button></div>` : '<button class="btn sm dark" data-act="opNuevo" style="align-self:flex-start">Agregar operario</button>';
+  const obras = (cfg().obras || []);
+  return `<div class="cols"><section class="card"><h2>Operarios (${S.operarios.length})</h2>${form}${ops ? `<div>${ops}</div>` : '<div class="empty">Sin operarios cargados.</div>'}</section>
+    <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+    <section class="card"><h2>Obras</h2>${obras.length ? `<div>${obras.map((o, i) => `<div class="att" style="grid-template-columns:1fr auto"><div class="t">${esc(o)}</div><button class="btn sm ghost" data-act="obraDel" data-i="${i}">Quitar</button></div>`).join('')}</div>` : '<p class="muted">Sin obras cargadas.</p>'}
+      <div class="row"><input class="inp" id="nueva-obra" data-abind="nuevaObra" value="${esc(a.nuevaObra)}" placeholder="Nombre de la obra" style="flex:1 1 200px"><button class="btn sm dark" data-act="obraAdd">Agregar</button></div></section>
+    <section class="card flat"><h3>PIN de administración</h3><p class="small muted">Es el PIN con el que entrás a este panel.</p>
+      <div class="row"><input class="inp num" id="new-pin" inputmode="numeric" maxlength="4" data-abind="newPin" value="${esc(a.newPin)}" placeholder="Nuevo PIN" style="flex:1 1 140px"><button class="btn sm" data-act="pinSave">Cambiar PIN</button></div></section></div></div>`;
+}
+
+/* CSV */
+function csvTexto() {
+  const q = v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const head = ['Fecha', 'Hora inicio', 'Hora cierre', 'Obra', 'Código', 'Equipo', 'Tipo', 'Operario', 'Medidor inicial', 'Medidor final', 'Uso', 'Unidad', 'Resultado', 'Fallas', 'Críticas', 'Detalle de fallas', 'Fallas reparadas', 'Duración checklist (s)', 'Checklist rápido', 'Latitud', 'Longitud', 'Precisión (m)', 'Referencia sin GPS', 'Estado', 'Novedades', 'Combustible (L)'];
+  const rows = filtradas().map(j => [fFecha(j.inicioMs), fHora(j.inicioMs), j.finMs ? fHora(j.finMs) : '', j.obra, j.equipoCodigo, j.equipoNombre, j.plantillaNombre, j.operarioNombre,
+    j.medIni, j.medFin ?? '', j.uso ?? '', unidad(j.medidor), RES[j.resultado][0], j.nFallas, j.nCriticas, (j.fallas || []).map(f => `${f.txt}: ${f.nota}`).join(' | '), j.nFallas ? (j.fallasResueltas ? 'Sí' : 'No') : '',
+    j.durChecklistS, j.rapido ? 'Sí' : 'No', j.gps ? j.gps.lat.toFixed(6) : '', j.gps ? j.gps.lng.toFixed(6) : '', j.gps ? Math.round(j.gps.acc) : '', j.ubicRef || '', j.estado, j.novedades || '', j.litros ?? '']
+    .map(v => typeof v === 'number' ? String(v).replace('.', ',') : v));
+  return [head, ...rows].map(r => r.map(q).join(';')).join('\r\n');
+}
+async function exportar() {
+  const csv = csvTexto(), name = `checkobra-jornadas-${dayKey(Date.now())}.csv`;
+  let dl = null; try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch (e) {}
+  if (dl) { try { await dl.save({ filename: name, data: '﻿' + csv }); toast('Archivo listo para abrir en Excel.'); return; } catch (e) { if (e && e.code === 'declined') return; } }
+  S.adm.csv = csv; render();
+}
+function csvModal() {
+  return `<div class="modal" role="dialog" aria-modal="true" aria-label="Datos para Excel"><div class="card"><h2>Copiar para Excel</h2>
+    <p class="muted">Esta vista no puede descargar archivos. Copiá el texto y pegalo en una hoja de Excel o Google Sheets (separado por punto y coma).</p>
+    <textarea class="inp mono" id="csv-txt" readonly style="min-height:240px;font-size:.8rem">${esc(S.adm.csv)}</textarea>
+    <div class="row"><button class="btn" data-act="csvClose">Cerrar</button><button class="btn primary" data-act="csvCopy">Copiar</button></div></div></div>`;
+}
+
+/* ==================== Acciones ==================== */
+const A = {
+  pin: b => pinKey(b.dataset.k),
+  logout: () => { S.user = null; S.view = 'login'; S.flow = null; S.resultId = null; S.cierre = null; S.opDetail = null; S.adm.detail = null; render(); },
+  nuevaJornada: () => { S.flow = newFlow(); render(); },
+  seguirDraft: () => { const d = ls.get(draftKey(), null); if (!d) return; S.flow = { ...newFlow(), ...d, t0: d.step === 3 ? Date.now() : null }; render(); },
+  descartarDraft: () => { if (S.adm.confirm === 'draft') { ls.del(draftKey()); S.adm.confirm = null; } else S.adm.confirm = 'draft'; render(); },
+  pickEq: b => { const f = S.flow; if (f.equipoId !== b.dataset.id) { f.equipoId = b.dataset.id; f.resp = {}; f.medIni = ''; f.selfie = null; } f.err = ''; saveDraft(); render(); },
+  gps: tomarGps,
+  resp: b => setResp(b.dataset.id, b.dataset.v),
+  flowNext, flowBack,
+  sigClear: () => { S.flow.firma = null; saveDraft(); initFirma(); },
+  volverHome: () => { S.resultId = null; S.localJ = null; render(); },
+  abrirCierre: b => { S.cierre = { id: b.dataset.id, medFin: '', litros: '', novedades: '', k1: false, k2: false, k3: false, falla: false, err: '' }; render(); },
+  cancelCierre: () => { S.cierre = null; render(); },
+  enviarCierre,
+  opVer: b => { S.opDetail = b.dataset.id; render(); },
+  opBack: () => { S.opDetail = null; render(); },
+  tab: b => { S.adm.tab = b.dataset.k; S.adm.confirm = null; render(); },
+  ver: b => { S.adm.detail = b.dataset.id; render(); },
+  admBack: () => { S.adm.detail = null; S.adm.confirm = null; render(); },
+  resolver: async b => { await save('update', 'jornadas', b.dataset.id, { fallasResueltas: true, resueltasMs: Date.now() }); toast('Fallas marcadas como reparadas.'); },
+  resolverCierre: async b => { await save('update', 'jornadas', b.dataset.id, { fallaCierreResuelta: true }); toast('Novedad marcada como atendida.'); },
+  borrarJ: async b => { const k = 'j-' + b.dataset.id; if (S.adm.confirm !== k) { S.adm.confirm = k; render(); return; } S.adm.confirm = null; S.adm.detail = null; await save('delete', 'jornadas', b.dataset.id); toast('Registro borrado.'); render(); },
+  borrarEjemplos: async () => { if (S.adm.confirm !== 'ej') { S.adm.confirm = 'ej'; render(); return; } S.adm.confirm = null; for (const j of S.jornadas.filter(j => j.ejemplo)) await save('delete', 'jornadas', j.id); toast('Jornadas de ejemplo borradas.'); },
+  csv: exportar,
+  csvClose: () => { S.adm.csv = null; render(); },
+  csvCopy: async () => { const t = $('#csv-txt'); try { await navigator.clipboard.writeText(S.adm.csv); toast('Copiado. Pegalo en Excel.'); } catch (e) { t.focus(); t.select(); toast('Seleccioné el texto: copialo con el menú del teléfono.'); } },
+  libAbrir: b => { S.adm.liberar = b.dataset.id; S.adm.nota = ''; render(); },
+  libCancel: () => { S.adm.liberar = null; render(); },
+  libOk: async b => {
+    if ((S.adm.nota || '').trim().length < 3) { toast('Contá qué se reparó antes de liberar.'); return; }
+    const e = eqById(b.dataset.id), now = Date.now();
+    await save('update', 'equipos', e.id, { estado: 'operativo', motivo: '', liberadoMs: now, liberadoNota: S.adm.nota.trim() });
+    if (e.bloqueoJornada) await save('update', 'jornadas', e.bloqueoJornada, { fallasResueltas: true, resueltasMs: now, reparacion: S.adm.nota.trim() });
+    S.adm.liberar = null; toast(`${e.codigo} liberado.`); render();
+  },
+  toggleFuera: async b => { const e = eqById(b.dataset.id); await save('update', 'equipos', e.id, { estado: e.estado === 'fuera' ? 'operativo' : 'fuera' }); },
+  eqNuevo: () => { S.adm.addEq = { codigo: '', tipo: 'excavadora', nombre: '', identificacion: '', med: '', err: '' }; render(); },
+  eqCancel: () => { S.adm.addEq = null; render(); },
+  eqSave: async () => {
+    const n = S.adm.addEq, cod = n.codigo.trim().toUpperCase().replace(/\s+/g, '-');
+    n.err = !/^[A-Z0-9-]{2,12}$/.test(cod) ? 'El código lleva letras, números o guiones (ej.: EX-11).' : eqById(cod) ? 'Ya existe un equipo con ese código.' : !n.nombre.trim() ? 'Escribí marca y modelo.' : '';
+    if (n.err) { render(); return; }
+    const ok = await save('set', 'equipos', cod, { codigo: cod, nombre: n.nombre.trim(), tipo: n.tipo, identificacion: n.identificacion.trim(), ultimoMedidor: n.med === '' ? null : +n.med, estado: 'operativo', activo: true });
+    if (ok) { S.adm.addEq = null; toast('Equipo agregado.'); render(); }
+  },
+  opNuevo: () => { S.adm.addOp = { nombre: '', pin: '', err: '' }; render(); },
+  opCancel: () => { S.adm.addOp = null; render(); },
+  opSave: async () => {
+    const n = S.adm.addOp;
+    n.err = !n.nombre.trim() ? 'Escribí el nombre.' : !/^\d{4}$/.test(n.pin) ? 'El PIN tiene que tener 4 números.' : n.pin === String(cfg().adminPin) || S.operarios.some(o => String(o.pin) === n.pin) ? 'Ese PIN ya está en uso. Elegí otro.' : '';
+    if (n.err) { render(); return; }
+    const ok = await save('set', 'operarios', 'op-' + rid(), { nombre: n.nombre.trim(), pin: n.pin, activo: true });
+    if (ok) { S.adm.addOp = null; toast('Operario agregado.'); render(); }
+  },
+  toggleOp: async b => { const o = S.operarios.find(x => x.id === b.dataset.id); await save('update', 'operarios', o.id, { activo: o.activo === false }); },
+  obraAdd: async () => { const v = (S.adm.nuevaObra || '').trim(); if (!v) return; await saveConfig({ obras: [...(cfg().obras || []), v] }); S.adm.nuevaObra = ''; render(); },
+  obraDel: async b => { const o = [...(cfg().obras || [])]; o.splice(+b.dataset.i, 1); await saveConfig({ obras: o }); },
+  pinSave: async () => {
+    const p = S.adm.newPin;
+    if (!/^\d{4}$/.test(p)) { toast('El PIN tiene que tener 4 números.'); return; }
+    if (S.operarios.some(o => String(o.pin) === p)) { toast('Ese PIN lo usa un operario. Elegí otro.'); return; }
+    await saveConfig({ adminPin: p }); S.adm.newPin = ''; toast('PIN de administración cambiado.'); render();
+  },
+};
+async function saveConfig(patch) { const c = { ...cfg(), ...patch }; delete c.id; return save('set', 'config', 'app', c); }
+
+document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b || b.disabled) return; const f = A[b.dataset.act]; if (f) { e.preventDefault(); f(b, e); } });
+document.addEventListener('input', e => {
+  const el = e.target, val = el.type === 'checkbox' ? el.checked : el.value;
+  if (el.dataset.bind && S.flow) { S.flow[el.dataset.bind] = val; saveDraft(); }
+  else if (el.dataset.nota && S.flow) { S.flow.resp[el.dataset.nota].nota = val; saveDraft(); }
+  else if (el.dataset.cbind && S.cierre) { S.cierre[el.dataset.cbind] = val; if (el.dataset.cbind === 'falla') render(); }
+  else if (el.dataset.fbind) { S.adm.f[el.dataset.fbind] = val; render(); }
+  else if (el.dataset.nbind && S.adm.addEq) { S.adm.addEq[el.dataset.nbind] = val; if (el.dataset.nbind === 'tipo') render(); }
+  else if (el.dataset.obind && S.adm.addOp) S.adm.addOp[el.dataset.obind] = val;
+  else if (el.dataset.abind) S.adm[el.dataset.abind] = val;
+});
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.dataset.file) onFile(el);
+});
+document.addEventListener('keydown', e => { if (S.view === 'login' && /^[0-9]$/.test(e.key)) pinKey(e.key); else if (S.view === 'login' && e.key === 'Backspace') pinKey('del'); });
+
+boot();
+</script>
