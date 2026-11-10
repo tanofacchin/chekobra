@@ -15,7 +15,7 @@ Primer cliente: Concivi.
 | Base de datos multiempresa (Supabase / Postgres) | `supabase/migrations` — aplicada en el proyecto `checkobra` de Supabase |
 | Plantillas base (13: construcción, vial, transporte y agro) | `plantillas/base.mjs` |
 | App instalable (PWA) conectada a Supabase | `app/` — publicada en GitHub Pages; ingreso de operarios con empresa + legajo + PIN |
-| Integración JDLink / ISO 15143-3 | pendiente (tablas listas) |
+| Integración JDLink / ISO 15143-3 | `supabase/functions/johndeere` — lista; falta habilitar las credenciales de John Deere |
 | Editor de plantillas, avisos por WhatsApp/mail, QR por equipo | pendiente |
 
 ## Cómo está armada la base de datos
@@ -82,3 +82,21 @@ Para probar en local: `cd app && python3 -m http.server 8080` y abrir http://loc
 ## Decisiones pendientes
 - **Telemetría**: registrar la app en developer.deere.com a nombre del producto y pedir acceso a la API ISO 15143-3.
   Cada cliente autoriza su cuenta JDLink con OAuth.
+
+## John Deere (JDLink)
+
+Función `johndeere` (API ISO 15143-3). Cada empresa conecta su cuenta desde **Equipos → Conectar John Deere**;
+las máquinas se vinculan por N.º de serie / PIN. Se actualiza sola cada hora (pg_cron) y con **Actualizar ahora**.
+
+Con los datos de la máquina, el panel avisa:
+- **Horómetro distinto**: el operario cargó un valor que difiere en más de 2 h del que informó la máquina.
+- **Checklist lejos de la máquina**: a más de 500 m de donde estaba el equipo.
+- **Máquina usada sin checklist**: sumó horas de motor en un día sin ningún checklist.
+
+Para habilitarla (una sola vez, a nombre del producto):
+1. Registrar la aplicación en developer.deere.com y pedir acceso a la API ISO 15143-3.
+2. Redirect URI: `https://xcnbmxppqbuglwcmiyuo.supabase.co/functions/v1/johndeere/callback`
+3. Cargar en Supabase (Edge Functions → Secrets): `JD_CLIENT_ID`, `JD_CLIENT_SECRET`.
+   Con acceso de producción, además `JD_API_BASE` con la URL que indique John Deere (por defecto se usa el sandbox).
+
+Pruebas: `npm install && npm test` (lector ISO 15143-3 + base de datos).

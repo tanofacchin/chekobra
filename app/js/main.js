@@ -113,6 +113,14 @@ async function alIniciarSesion(user) {
 async function entrar(m) {
   S.m = m; ls.set('co_membresia', m.id); S.vista = 'app'; S.modoOperario = false;
   Op.reiniciar(); Adm.reiniciar();
+  // Vuelta desde John Deere después de autorizar (?jd=ok | ?jd=error&msg=...)
+  const q = new URLSearchParams(location.search);
+  if (q.has('jd')) {
+    history.replaceState(null, '', location.pathname);
+    if (esGestor()) S.adm.tab = 'equipos';
+    if (q.get('jd') === 'ok') { toast('John Deere conectado. Descargando datos de las máquinas…', 5000); if (esGestor()) setTimeout(() => Adm.A.admJdSync(), 500); }
+    else toast('No se pudo conectar John Deere: ' + (q.get('msg') || 'error desconocido'), 8000);
+  }
   render();
   if (esGestor()) Adm.cargar(); else Op.cargar();
   sync();

@@ -1,6 +1,6 @@
 // Service worker: guarda la app en el teléfono para que abra sin señal.
 // Los datos (Supabase) nunca se cachean acá: la app maneja su propia copia y su bandeja de salida.
-const VERSION = 'checkobra-v1';
+const VERSION = 'checkobra-v2';
 const ARCHIVOS = ['./', 'index.html', 'manifest.webmanifest', 'css/app.css', 'vendor/supabase-2.118.0.js',
   'js/main.js', 'js/estado.js', 'js/util.js', 'js/datos.js', 'js/cola.js', 'js/operario.js', 'js/admin.js', 'js/config.js',
   'icons/icono.svg', 'icons/icono-192.png', 'icons/icono-512.png'];

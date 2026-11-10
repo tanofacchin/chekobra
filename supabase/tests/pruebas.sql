@@ -198,4 +198,32 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
 select pg_temp.esperar_error($$select * from public.telemetria_tokens$$, 'permission denied');
 reset role;
 
+-- ===== Telemetría: alertas cruzadas con los checklists
+insert into public.telemetria_lecturas (empresa_id, equipo_id, proveedor, medido_en, horas, lat, lng)
+select (select v from ctx where k = 'A'), (select v from ctx where k = 'eqA'), 'john_deere', t, h, la, lo
+  from (values (now() - interval '10 minutes', 110::numeric, -31.5, -64.2),
+               (date_trunc('day', now() at time zone 'America/Argentina/Buenos_Aires') at time zone 'America/Argentina/Buenos_Aires' - interval '20 hours', 100, null, null),
+               (date_trunc('day', now() at time zone 'America/Argentina/Buenos_Aires') at time zone 'America/Argentina/Buenos_Aires' - interval '12 hours', 104, null, null)) v(t, h, la, lo);
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+do $$ declare n_h int; n_l int; n_s int; begin
+  select count(*) filter (where tipo = 'horometro'), count(*) filter (where tipo = 'lejos'), count(*) filter (where tipo = 'sin_checklist')
+    into n_h, n_l, n_s from public.alertas_telemetria((select v from ctx where k = 'A'));
+  if (n_h, n_l, n_s) <> (2, 1, 1) then raise exception 'FALLÓ: alertas de telemetría % % %', n_h, n_l, n_s; end if;
+  if (select horas from public.telemetria_ultimas((select v from ctx where k = 'A'))) <> 110 then raise exception 'FALLÓ: última lectura'; end if;
+end $$;
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+do $$ begin
+  if exists (select 1 from public.alertas_telemetria((select v from ctx where k = 'A'))) then raise exception 'FALLÓ: B ve alertas de A'; end if;
+  if exists (select 1 from public.telemetria_lecturas) then raise exception 'FALLÓ: B ve lecturas de A'; end if;
+end $$;
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a2';
+do $$ begin if exists (select 1 from public.alertas_telemetria((select v from ctx where k = 'A'))) then raise exception 'FALLÓ: operario ve alertas'; end if; end $$;
+select pg_temp.esperar_error($$select * from public.telemetria_oauth$$, 'permission denied');
+reset role;
+
 \echo TODAS LAS PRUEBAS PASARON

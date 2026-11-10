@@ -249,3 +249,5 @@ body{margin:0}
 .top .btn-s{padding:8px 10px}
 @media (max-width:480px){.top .brand span{display:none}}
 .fl .chip{align-self:flex-start}
+.tele{color:var(--ok)}
+.tele a{color:inherit}

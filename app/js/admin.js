@@ -20,7 +20,7 @@ export async function cargar() {
   a.cargando = true;
   try {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-    const [eq, mi, ob, pl, fa, ab, jh] = await Promise.all([
+    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta] = await Promise.all([
       sb.from('equipos').select('*').eq('empresa_id', E()).order('codigo'),
       sb.from('miembros').select('id, nombre, legajo, rol, activo, user_id').eq('empresa_id', E()).order('nombre'),
       sb.from('obras').select('*').eq('empresa_id', E()).order('nombre'),
@@ -28,9 +28,13 @@ export async function cargar() {
       sb.from('fallas').select('*, equipo:equipos(codigo, nombre), jornada:jornadas(inicio, operario:miembros(nombre))').eq('empresa_id', E()).eq('estado', 'abierta').order('creada_en', { ascending: false }),
       sb.from('jornadas').select('id, inicio, equipo_id, resultado, operario:miembros(nombre), obra:obras(nombre)').eq('empresa_id', E()).eq('estado', 'abierta'),
       sb.from('jornadas').select('id, inicio, equipo_id, resultado, rapido, dur_checklist_s, operario:miembros(nombre)').eq('empresa_id', E()).gte('inicio', hoy.toISOString()),
+      sb.from('telemetria_conexiones').select('*').eq('empresa_id', E()),
+      sb.rpc('telemetria_ultimas', { p_empresa: E() }),
+      sb.rpc('alertas_telemetria', { p_empresa: E() }),
     ]);
-    for (const r of [eq, mi, ob, pl, fa, ab, jh]) if (r.error) throw r.error;
-    a.d = { equipos: eq.data, miembros: mi.data, obras: ob.data, plantillas: vigentes(pl.data, E()), fallas: fa.data, abiertas: ab.data, hoy: jh.data };
+    for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta]) if (r.error) throw r.error;
+    a.d = { equipos: eq.data, miembros: mi.data, obras: ob.data, plantillas: vigentes(pl.data, E()), fallas: fa.data, abiertas: ab.data, hoy: jh.data,
+      jd: tc.data.find(c => c.proveedor === 'john_deere') || null, tele: Object.fromEntries(tu.data.map(l => [l.equipo_id, l])), alertasTele: ta.data };
     a.err = '';
     if (a.tab === 'jornadas') await cargarJornadas();
   } catch (e) { a.err = msgError(e); }
@@ -95,6 +99,8 @@ function vResumen() {
   d.fallas.filter(f => !f.critica).slice(0, 8).forEach(f => att.push(['warn', `${f.equipo.codigo} · ${f.texto}`, `${f.nota} · ${f.jornada && f.jornada.operario ? f.jornada.operario.nombre + ' · ' : ''}${fFecha(f.creada_en)}`, `<button class="btn sm" data-act="admTab" data-k="fallas">Ver</button>`]));
   d.hoy.filter(j => j.rapido).forEach(j => { const e = activos.find(x => x.id === j.equipo_id); att.push(['warn', `Checklist muy rápido · ${e ? e.codigo : ''}`, `${j.operario.nombre} lo completó en ${fDur(j.dur_checklist_s)}`, `<button class="btn sm" data-act="admVer" data-id="${j.id}">Ver</button>`]); });
   d.abiertas.filter(j => Date.now() - new Date(j.inicio) > 14 * 36e5).forEach(j => { const e = activos.find(x => x.id === j.equipo_id); att.push(['warn', `Jornada sin cerrar · ${e ? e.codigo : ''}`, `${j.operario.nombre} · desde ${fFecha(j.inicio)} ${fHora(j.inicio)}`, `<button class="btn sm" data-act="admVer" data-id="${j.id}">Ver</button>`]); });
+  const TIT = { horometro: 'Horómetro distinto al de la máquina', lejos: 'Checklist lejos de la máquina', sin_checklist: 'Máquina usada sin checklist' };
+  d.alertasTele.forEach(x => { const e = d.equipos.find(q => q.id === x.equipo_id); att.push([x.tipo === 'sin_checklist' ? 'bad' : 'warn', `${TIT[x.tipo]} · ${e ? e.codigo : ''}`, `${x.detalle} · ${fFecha(x.fecha + 'T12:00:00')} · dato de John Deere`, x.jornada_id ? `<button class="btn sm" data-act="admVer" data-id="${x.jornada_id}">Ver</button>` : '']); });
   const sinCheck = activos.filter(e => e.estado === 'operativo' && !d.hoy.some(j => j.equipo_id === e.id));
   const vacio = !d.equipos.length ? `<section class="card"><h2>Primeros pasos</h2><ol class="pasos">
       <li>Cargá las obras en <button class="linkbtn" data-act="admTab" data-k="personal">Personal y obras</button>.</li>
@@ -152,6 +158,7 @@ function vEquipos() {
     const pl = d.plantillas[e.plantilla_clave];
     return `<div class="eqrow"><span class="eqcode">${esc(e.codigo)}</span><div><b>${esc(e.nombre)}</b> ${chipEquipo(e)}${e.activo ? '' : ' <span class="chip">Dado de baja</span>'}
       <div class="small muted">${esc(pl ? pl.nombre : e.plantilla_clave)}${e.serie ? ' · Serie ' + esc(e.serie) : ''}${e.patente ? ' · ' + esc(e.patente) : ''} · <span class="num">${fNum(e.ultimo_medidor)} ${unidad(e.medidor)}</span></div>
+      ${d.tele[e.id] ? lineaTele(d.tele[e.id], e) : ''}
       ${e.estado === 'bloqueado' ? `<div class="small" style="color:var(--bad);font-weight:600">Motivo: ${esc(e.motivo_bloqueo || '')}</div>` : ''}
       ${e.estado === 'fuera_servicio' && e.motivo_bloqueo ? `<div class="small muted">Motivo: ${esc(e.motivo_bloqueo)}</div>` : ''}</div>
       <div class="row" style="justify-content:flex-end">${e.estado === 'bloqueado' ? `<button class="btn sm primary" data-act="admLiberar" data-id="${e.id}">Liberar</button>`
@@ -168,8 +175,36 @@ function vEquipos() {
       <label class="f">Patente <small>Si tiene</small><input class="inp" id="ne-pat" data-ne="patente" value="${esc(n.patente)}"></label>
       <label class="f">${(d.plantillas[n.plantilla] || {}).medidor === 'km' ? 'Odómetro actual (km)' : 'Horómetro actual (h)'}<input class="inp num" id="ne-med" type="number" inputmode="decimal" data-ne="med" value="${esc(n.med)}"></label></div>
       ${n.err ? `<p class="err">${esc(n.err)}</p>` : ''}<div class="row"><button class="btn sm" data-act="admEqCancelar">Cancelar</button><button class="btn sm primary" data-act="admEqGuardar">Guardar equipo</button></div></section>` : '';
-  return `${form}<section class="card"><div class="row" style="justify-content:space-between"><h2>Flota (${d.equipos.length})</h2>${n ? '' : '<button class="btn sm dark" data-act="admEqNuevo">Agregar equipo</button>'}</div>
+  return `${vJd()}${form}<section class="card"><div class="row" style="justify-content:space-between"><h2>Flota (${d.equipos.length})</h2>${n ? '' : '<button class="btn sm dark" data-act="admEqNuevo">Agregar equipo</button>'}</div>
     ${d.equipos.length ? `<div>${rows}</div>` : '<div class="empty">Todavía no hay equipos. Agregá el primero.</div>'}</section>`;
+}
+
+function hace(t) {
+  const m = Math.round((Date.now() - new Date(t)) / 60000);
+  return m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `el ${fFecha(t)}`;
+}
+function lineaTele(l, e) {
+  const p = [];
+  if (l.horas != null) p.push(`<span class="num">${fNum(l.horas)} h</span>`);
+  if (l.odometro_km != null && e.medidor === 'km') p.push(`<span class="num">${fNum(l.odometro_km)} km</span>`);
+  if (l.combustible_pct != null) p.push(`combustible ${fNum(l.combustible_pct)}%`);
+  if (l.lat != null) p.push(`<a href="${mapsUrl(l.lat, l.lng)}" target="_blank" rel="noopener">ubicación ↗</a>`);
+  return `<div class="small tele">JDLink ${hace(l.medido_en)}: ${p.join(' · ')}</div>`;
+}
+function vJd() {
+  const a = T(), c = a.d.jd, adm = esAdmin();
+  const est = !c || c.estado === 'desconectada' ? ['', 'No conectado'] : c.estado === 'conectada' ? ['ok', 'Conectado'] : c.estado === 'pendiente' ? ['warn', 'Autorización pendiente'] : ['bad', 'Error'];
+  const sinV = c && c.maquinas_sin_vincular && c.maquinas_sin_vincular.length ? c.maquinas_sin_vincular : [];
+  return `<section class="card"><div class="row" style="justify-content:space-between"><div><h2>John Deere JDLink</h2>
+      <p class="small muted">Horas de motor, ubicación y combustible de cada máquina, para controlar los checklists. Se vincula por N.º de serie / PIN.</p></div>
+      <span class="chip ${est[0]}">${est[1]}</span></div>
+    ${c && c.error ? `<div class="badbox">${esc(c.error)}</div>` : ''}
+    ${c && c.ultima_sync ? `<p class="small muted">Última actualización ${hace(c.ultima_sync)}.</p>` : ''}
+    ${sinV.length ? `<div class="warnbox"><b>${sinV.length} máquina${sinV.length > 1 ? 's' : ''} de JDLink sin vincular.</b> Cargá su número de serie en el equipo correspondiente:
+      <ul style="margin:6px 0 0;padding-left:18px">${sinV.slice(0, 10).map(m => `<li><span class="mono">${esc(m.pin || m.serie || '—')}</span> ${esc([m.oem, m.modelo].filter(Boolean).join(' '))}</li>`).join('')}</ul></div>` : ''}
+    <div class="row">${c && ['conectada', 'error'].includes(c.estado) ? `<button class="btn sm dark" data-act="admJdSync" ${a.jdOcupado ? 'disabled' : ''}>${a.jdOcupado ? 'Actualizando…' : 'Actualizar ahora'}</button>` : ''}
+      ${adm ? `<button class="btn sm ${c && c.estado === 'conectada' ? 'ghost' : 'primary'}" data-act="admJdConectar" ${a.jdOcupado ? 'disabled' : ''}>${c && c.estado !== 'desconectada' ? 'Volver a conectar' : 'Conectar John Deere'}</button>` : ''}
+      ${adm && c && c.estado !== 'desconectada' ? `<button class="btn sm ghost" data-act="admJdDesconectar">${a.confirm === 'jd' ? 'Tocá de nuevo para desconectar' : 'Desconectar'}</button>` : ''}</div></section>`;
 }
 
 function vPersonal() {
@@ -262,6 +297,27 @@ export const A = {
       serie: n.serie.trim() || null, patente: n.patente.trim().toUpperCase() || null, ultimo_medidor: n.med === '' ? null : +n.med });
     if (error) { n.err = msgError(error); return render(); }
     a.addEq = null; toast('Equipo agregado.'); cargar();
+  },
+  admJdConectar: async () => {
+    const a = T(); a.jdOcupado = true; render();
+    const { data, error } = await sb.functions.invoke('johndeere', { body: { accion: 'conectar', empresa_id: E(), volver_a: location.origin + location.pathname } });
+    a.jdOcupado = false;
+    if (error || (data && data.error)) { render(); return toast((data && data.error) || await errorFuncion(error), 7000); }
+    location.href = data.url;
+  },
+  admJdSync: async () => {
+    const a = T(); a.jdOcupado = true; render();
+    const { data, error } = await sb.functions.invoke('johndeere', { body: { accion: 'sincronizar', empresa_id: E() } });
+    a.jdOcupado = false;
+    if (error || (data && data.error)) toast((data && data.error) || await errorFuncion(error), 7000);
+    else toast(`JDLink: ${data.vinculadas} de ${data.maquinas} máquinas actualizadas.`);
+    cargar();
+  },
+  admJdDesconectar: async () => {
+    const a = T(); if (a.confirm !== 'jd') { a.confirm = 'jd'; return render(); } a.confirm = null;
+    const { data, error } = await sb.functions.invoke('johndeere', { body: { accion: 'desconectar', empresa_id: E() } });
+    if (error || (data && data.error)) return toast((data && data.error) || await errorFuncion(error));
+    toast('John Deere desconectado.'); cargar();
   },
   admPerNuevo: () => { T().addPer = { nombre: '', legajo: '', pin: '', rol: 'operario', err: '', ocupado: false }; render(); },
   admPerCancelar: () => { T().addPer = null; render(); },
