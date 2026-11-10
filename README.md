@@ -12,7 +12,7 @@ Primer cliente: Concivi.
 | Parte | Estado |
 |---|---|
 | Prototipo funcional (operario + administración) | `prototipo/index.html` — también publicado en claude.ai |
-| Base de datos multiempresa (Supabase / Postgres) | `supabase/migrations` — probada localmente |
+| Base de datos multiempresa (Supabase / Postgres) | `supabase/migrations` — aplicada en el proyecto `checkobra` de Supabase |
 | Plantillas base (13: construcción, vial, transporte y agro) | `plantillas/base.mjs` |
 | App instalable (PWA) conectada a Supabase | pendiente |
 | Integración JDLink / ISO 15143-3 | pendiente (tablas listas) |
