@@ -14,7 +14,7 @@ Primer cliente: Concivi.
 | Prototipo funcional (operario + administración) | `prototipo/index.html` — también publicado en claude.ai |
 | Base de datos multiempresa (Supabase / Postgres) | `supabase/migrations` — aplicada en el proyecto `checkobra` de Supabase |
 | Plantillas base (13: construcción, vial, transporte y agro) | `plantillas/base.mjs` |
-| App instalable (PWA) conectada a Supabase | pendiente |
+| App instalable (PWA) conectada a Supabase | `app/` — publicada en GitHub Pages; ingreso de operarios con empresa + legajo + PIN |
 | Integración JDLink / ISO 15143-3 | pendiente (tablas listas) |
 | Editor de plantillas, avisos por WhatsApp/mail, QR por equipo | pendiente |
 
@@ -66,9 +66,19 @@ Para cambiar una plantilla ya usada, se crea una versión nueva.
 2. `supabase link --project-ref <ref>` y `supabase db push` para aplicar las migraciones
    (no aplicar `supabase/tests/stub_supabase.sql`: es solo para pruebas locales).
 
-## Decisiones pendientes
+## App (`app/`)
 
-- **Ingreso de operarios**: muchos no tienen mail. Propuesta: el administrador da de alta al operario con legajo y PIN
-  de 6 dígitos; el operario entra con código de empresa + legajo + PIN.
+Archivos estáticos, sin paso de compilación: se publican tal cual (GitHub Pages, Cloudflare Pages, etc.).
+
+- `js/config.js`: dirección y clave pública (anon) del proyecto Supabase.
+- `js/cola.js`: bandeja de salida en el teléfono (IndexedDB). Lo que carga el operario sin señal se envía solo después.
+- `sw.js`: guarda la app en el teléfono para que abra sin conexión. Al cambiar archivos, subir `VERSION`.
+- Operarios: el administrador los da de alta con legajo y PIN de 6 dígitos (función `supabase/functions/operarios`);
+  entran con código de empresa + legajo + PIN.
+- Dueños y supervisores: correo y contraseña.
+
+Para probar en local: `cd app && python3 -m http.server 8080` y abrir http://localhost:8080.
+
+## Decisiones pendientes
 - **Telemetría**: registrar la app en developer.deere.com a nombre del producto y pedir acceso a la API ISO 15143-3.
   Cada cliente autoriza su cuenta JDLink con OAuth.
