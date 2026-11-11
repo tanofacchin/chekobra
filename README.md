@@ -16,6 +16,7 @@ Checklist pre-operacional de maquinaria y vehículos para construcción, minerí
 | [`legal/`](legal/) | Propiedad intelectual, datos personales, contratos | Titular y asesor legal |
 | [`seguridad/`](seguridad/) | Política, cuentas y accesos, incidentes, seguridad de la app | Titular |
 | [`operaciones/`](operaciones/) | Infraestructura, costos, despliegue, respaldos | Titular y desarrolladores |
+| [`conversaciones/`](conversaciones/) | Registro de las conversaciones de trabajo con Claude | Titular |
 
 ## Reglas básicas
 
