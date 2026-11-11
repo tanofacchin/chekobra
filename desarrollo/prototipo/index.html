@@ -363,7 +363,7 @@ const mapsUrl = g => `https://www.google.com/maps?q=${g.lat},${g.lng}`;
 
 /* ==================== Datos (nube compartida o local) ==================== */
 const LOCAL_DEMO = {
-  config: { app: { adminPin: '0000', empresa: 'Concivi', obras: ['Ruta 5 · Tramo Norte (ejemplo)', 'Planta de áridos (ejemplo)', 'Barrio Los Álamos (ejemplo)'] } },
+  config: { app: { adminPin: '0000', empresa: 'Mi Empresa', obras: ['Ruta 5 · Tramo Norte (ejemplo)', 'Planta de áridos (ejemplo)', 'Barrio Los Álamos (ejemplo)'] } },
   operarios: { 'op-1': { nombre: 'Operario de prueba', pin: '1234', activo: true } },
   equipos: {
     'EX-01': { codigo: 'EX-01', nombre: 'Excavadora CAT 320', tipo: 'excavadora', identificacion: 'Serie de ejemplo', ultimoMedidor: 4820, estado: 'operativo', activo: true },
@@ -448,7 +448,7 @@ const S = {
   flow: null, resultId: null, cierre: null, opDetail: null,
   adm: { tab: 'resumen', detail: null, f: null, liberar: null, nota: '', addEq: null, addOp: null, nuevaObra: '', confirm: null, csv: null, newPin: '' },
 };
-const cfg = () => S.config || { adminPin: '0000', obras: [], empresa: 'Concivi' };
+const cfg = () => S.config || { adminPin: '0000', obras: [], empresa: 'Mi Empresa' };
 const eqById = id => S.equipos.find(e => e.id === id);
 const draftKey = () => 'co_draft_' + (S.user ? S.user.id : '');
 
@@ -530,7 +530,7 @@ function vLogin() {
     : k === 'ok' ? `<button class="key fn" data-act="pin" data-k="clr" aria-label="Limpiar">Limpiar</button>`
     : `<button class="key" data-act="pin" data-k="${k}">${k}</button>`).join('');
   return `<main class="login">
-    <div class="login-brand">${MARK.replace('width="26" height="26"', 'width="54" height="54"')}<h1>CheckObra</h1><p class="muted">Control pre-operacional de equipos · ${esc(cfg().empresa || 'Concivi')}</p></div>
+    <div class="login-brand">${MARK.replace('width="26" height="26"', 'width="54" height="54"')}<h1>CheckObra</h1><p class="muted">Control pre-operacional de equipos · ${esc(cfg().empresa || 'Mi Empresa')}</p></div>
     <p class="eyebrow">Ingresá tu PIN</p>
     <div class="dots ${S.pinErr ? 'shake' : ''}" aria-live="polite">${dots}</div>
     ${S.pinErr ? '<p class="err">PIN incorrecto o usuario inactivo</p>' : ''}
@@ -934,7 +934,7 @@ function vAdmin() {
   const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['equipos', 'Equipos'], ['personal', 'Personal y obras']]
     .map(([k, l]) => `<button class="tab ${a.tab === k ? 'on' : ''}" data-act="tab" data-k="${k}">${l}</button>`).join('');
   const body = { resumen: aResumen, jornadas: aJornadas, equipos: aEquipos, personal: aPersonal }[a.tab]();
-  return `<main class="wrap wide"><section><p class="eyebrow">${esc(fechaLarga())}</p><h1>Panel de ${esc(cfg().empresa || 'Concivi')}</h1></section><nav class="tabs">${tabs}</nav>${body}${a.csv != null ? csvModal() : ''}</main>`;
+  return `<main class="wrap wide"><section><p class="eyebrow">${esc(fechaLarga())}</p><h1>Panel de ${esc(cfg().empresa || 'Mi Empresa')}</h1></section><nav class="tabs">${tabs}</nav>${body}${a.csv != null ? csvModal() : ''}</main>`;
 }
 function aResumen() {
   const hoy = dayKey(Date.now()), js = S.jornadas, eqs = S.equipos.filter(e => e.activo !== false);

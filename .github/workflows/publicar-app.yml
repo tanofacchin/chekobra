@@ -3,7 +3,7 @@ name: Publicar app
 on:
   push:
     branches: [main]
-    paths: ['app/**', '.github/workflows/publicar-app.yml']
+    paths: ['desarrollo/app/**', '.github/workflows/publicar-app.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,6 +23,6 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: app
+          path: desarrollo/app
       - id: deploy
         uses: actions/deploy-pages@v4

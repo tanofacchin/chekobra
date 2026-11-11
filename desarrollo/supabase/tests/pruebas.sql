@@ -105,6 +105,19 @@ select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build
   'respuestas', pg_temp.respuestas('excavadora')))$$,
   (select v from ctx where k = 'eqA'), :'pref' || 'f.png'), 'Foto o firma inválida');
 
+-- sin aceptar la política de privacidad no se guarda nada
+do $$ begin if not public.privacidad_pendiente((select v from ctx where k = 'A')) then raise exception 'FALLÓ: privacidad no pendiente'; end if; end $$;
+select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object(
+  'client_id', gen_random_uuid(), 'equipo_id', %L, 'med_ini', 120, 'lat', -31.4, 'lng', -64.2,
+  'selfie_path', %L, 'firma_path', %L, 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('excavadora')))$$,
+  (select v from ctx where k = 'eqA'), :'pref' || 's.jpg', :'pref' || 'f.png'), 'política de privacidad');
+select public.aceptar_privacidad((select v from ctx where k = 'A'), 'prueba');
+select public.aceptar_privacidad((select v from ctx where k = 'A'), 'prueba');   -- repetir no falla
+do $$ begin if public.privacidad_pendiente((select v from ctx where k = 'A')) then raise exception 'FALLÓ: privacidad sigue pendiente'; end if; end $$;
+-- el operario no puede desbloquearse ni tocar sus intentos
+select pg_temp.esperar_error(format($$select public.desbloquear_miembro(%L)$$, (select id from public.miembros where nombre = 'Operario A')), 'permiso');
+
 -- envío válido con falla crítica → no apto y equipo bloqueado
 select gen_random_uuid() as cid \gset
 select public.enviar_checklist(jsonb_build_object(
@@ -131,6 +144,8 @@ do $$ declare j public.jornadas; e public.equipos; begin
   if e.estado <> 'bloqueado' or e.ultimo_medidor <> 120 then raise exception 'FALLÓ: equipo no bloqueado %', row_to_json(e); end if;
   if (select count(*) from public.fallas where jornada_id = j.id) <> 2 then raise exception 'FALLÓ: fallas no registradas'; end if;
   if (select count(*) from public.eventos_equipo where tipo = 'bloqueo') <> 1 then raise exception 'FALLÓ: falta evento de bloqueo'; end if;
+  if (select count(*) from public.notificaciones where tipo = 'equipo_bloqueado' and estado = 'pendiente' and datos->>'codigo' = 'EX-01'
+        and datos->>'operario' = 'Operario A' and datos->>'obra' = 'Ruta 5') <> 1 then raise exception 'FALLÓ: falta aviso de bloqueo'; end if;
 end $$;
 
 -- ===== Otro operario no puede usar el equipo bloqueado ni ver la jornada ajena
@@ -160,6 +175,7 @@ reset role;
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
 select (select v from ctx where k = 'A')::text || '/00000000-0000-0000-0000-0000000000a3/' as pref2 \gset
+select public.aceptar_privacidad((select v from ctx where k = 'A'), 'prueba');
 select (public.enviar_checklist(jsonb_build_object(
   'client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqA'), 'med_ini', 121, 'ubic_ref', 'Obrador km 12',
   'selfie_path', :'pref2' || 's.jpg', 'firma_path', :'pref2' || 'f.png', 'declaracion', true, 'dur_checklist_s', 400,
@@ -225,5 +241,42 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a2';
 do $$ begin if exists (select 1 from public.alertas_telemetria((select v from ctx where k = 'A'))) then raise exception 'FALLÓ: operario ve alertas'; end if; end $$;
 select pg_temp.esperar_error($$select * from public.telemetria_oauth$$, 'permission denied');
 reset role;
+
+-- ===== Bloqueo de PIN: la dueña ve y desbloquea; nadie toca los campos a mano
+update public.miembros set intentos_fallidos = 5, bloqueado_en = now() where nombre = 'Operario A';   -- lo hace el servidor
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+select pg_temp.esperar_error($$update public.miembros set bloqueado_en = null where nombre = 'Operario A'$$, 'Desbloquear');
+select public.desbloquear_miembro((select id from public.miembros where nombre = 'Operario A'));
+do $$ begin if (select bloqueado_en from public.miembros where nombre = 'Operario A') is not null then raise exception 'FALLÓ: no se desbloqueó'; end if; end $$;
+-- la dueña ve los consentimientos y los avisos de su empresa
+do $$ begin
+  if (select count(*) from public.consentimientos) <> 2 then raise exception 'FALLÓ: consentimientos visibles %', (select count(*) from public.consentimientos); end if;
+  if (select count(*) from public.notificaciones) <> 1 then raise exception 'FALLÓ: avisos visibles'; end if;
+end $$;
+-- ===== Plantillas propias
+insert into public.plantillas (empresa_id, clave, nombre, rubro, medidor, version, secciones)
+  select v, 'excavadora', 'Excavadora Propia', 'construccion', 'horas', 1,
+         '[{"titulo":"Seguridad","items":[{"id":"doc.1","texto":"Operador habilitado","critico":true},{"id":"c.x1","texto":"Arnés","critico":false}]}]'
+    from ctx where k = 'A';
+do $$ begin if (public.plantilla_vigente((select v from ctx where k = 'A'), 'excavadora')).nombre <> 'Excavadora Propia' then raise exception 'FALLÓ: no usa la plantilla propia'; end if; end $$;
+select pg_temp.esperar_error($$insert into public.plantillas (empresa_id, clave, nombre, rubro, version, secciones)
+  select v, 'mala', 'Mala', 'construccion', 1, '[{"titulo":"X","items":[{"id":"a","texto":"Uno","critico":false},{"id":"a","texto":"Dos","critico":false}]}]' from ctx where k = 'A'$$, 'repetidos');
+select pg_temp.esperar_error($$insert into public.plantillas (empresa_id, clave, nombre, rubro, version, secciones)
+  select v, 'mala', 'Mala', 'construccion', 1, '[{"titulo":"X","items":[]}]' from ctx where k = 'A'$$, 'no tiene puntos');
+-- una versión base usada en jornadas no se puede cambiar (además, la base no es editable por empresas)
+reset role;
+select pg_temp.esperar_error($$update public.plantillas set secciones = '[{"titulo":"X","items":[{"id":"a","texto":"Uno","critico":false}]}]' where empresa_id is null and clave = 'excavadora'$$, 'versión nueva');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+do $$ begin
+  if exists (select 1 from public.plantillas where nombre = 'Excavadora Propia') then raise exception 'FALLÓ: B ve plantillas de A'; end if;
+  if exists (select 1 from public.notificaciones) or exists (select 1 from public.consentimientos) then raise exception 'FALLÓ: B ve datos de A'; end if;
+end $$;
+select pg_temp.esperar_error($$select public.destinatarios_avisos(gen_random_uuid())$$, 'permission denied');
+reset role;
+do $$ begin
+  if (select count(*) from public.destinatarios_avisos((select v from ctx where k = 'A'))) <> 1 then raise exception 'FALLÓ: destinatarios (solo la dueña, sin operarios)'; end if;
+end $$;
 
 \echo TODAS LAS PRUEBAS PASARON

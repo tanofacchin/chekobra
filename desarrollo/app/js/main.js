@@ -1,5 +1,6 @@
 import { $, esc, ls, toast, msgError } from './util.js';
-import { sb, ingresarOperario, ingresarConCorreo, registrarse, salir, misMembresias } from './datos.js';
+import { sb, ingresarOperario, ingresarConCorreo, registrarse, salir, misMembresias, privacidadPendiente, aceptarPrivacidad } from './datos.js';
+import { politicaHtml, RESUMEN } from './politica.js';
 import { sincronizar, cola } from './cola.js';
 import { S, setRender, render, esGestor } from './estado.js';
 import * as Op from './operario.js';
@@ -30,6 +31,8 @@ function vista() {
     case 'registro': return vRegistro();
     case 'onboarding': return vTop() + vOnboarding();
     case 'elegir': return vTop() + vElegir();
+    case 'privacidad': return vTop() + vPrivacidad();
+    case 'politica': return `<main class="wrap politica"><button class="btn ghost sm" data-act="cerrarPolitica" style="align-self:flex-start">← Volver</button>${politicaHtml()}</main>`;
     default: return vTop() + (esGestor() && !S.modoOperario ? Adm.vista() : Op.vista());
   }
 }
@@ -59,7 +62,7 @@ function vLogin() {
       <button role="tab" aria-selected="${!op}" class="${!op ? 'on' : ''}" data-act="modoLogin" data-m="correo">Supervisión</button></div>
     <form class="card login-card" data-form="login" novalidate>
       ${op ? `
-        <label class="f">Código de empresa<input class="inp" id="l-slug" data-l="slug" value="${esc(L.slug)}" autocapitalize="none" autocomplete="organization" placeholder="ej.: concivi"></label>
+        <label class="f">Código de empresa<input class="inp" id="l-slug" data-l="slug" value="${esc(L.slug)}" autocapitalize="none" autocomplete="organization" placeholder="ej.: miempresa"></label>
         <label class="f">Legajo<input class="inp" id="l-leg" data-l="legajo" value="${esc(L.legajo)}" autocapitalize="none" autocomplete="username"></label>
         <label class="f">PIN<input class="inp num pin" id="l-pin" data-l="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" value="${esc(L.pin)}"></label>`
       : `
@@ -68,7 +71,7 @@ function vLogin() {
       ${L.err ? `<p class="err" role="alert">${esc(L.err)}</p>` : ''}${L.aviso ? `<div class="warnbox">${esc(L.aviso)}</div>` : ''}
       <button class="btn primary block" type="submit" ${L.ocupado ? 'disabled' : ''}>${L.ocupado ? 'Ingresando…' : 'Ingresar'}</button>
     </form>
-    <p class="hint">${op ? 'El código de empresa, el legajo y el PIN te los da tu supervisor.' : '¿Tu empresa todavía no usa CheckObra? <button class="linkbtn" data-act="irRegistro">Crear cuenta</button>'}</p>
+    <p class="hint">${op ? 'El código de empresa, el legajo y el PIN te los da tu supervisor.<br><button class="linkbtn" data-act="verPolitica">Política de privacidad</button>' : '¿Tu empresa todavía no usa CheckObra? <button class="linkbtn" data-act="irRegistro">Crear cuenta</button>'}</p>
   </main>`;
 }
 function vRegistro() {
@@ -86,13 +89,23 @@ function vOnboarding() {
   return `<main class="wrap"><section><p class="eyebrow">Primer paso</p><h1>Registrá tu empresa</h1>
     <p class="muted">Si sos operario, no hace falta: pedile a tu supervisor que te dé de alta.</p></section>
     <form class="card" data-form="empresa" novalidate>
-      <label class="f">Nombre de la empresa<input class="inp" id="o-nom" data-o="nombre" value="${esc(o.nombre)}" placeholder="Concivi S.A."></label>
+      <label class="f">Nombre de la empresa<input class="inp" id="o-nom" data-o="nombre" value="${esc(o.nombre)}" placeholder="Mi Empresa S.A."></label>
       <label class="f">Código de empresa <small>Lo usan los operarios para entrar. Minúsculas, números y guiones.</small>
-        <input class="inp" id="o-slug" data-o="slug" value="${esc(o.slug)}" autocapitalize="none" placeholder="concivi"></label>
+        <input class="inp" id="o-slug" data-o="slug" value="${esc(o.slug)}" autocapitalize="none" placeholder="miempresa"></label>
       <label class="f">Rubro<select class="inp" id="o-rubro" data-o="rubro">${[['construccion', 'Construcción'], ['mineria', 'Minería'], ['agro', 'Agro'], ['otro', 'Otro']].map(([v, l]) => `<option value="${v}" ${o.rubro === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="f">Tu nombre y apellido<input class="inp" id="o-mi" data-o="miNombre" value="${esc(o.miNombre)}"></label>
       ${o.err ? `<p class="err" role="alert">${esc(o.err)}</p>` : ''}
       <button class="btn primary block" type="submit" ${o.ocupado ? 'disabled' : ''}>Registrar empresa</button></form></main>`;
+}
+function vPrivacidad() {
+  const p = S.priv || {};
+  return `<main class="wrap"><section><p class="eyebrow">Antes de empezar</p><h1>Tus datos en CheckObra</h1>
+    <p class="muted">${esc(S.m.empresa.nombre)} usa CheckObra para registrar el control de los equipos. Esto es lo que se guarda:</p></section>
+    <section class="card"><dl class="kv priv">${RESUMEN.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${esc(d)}</dd>`).join('')}</dl>
+      <button class="linkbtn" data-act="verPolitica" style="align-self:flex-start">Leer la política de privacidad completa</button></section>
+    <label class="check"><input type="checkbox" id="priv-ok" data-priv="ok" ${p.ok ? 'checked' : ''}><span>Leí y acepto que se traten mis datos para estos fines.</span></label>
+    ${p.err ? `<p class="err" role="alert">${esc(p.err)}</p>` : ''}
+    <div class="row"><button class="btn" data-act="salir">Salir</button><button class="btn primary" data-act="aceptarPrivacidad" ${p.ocupado ? 'disabled' : ''}>Aceptar y continuar</button></div></main>`;
 }
 function vElegir() {
   return `<main class="wrap"><h1>¿Con qué empresa vas a trabajar?</h1><div class="list">${S.membresias.map(m =>
@@ -111,8 +124,11 @@ async function alIniciarSesion(user) {
   await entrar(m);
 }
 async function entrar(m) {
-  S.m = m; ls.set('co_membresia', m.id); S.vista = 'app'; S.modoOperario = false;
+  S.m = m; ls.set('co_membresia', m.id); S.modoOperario = false;
   Op.reiniciar(); Adm.reiniciar();
+  // Consentimiento de privacidad (Ley 25.326): sin aceptarlo no se puede usar la app.
+  if (await privacidadPendiente(m.empresa_id, m.id)) { S.vista = 'privacidad'; S.priv = {}; render(); return; }
+  S.vista = 'app';
   // Vuelta desde John Deere después de autorizar (?jd=ok | ?jd=error&msg=...)
   const q = new URLSearchParams(location.search);
   if (q.has('jd')) {
@@ -124,6 +140,22 @@ async function entrar(m) {
   render();
   if (esGestor()) Adm.cargar(); else Op.cargar();
   sync();
+  abrirQrPendiente();
+}
+
+// QR pegado en la máquina: ?equipo=<id>. Se guarda al abrir la app (aunque haya que iniciar sesión primero).
+function guardarQr() {
+  const q = new URLSearchParams(location.search), id = q.get('equipo');
+  if (!id) return;
+  if (/^[0-9a-f-]{36}$/i.test(id)) ls.set('co_qr', { id, ts: Date.now() });
+  q.delete('equipo'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
+}
+function abrirQrPendiente() {
+  const qr = ls.get('co_qr', null); if (!qr) return;
+  ls.del('co_qr');
+  if (Date.now() - qr.ts > 30 * 60000) return;
+  if (esGestor()) S.modoOperario = true;
+  Op.abrirDesdeQr(qr.id);
 }
 
 async function sync() {
@@ -151,6 +183,15 @@ const A = {
   },
   cambiarEmpresa: () => { S.vista = 'elegir'; render(); },
   elegirEmpresa: b => entrar(S.membresias.find(m => m.id === b.dataset.id)),
+  verPolitica: () => { S.vistaPrevia = S.vista; S.vista = 'politica'; render(); },
+  cerrarPolitica: () => { S.vista = S.vistaPrevia || 'login'; render(); },
+  aceptarPrivacidad: async () => {
+    const p = S.priv; p.err = '';
+    if (!p.ok) { p.err = 'Marcá la casilla para aceptar.'; return render(); }
+    p.ocupado = true; render();
+    try { await aceptarPrivacidad(S.m.empresa_id, S.m.id); S.priv = null; await entrar(S.m); }
+    catch (e) { p.ocupado = false; p.err = msgError(e); render(); }
+  },
   modo: () => { S.modoOperario = !S.modoOperario; render(); S.modoOperario ? Op.cargar() : Adm.cargar(); },
 };
 
@@ -210,6 +251,7 @@ document.addEventListener('submit', e => {
 document.addEventListener('input', e => {
   const el = e.target, v = el.type === 'checkbox' ? el.checked : el.value;
   if (el.dataset.l) S.login[el.dataset.l] = v;
+  else if (el.dataset.priv) S.priv.ok = v;
   else if (el.dataset.o) S.onb[el.dataset.o] = v;
   else (Op.alEscribir(el, v) || Adm.alEscribir(el, v));
 });
@@ -221,6 +263,7 @@ setInterval(() => { if (S.online && S.user) sync(); }, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.user && S.vista === 'app') { sync(); esGestor() && !S.modoOperario ? Adm.cargar() : Op.cargar(); } });
 
 /* ---------------------------------------------------------------- arranque */
+guardarQr();
 const ult = ls.get('co_ultimo', null); if (ult) { S.login.slug = ult.slug; S.login.legajo = ult.legajo; }
 sb.auth.onAuthStateChange((ev, ses) => {
   if (ev === 'SIGNED_IN' && ses && (!S.user || S.user.id !== ses.user.id)) alIniciarSesion(ses.user);

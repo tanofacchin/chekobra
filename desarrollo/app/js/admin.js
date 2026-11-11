@@ -2,6 +2,9 @@
 import { esc, fFecha, fHora, fDur, fNum, unidad, fechaLarga, mapsUrl, dayKey, RES, toast, msgError, descargar } from './util.js';
 import { sb, vigentes } from './datos.js';
 import { S, render, esAdmin } from './estado.js';
+import * as Ed from './editor.js';
+import { vEtiquetas } from './etiquetas.js';
+import { VERSION_PRIVACIDAD } from './politica.js';
 
 const T = () => S.adm;
 export function reiniciar() {
@@ -20,9 +23,9 @@ export async function cargar() {
   a.cargando = true;
   try {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta] = await Promise.all([
+    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no] = await Promise.all([
       sb.from('equipos').select('*').eq('empresa_id', E()).order('codigo'),
-      sb.from('miembros').select('id, nombre, legajo, rol, activo, user_id').eq('empresa_id', E()).order('nombre'),
+      sb.from('miembros').select('id, nombre, legajo, rol, activo, user_id, intentos_fallidos, bloqueado_en, recibir_avisos').eq('empresa_id', E()).order('nombre'),
       sb.from('obras').select('*').eq('empresa_id', E()).order('nombre'),
       sb.from('plantillas').select('id, empresa_id, clave, nombre, medidor, version, rubro').eq('activa', true),
       sb.from('fallas').select('*, equipo:equipos(codigo, nombre), jornada:jornadas(inicio, operario:miembros(nombre))').eq('empresa_id', E()).eq('estado', 'abierta').order('creada_en', { ascending: false }),
@@ -31,10 +34,13 @@ export async function cargar() {
       sb.from('telemetria_conexiones').select('*').eq('empresa_id', E()),
       sb.rpc('telemetria_ultimas', { p_empresa: E() }),
       sb.rpc('alertas_telemetria', { p_empresa: E() }),
+      sb.from('consentimientos').select('miembro_id, aceptado_en').eq('empresa_id', E()).eq('version', VERSION_PRIVACIDAD),
+      sb.from('notificaciones').select('id, tipo, estado, datos, creada_en, enviada_en, error').eq('empresa_id', E()).order('creada_en', { ascending: false }).limit(8),
     ]);
-    for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta]) if (r.error) throw r.error;
+    for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no]) if (r.error) throw r.error;
     a.d = { equipos: eq.data, miembros: mi.data, obras: ob.data, plantillas: vigentes(pl.data, E()), fallas: fa.data, abiertas: ab.data, hoy: jh.data,
-      jd: tc.data.find(c => c.proveedor === 'john_deere') || null, tele: Object.fromEntries(tu.data.map(l => [l.equipo_id, l])), alertasTele: ta.data };
+      jd: tc.data.find(c => c.proveedor === 'john_deere') || null, tele: Object.fromEntries(tu.data.map(l => [l.equipo_id, l])), alertasTele: ta.data,
+      consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data };
     a.err = '';
     if (a.tab === 'jornadas') await cargarJornadas();
   } catch (e) { a.err = msgError(e); }
@@ -82,10 +88,11 @@ function chipEquipo(e) {
 export function vista() {
   const a = T();
   if (!a.d) return `<main class="wrap wide">${a.err ? `<div class="badbox">${esc(a.err)}</div><button class="btn" data-act="admRecargar">Reintentar</button>` : '<p class="muted">Cargando panel…</p>'}</main>`;
+  if (a.etiquetas) return vEtiquetas(a.d.equipos.filter(e => a.etiquetas.includes(e.id)), S.m.empresa.nombre);
   if (a.detalle) return `<main class="wrap wide"><button class="btn ghost sm" data-act="admVolver" style="align-self:flex-start">← Volver</button>${vDetalle()}</main>`;
-  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['personal', 'Personal y obras']]
+  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras']]
     .map(([k, l]) => `<button class="tab ${a.tab === k ? 'on' : ''}" data-act="admTab" data-k="${k}">${l}</button>`).join('');
-  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, personal: vPersonal }[a.tab]();
+  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
   return `<main class="wrap wide"><section class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="eyebrow">${esc(fechaLarga())}</p><h1>${esc(S.m.empresa.nombre)}</h1></div>
     <button class="btn sm ghost" data-act="admRecargar">${a.cargando ? 'Actualizando…' : 'Actualizar'}</button></section>
     ${a.err ? `<div class="badbox">${esc(a.err)}</div>` : ''}<nav class="tabs">${tabs}</nav>${body}</main>`;
@@ -101,6 +108,7 @@ function vResumen() {
   d.abiertas.filter(j => Date.now() - new Date(j.inicio) > 14 * 36e5).forEach(j => { const e = activos.find(x => x.id === j.equipo_id); att.push(['warn', `Jornada sin cerrar · ${e ? e.codigo : ''}`, `${j.operario.nombre} · desde ${fFecha(j.inicio)} ${fHora(j.inicio)}`, `<button class="btn sm" data-act="admVer" data-id="${j.id}">Ver</button>`]); });
   const TIT = { horometro: 'Horómetro distinto al de la máquina', lejos: 'Checklist lejos de la máquina', sin_checklist: 'Máquina usada sin checklist' };
   d.alertasTele.forEach(x => { const e = d.equipos.find(q => q.id === x.equipo_id); att.push([x.tipo === 'sin_checklist' ? 'bad' : 'warn', `${TIT[x.tipo]} · ${e ? e.codigo : ''}`, `${x.detalle} · ${fFecha(x.fecha + 'T12:00:00')} · dato de John Deere`, x.jornada_id ? `<button class="btn sm" data-act="admVer" data-id="${x.jornada_id}">Ver</button>` : '']); });
+  d.miembros.filter(m => m.bloqueado_en).forEach(m => att.push(['bad', `Legajo bloqueado · ${m.nombre}`, `${m.intentos_fallidos} intentos fallidos de PIN · ${fFecha(m.bloqueado_en)} ${fHora(m.bloqueado_en)}`, `<button class="btn sm" data-act="admTab" data-k="personal">Desbloquear</button>`]));
   const sinCheck = activos.filter(e => e.estado === 'operativo' && !d.hoy.some(j => j.equipo_id === e.id));
   const vacio = !d.equipos.length ? `<section class="card"><h2>Primeros pasos</h2><ol class="pasos">
       <li>Cargá las obras en <button class="linkbtn" data-act="admTab" data-k="personal">Personal y obras</button>.</li>
@@ -115,6 +123,7 @@ function vResumen() {
       <section class="card"><h2>Requiere atención</h2>${att.length ? `<div>${att.map(([s, t, x, b]) => `<div class="att"><span class="sev ${s}"></span><div><div class="t">${esc(t)}</div><div class="s">${esc(x)}</div></div>${b}</div>`).join('')}</div>` : '<div class="empty">Nada pendiente. Todos los equipos están en orden.</div>'}</section>
       <div class="stack">
         <section class="card"><h2>En obra ahora</h2>${d.abiertas.length ? `<div>${d.abiertas.map(j => { const e = d.equipos.find(x => x.id === j.equipo_id); return `<button class="li" data-act="admVer" data-id="${j.id}"><span class="t">${esc(e ? e.codigo : '')} · ${esc(j.operario.nombre)}</span>${chipRes(j.resultado)}<span class="s">${esc(j.obra ? j.obra.nombre : '')} · desde ${fHora(j.inicio)} h</span></button>`; }).join('')}</div>` : '<p class="muted">Ningún equipo con jornada abierta.</p>'}</section>
+        ${vAvisos()}
         <section class="card flat"><h3>Sin checklist hoy (${sinCheck.length})</h3><p class="small">${sinCheck.length ? sinCheck.map(e => `<span class="eqcode">${esc(e.codigo)}</span>`).join(' ') : 'Todos los equipos operativos ya tienen checklist.'}</p></section>
       </div></div>`;
 }
@@ -161,7 +170,7 @@ function vEquipos() {
       ${d.tele[e.id] ? lineaTele(d.tele[e.id], e) : ''}
       ${e.estado === 'bloqueado' ? `<div class="small" style="color:var(--bad);font-weight:600">Motivo: ${esc(e.motivo_bloqueo || '')}</div>` : ''}
       ${e.estado === 'fuera_servicio' && e.motivo_bloqueo ? `<div class="small muted">Motivo: ${esc(e.motivo_bloqueo)}</div>` : ''}</div>
-      <div class="row" style="justify-content:flex-end">${e.estado === 'bloqueado' ? `<button class="btn sm primary" data-act="admLiberar" data-id="${e.id}">Liberar</button>`
+      <div class="row" style="justify-content:flex-end"><button class="btn sm ghost" data-act="etqUno" data-id="${e.id}">QR</button>${e.estado === 'bloqueado' ? `<button class="btn sm primary" data-act="admLiberar" data-id="${e.id}">Liberar</button>`
         : `<button class="btn sm ghost" data-act="admServicio" data-id="${e.id}">${e.estado === 'fuera_servicio' ? 'Volver a servicio' : 'Fuera de servicio'}</button>`}</div>
       ${a.liberar === e.id ? `<div style="grid-column:1/-1;display:flex;flex-direction:column;gap:8px"><label class="f">¿Qué se reparó?<textarea class="inp" id="lib-nota" data-ad="nota" placeholder="Ej.: se cambió la manguera del cilindro de pluma">${esc(a.nota)}</textarea></label>
         <div class="row"><button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admLiberarOk" data-id="${e.id}">Liberar equipo</button></div></div>` : ''}</div>`;
@@ -175,7 +184,7 @@ function vEquipos() {
       <label class="f">Patente <small>Si tiene</small><input class="inp" id="ne-pat" data-ne="patente" value="${esc(n.patente)}"></label>
       <label class="f">${(d.plantillas[n.plantilla] || {}).medidor === 'km' ? 'Odómetro actual (km)' : 'Horómetro actual (h)'}<input class="inp num" id="ne-med" type="number" inputmode="decimal" data-ne="med" value="${esc(n.med)}"></label></div>
       ${n.err ? `<p class="err">${esc(n.err)}</p>` : ''}<div class="row"><button class="btn sm" data-act="admEqCancelar">Cancelar</button><button class="btn sm primary" data-act="admEqGuardar">Guardar equipo</button></div></section>` : '';
-  return `${vJd()}${form}<section class="card"><div class="row" style="justify-content:space-between"><h2>Flota (${d.equipos.length})</h2>${n ? '' : '<button class="btn sm dark" data-act="admEqNuevo">Agregar equipo</button>'}</div>
+  return `${vJd()}${form}<section class="card"><div class="row" style="justify-content:space-between"><h2>Flota (${d.equipos.length})</h2><div class="row">${d.equipos.length ? '<button class="btn sm" data-act="etqTodas">Etiquetas QR</button>' : ''}${n ? '' : '<button class="btn sm dark" data-act="admEqNuevo">Agregar equipo</button>'}</div></div>
     ${d.equipos.length ? `<div>${rows}</div>` : '<div class="empty">Todavía no hay equipos. Agregá el primero.</div>'}</section>`;
 }
 
@@ -207,11 +216,24 @@ function vJd() {
       ${adm && c && c.estado !== 'desconectada' ? `<button class="btn sm ghost" data-act="admJdDesconectar">${a.confirm === 'jd' ? 'Tocá de nuevo para desconectar' : 'Desconectar'}</button>` : ''}</div></section>`;
 }
 
+function vAvisos() {
+  const av = T().d.avisos;
+  if (!av.length) return '';
+  const est = { pendiente: ['warn', 'Pendiente'], enviada: ['ok', 'Enviado'], sin_destinatarios: ['', 'Sin destinatarios'], error: ['bad', 'Error'] };
+  const sinEnvio = av.some(x => x.estado === 'pendiente' && Date.now() - new Date(x.creada_en) > 10 * 60000);
+  return `<section class="card flat"><h3>Avisos por correo</h3>
+    ${sinEnvio ? '<p class="small warnbox">Hay avisos sin enviar. El envío de correos todavía no está configurado (ver operaciones).</p>' : ''}
+    <div>${av.map(x => `<div class="att" style="grid-template-columns:1fr auto"><div><div class="t">${esc(x.datos.codigo || '')} bloqueado</div><div class="s">${fFecha(x.creada_en)} ${fHora(x.creada_en)} · ${esc(x.datos.operario || '')}</div></div><span class="chip ${est[x.estado][0]}">${est[x.estado][1]}</span></div>`).join('')}</div></section>`;
+}
+
 function vPersonal() {
   const a = T(), d = a.d, adm = esAdmin(), n = a.addPer;
   const roles = { dueno: 'Dueño', admin: 'Administración', supervisor: 'Supervisor', operario: 'Operario' };
-  const per = d.miembros.map(m => `<div class="eqrow"><span class="eqcode">${esc(m.legajo || '—')}</span><div><b>${esc(m.nombre)}</b> <span class="chip plain">${roles[m.rol]}</span>${m.activo ? '' : ' <span class="chip">Inactivo</span>'}</div>
-      <div class="row" style="justify-content:flex-end">${adm && m.rol !== 'dueno' && m.legajo ? `<button class="btn sm ghost" data-act="admPin" data-id="${m.id}">Cambiar PIN</button>` : ''}
+  const gestor = m => ['dueno', 'admin', 'supervisor'].includes(m.rol);
+  const per = d.miembros.map(m => `<div class="eqrow"><span class="eqcode">${esc(m.legajo || '—')}</span><div><b>${esc(m.nombre)}</b> <span class="chip plain">${roles[m.rol]}</span>${m.activo ? '' : ' <span class="chip">Inactivo</span>'}${m.bloqueado_en ? ' <span class="chip bad">Bloqueado por PIN</span>' : ''}
+      <div class="small muted">${d.consent[m.id] ? `Aceptó la política de privacidad el ${fFecha(d.consent[m.id])}` : 'Todavía no aceptó la política de privacidad'}${gestor(m) ? ` · ${m.recibir_avisos ? 'recibe avisos por correo' : 'no recibe avisos'}` : ''}</div></div>
+      <div class="row" style="justify-content:flex-end">${adm && m.bloqueado_en ? `<button class="btn sm primary" data-act="admDesbloquear" data-id="${m.id}">Desbloquear</button>` : ''}
+      ${adm && gestor(m) && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admAvisos" data-id="${m.id}">${m.recibir_avisos ? 'Sin avisos' : 'Con avisos'}</button>` : ''}${adm && m.rol !== 'dueno' && m.legajo ? `<button class="btn sm ghost" data-act="admPin" data-id="${m.id}">Cambiar PIN</button>` : ''}
       ${adm && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admActivo" data-id="${m.id}">${m.activo ? 'Desactivar' : 'Activar'}</button>` : ''}</div>
       ${a.pin && a.pin.id === m.id ? `<div style="grid-column:1/-1" class="row"><input class="inp num" id="pin-nuevo" data-pin="pin" inputmode="numeric" maxlength="6" placeholder="Nuevo PIN (6 números)" value="${esc(a.pin.pin)}" style="flex:1 1 180px">
         <button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admPinOk">Guardar</button></div>` : ''}</div>`).join('');
@@ -277,7 +299,22 @@ async function rpc(nombre, args, ok) {
 }
 export const A = {
   admRecargar: () => cargar(),
-  admTab: async b => { const a = T(); a.tab = b.dataset.k; a.confirm = null; render(); if (a.tab === 'jornadas') { a.jornadas = null; render(); await cargarJornadas(); render(); } },
+  admTab: async b => {
+    const a = T(); a.tab = b.dataset.k; a.confirm = null; a.ed = null; render();
+    if (a.tab === 'jornadas') { a.jornadas = null; render(); await cargarJornadas(); render(); }
+    if (a.tab === 'plantillas') Ed.cargarPlantillas();
+  },
+  ...Ed.A,
+  etqUno: b => { T().etiquetas = [b.dataset.id]; render(); },
+  etqTodas: () => { T().etiquetas = T().d.equipos.filter(e => e.activo).map(e => e.id); render(); },
+  etqCerrar: () => { T().etiquetas = null; render(); },
+  etqImprimir: () => window.print(),
+  admDesbloquear: async b => { await rpc('desbloquear_miembro', { p_miembro: b.dataset.id }, 'Legajo desbloqueado. Ya puede volver a entrar.'); },
+  admAvisos: async b => {
+    const m = T().d.miembros.find(x => x.id === b.dataset.id);
+    const { error } = await sb.from('miembros').update({ recibir_avisos: !m.recibir_avisos }).eq('id', m.id);
+    if (error) return toast(msgError(error)); cargar();
+  },
   admVer: b => { T().detalle = b.dataset.id; cargarDetalle(b.dataset.id); },
   admVolver: () => { T().detalle = null; T().det = null; render(); },
   admCsv: () => { descargar(`checkobra-jornadas-${dayKey(new Date())}.csv`, csv(), 'text/csv;charset=utf-8'); toast('Archivo descargado. Se abre con Excel.'); },
@@ -360,6 +397,7 @@ async function errorFuncion(error) {
 
 export function alEscribir(el, v) {
   const a = T(); if (!a) return false;
+  if (Ed.alEscribir(el, v)) return true;
   if (el.dataset.fa) { a.f[el.dataset.fa] = v; a.jornadas = null; render(); cargarJornadas().then(render); return true; }
   if (el.dataset.ne && a.addEq) { a.addEq[el.dataset.ne] = v; if (el.dataset.ne === 'plantilla') render(); return true; }
   if (el.dataset.np && a.addPer) { a.addPer[el.dataset.np] = v; return true; }

@@ -1,0 +1,9 @@
+# Avisos de librerías con vulnerabilidades conocidas.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /desarrollo
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

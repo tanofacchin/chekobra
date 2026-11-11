@@ -1,5 +1,17 @@
+# Dependencias y temporales
 node_modules/
+supabase/.temp/
+**/supabase/.temp/
+.DS_Store
+*.log
+
+# Claves y configuraciones locales: NUNCA se suben
 .env
 .env.*
-supabase/.temp/
-.DS_Store
+*.pem
+*.key
+*.p12
+*.pfx
+*secret*
+*credencial*
+service-account*.json
