@@ -256,10 +256,10 @@ do $$ begin
 end $$;
 -- ===== Plantillas propias
 insert into public.plantillas (empresa_id, clave, nombre, rubro, medidor, version, secciones)
-  select v, 'excavadora', 'Excavadora Concivi', 'construccion', 'horas', 1,
+  select v, 'excavadora', 'Excavadora Propia', 'construccion', 'horas', 1,
          '[{"titulo":"Seguridad","items":[{"id":"doc.1","texto":"Operador habilitado","critico":true},{"id":"c.x1","texto":"Arnés","critico":false}]}]'
     from ctx where k = 'A';
-do $$ begin if (public.plantilla_vigente((select v from ctx where k = 'A'), 'excavadora')).nombre <> 'Excavadora Concivi' then raise exception 'FALLÓ: no usa la plantilla propia'; end if; end $$;
+do $$ begin if (public.plantilla_vigente((select v from ctx where k = 'A'), 'excavadora')).nombre <> 'Excavadora Propia' then raise exception 'FALLÓ: no usa la plantilla propia'; end if; end $$;
 select pg_temp.esperar_error($$insert into public.plantillas (empresa_id, clave, nombre, rubro, version, secciones)
   select v, 'mala', 'Mala', 'construccion', 1, '[{"titulo":"X","items":[{"id":"a","texto":"Uno","critico":false},{"id":"a","texto":"Dos","critico":false}]}]' from ctx where k = 'A'$$, 'repetidos');
 select pg_temp.esperar_error($$insert into public.plantillas (empresa_id, clave, nombre, rubro, version, secciones)
@@ -270,7 +270,7 @@ select pg_temp.esperar_error($$update public.plantillas set secciones = '[{"titu
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
 do $$ begin
-  if exists (select 1 from public.plantillas where nombre = 'Excavadora Concivi') then raise exception 'FALLÓ: B ve plantillas de A'; end if;
+  if exists (select 1 from public.plantillas where nombre = 'Excavadora Propia') then raise exception 'FALLÓ: B ve plantillas de A'; end if;
   if exists (select 1 from public.notificaciones) or exists (select 1 from public.consentimientos) then raise exception 'FALLÓ: B ve datos de A'; end if;
 end $$;
 select pg_temp.esperar_error($$select public.destinatarios_avisos(gen_random_uuid())$$, 'permission denied');

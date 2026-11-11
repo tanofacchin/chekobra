@@ -16,5 +16,5 @@ test('exige un secreto largo', async () => {
   await assert.rejects(() => derivarClave('corto', 'u1', '123456'));
 });
 test('correo interno del operario', () => {
-  assert.equal(correoOperario(' Concivi ', 'AB-12'), 'ab-12@concivi.operarios.invalid');
+  assert.equal(correoOperario(' MiEmpresa ', 'AB-12'), 'ab-12@miempresa.operarios.invalid');
 });

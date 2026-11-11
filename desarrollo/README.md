@@ -7,7 +7,6 @@ El operario inicia la jornada con ubicación, foto con el equipo, checklist y fi
 el equipo queda bloqueado hasta que un supervisor lo libera. La empresa ve todo en un panel y exporta a Excel.
 
 Producto multiempresa: cada cliente (empresa) tiene sus equipos, personal, obras y plantillas, y no ve los datos de los demás.
-Primer cliente: Concivi.
 
 ## Estado
 

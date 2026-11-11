@@ -62,7 +62,7 @@ function vLogin() {
       <button role="tab" aria-selected="${!op}" class="${!op ? 'on' : ''}" data-act="modoLogin" data-m="correo">Supervisión</button></div>
     <form class="card login-card" data-form="login" novalidate>
       ${op ? `
-        <label class="f">Código de empresa<input class="inp" id="l-slug" data-l="slug" value="${esc(L.slug)}" autocapitalize="none" autocomplete="organization" placeholder="ej.: concivi"></label>
+        <label class="f">Código de empresa<input class="inp" id="l-slug" data-l="slug" value="${esc(L.slug)}" autocapitalize="none" autocomplete="organization" placeholder="ej.: miempresa"></label>
         <label class="f">Legajo<input class="inp" id="l-leg" data-l="legajo" value="${esc(L.legajo)}" autocapitalize="none" autocomplete="username"></label>
         <label class="f">PIN<input class="inp num pin" id="l-pin" data-l="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" value="${esc(L.pin)}"></label>`
       : `
@@ -89,9 +89,9 @@ function vOnboarding() {
   return `<main class="wrap"><section><p class="eyebrow">Primer paso</p><h1>Registrá tu empresa</h1>
     <p class="muted">Si sos operario, no hace falta: pedile a tu supervisor que te dé de alta.</p></section>
     <form class="card" data-form="empresa" novalidate>
-      <label class="f">Nombre de la empresa<input class="inp" id="o-nom" data-o="nombre" value="${esc(o.nombre)}" placeholder="Concivi S.A."></label>
+      <label class="f">Nombre de la empresa<input class="inp" id="o-nom" data-o="nombre" value="${esc(o.nombre)}" placeholder="Mi Empresa S.A."></label>
       <label class="f">Código de empresa <small>Lo usan los operarios para entrar. Minúsculas, números y guiones.</small>
-        <input class="inp" id="o-slug" data-o="slug" value="${esc(o.slug)}" autocapitalize="none" placeholder="concivi"></label>
+        <input class="inp" id="o-slug" data-o="slug" value="${esc(o.slug)}" autocapitalize="none" placeholder="miempresa"></label>
       <label class="f">Rubro<select class="inp" id="o-rubro" data-o="rubro">${[['construccion', 'Construcción'], ['mineria', 'Minería'], ['agro', 'Agro'], ['otro', 'Otro']].map(([v, l]) => `<option value="${v}" ${o.rubro === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="f">Tu nombre y apellido<input class="inp" id="o-mi" data-o="miNombre" value="${esc(o.miNombre)}"></label>
       ${o.err ? `<p class="err" role="alert">${esc(o.err)}</p>` : ''}
