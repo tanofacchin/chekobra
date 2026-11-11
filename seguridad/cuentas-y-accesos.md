@@ -23,6 +23,8 @@ El **correo principal** es la llave de todo: si alguien lo controla, recupera la
 | Token personal de Supabase (`sbp_…`) | Entorno de Claude Code "chekobra" | Alto: administra el proyecto | supabase.com/dashboard/account/tokens → borrar y crear otro |
 | `CRON_SECRET` | Secrets de la función `johndeere` + Vault (`cron_secret`) | Bajo: permite forzar una sincronización | Cambiar en ambos lugares a la vez |
 | `JD_CLIENT_ID` / `JD_CLIENT_SECRET` (pendiente) | Secrets de la función `johndeere` | Alto: suplantar la app ante John Deere | Portal de John Deere |
+| `PIN_PEPPER` | Secrets de funciones de Supabase + gestor de contraseñas | Alto: junto con la base, permitiría probar PINs fuera de la app | Cambiarlo obliga a dar PIN nuevo a todos los operarios |
+| `RESEND_API_KEY` (pendiente) | Secrets de la función `avisos` | Medio: mandar correos en nombre del dominio | Panel de Resend |
 | Contraseña de la base de datos | Gestor de contraseñas | Alto | Supabase → Database → Reset password |
 
 ## Configuración recomendada de GitHub

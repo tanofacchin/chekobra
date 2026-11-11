@@ -9,9 +9,27 @@ export const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, 
 // Debe coincidir con public.correo_operario() y supabase/functions/operarios.
 export const correoOperario = (slug, legajo) => `${legajo.trim().toLowerCase()}@${slug.trim().toLowerCase()}.operarios.invalid`;
 
+// Los operarios entran por la función 'ingresar', que cuenta intentos y bloquea al quinto error.
 export async function ingresarOperario(slug, legajo, pin) {
-  const { error } = await sb.auth.signInWithPassword({ email: correoOperario(slug, legajo), password: pin });
+  const { data, error } = await sb.functions.invoke('ingresar', { body: { slug, legajo, pin } });
+  if (error) {
+    let msg = error.message;
+    try { const b = await error.context.json(); if (b && b.error) msg = b.error; } catch { /* sin cuerpo */ }
+    const e = new Error(msg); e.bloqueado = error.context && error.context.status === 423; throw e;
+  }
+  const { error: es } = await sb.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token });
+  if (es) throw es;
+}
+export async function privacidadPendiente(empresa, miembroId) {
+  const k = 'co_priv_' + miembroId;
+  const { data, error } = await sb.rpc('privacidad_pendiente', { p_empresa: empresa });
+  if (error) return ls.get(k, true);     // sin señal: usar lo último conocido (por defecto, pedirla)
+  ls.set(k, data); return data;
+}
+export async function aceptarPrivacidad(empresa, miembroId) {
+  const { error } = await sb.rpc('aceptar_privacidad', { p_empresa: empresa, p_agente: navigator.userAgent });
   if (error) throw error;
+  ls.set('co_priv_' + miembroId, false);
 }
 export async function ingresarConCorreo(email, password) {
   const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password });

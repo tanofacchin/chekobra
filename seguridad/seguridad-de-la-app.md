@@ -14,7 +14,7 @@
 
 ## Pendientes (por prioridad)
 
-1. **Límite de intentos de PIN.** El PIN tiene 6 dígitos; Supabase limita intentos por IP, pero conviene bloquear el legajo tras 5 intentos fallidos y avisar al administrador.
+1. ~~Límite de intentos de PIN~~ **Hecho:** bloqueo al 5.º intento; la contraseña real se deriva del PIN con un secreto del servidor, así que no se pueden probar PINs por fuera de la función `ingresar`.
 2. **Correo propio (SMTP)** para los mails de la cuenta, con dominio propio (evita suplantación y el límite de envíos).
 3. **Dominio propio con HTTPS** en lugar de github.io.
 4. **Encabezados de seguridad** (Content-Security-Policy) en el hosting definitivo.

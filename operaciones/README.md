@@ -15,6 +15,21 @@
 - **Base de datos**: nueva migración en `desarrollo/supabase/migrations/`, probar con `npm test` en `desarrollo/`, aplicar en Supabase.
 - **Funciones**: desplegar con la CLI de Supabase o la API de administración.
 
+## Publicar la versión del piloto (consentimiento, PIN, QR, plantillas, avisos)
+
+El orden importa: la app nueva entra por la función `ingresar` y exige el consentimiento.
+1. Probar todo en el proyecto `checkobra-pruebas`.
+2. En producción, cargar el secreto `PIN_PEPPER` (64 caracteres al azar, guardarlo también en el gestor de contraseñas:
+   si se pierde, todos los operarios tienen que recibir un PIN nuevo).
+3. Aplicar las migraciones 8 y 9.
+4. Desplegar las funciones `ingresar`, `operarios` y `avisos`.
+5. Subir la app (sube `VERSION` del service worker a `checkobra-v3`).
+6. Los operarios creados antes de este cambio necesitan un PIN nuevo (Personal → Cambiar PIN).
+
+Avisos por correo: crear cuenta en Resend, verificar el dominio propio y cargar `RESEND_API_KEY` y
+`AVISOS_REMITENTE` (ej.: `CheckObra <avisos@dominio>`) en los secretos de funciones. Sin eso, los avisos quedan
+pendientes y se ven en el panel.
+
 ## Respaldos
 
 - Plan gratuito de Supabase: **sin respaldos automáticos descargables**. Antes de tener clientes pagos: pasar a plan Pro

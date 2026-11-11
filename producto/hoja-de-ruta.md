@@ -11,17 +11,19 @@
 - Ingreso de operarios con código de empresa + legajo + PIN.
 - Integración John Deere JDLink (ISO 15143-3) con alertas cruzadas. Falta la aprobación de John Deere.
 
+- Listo para publicar (falta prueba completa en el proyecto de pruebas): consentimiento y política de privacidad,
+  bloqueo por 5 intentos de PIN, etiquetas QR por equipo y escáner en la app, editor de plantillas, avisos por correo
+  de equipos bloqueados.
+
 ## Próximo (piloto Concivi)
 
-1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal).
-2. Consentimiento del operario y política de privacidad (ver `legal/`).
-3. Límite de intentos de PIN (ver `seguridad/`).
-4. Código QR por equipo: el operario escanea y entra directo al checklist de ese equipo.
-5. Editor de plantillas para que cada empresa ajuste sus checklists.
+1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).
+2. Revisión legal de la política de privacidad y definición de plazos de conservación.
+3. Borrado automático de fotos y ubicaciones vencidas.
 
 ## Después
 
-- Avisos por WhatsApp / correo al supervisor ante un bloqueo o una falla.
+- Avisos por WhatsApp (por correo ya está).
 - Mantenimiento: service por horas de motor, vencimientos de documentación (seguro, VTV, habilitaciones).
 - Otras marcas por ISO 15143-3 (Caterpillar, Komatsu, Volvo) y APIs de agro (CNH, AGCO).
 - Reportes PDF para auditorías de minería.

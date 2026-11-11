@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Política de privacidad · CheckObra</title>
+<link rel="icon" href="icons/icono.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<main class="wrap politica" id="contenido"></main>
+<script type="module">
+  import { politicaHtml } from './js/politica.js';
+  document.getElementById('contenido').innerHTML = politicaHtml() + '<p><a href="./">Volver a CheckObra</a></p>';
+</script>
+</body>
+</html>

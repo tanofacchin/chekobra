@@ -251,3 +251,38 @@ body{margin:0}
 .fl .chip{align-self:flex-start}
 .tele{color:var(--ok)}
 .tele a{color:inherit}
+
+/* ---- piloto: privacidad, editor, escáner, etiquetas ---- */
+.priv dt{font-weight:700;color:var(--ink)}
+.priv{grid-template-columns:1fr}
+.priv dd{margin-bottom:6px;color:var(--muted)}
+.politica{max-width:760px}
+.politica h1{font-size:2rem}
+.politica h2{font-size:1.25rem;margin-top:8px}
+.politica p,.politica li{line-height:1.6}
+.ed-sec-h{display:grid;grid-template-columns:1fr auto;gap:8px;padding:12px 16px;background:var(--sunk);align-items:center}
+.ed-sec-h .inp{font-weight:700;min-height:44px}
+.ed-item{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:8px 16px;border-top:1px solid var(--line)}
+.ed-item .inp{min-height:44px;font-size:.98rem}
+.ed-crit{padding:0;font-size:.9rem;white-space:nowrap}
+.ed-crit input{width:20px;height:20px}
+.ed-btns{display:flex;gap:4px}
+.ed-btns .btn{min-height:40px;min-width:40px;padding:0 8px}
+@media (max-width:600px){.ed-item{grid-template-columns:1fr auto}.ed-item .ed-btns{grid-column:1/-1;justify-content:flex-end}}
+.scan video{width:100%;max-height:60vh;border-radius:10px;background:#000;aspect-ratio:3/4;object-fit:cover}
+.etiquetas{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.etiqueta{display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center;border:2px solid #1a1e22;border-radius:12px;padding:12px;background:#fff;color:#1a1e22;break-inside:avoid}
+.etq-qr svg{width:120px;height:120px;display:block}
+.etq-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.etq-marca{font-family:var(--f-display);font-weight:700;color:#9a5b00;letter-spacing:.06em;text-transform:uppercase;font-size:.8rem}
+.etq-cod{font-family:var(--f-display);font-size:2rem;line-height:1}
+.etq-nom{font-size:.9rem;overflow-wrap:anywhere}
+.etq-ins{margin-top:6px;font-weight:700;font-size:.85rem;background:#f0a500;color:#1a1e22;border-radius:6px;padding:2px 8px;align-self:flex-start}
+.etq-emp{font-size:.75rem;color:#555}
+@media print{
+  .top,.banner-band,.no-print,#toast{display:none!important}
+  body{background:#fff}
+  .wrap{padding:0;max-width:none}
+  .etiquetas{grid-template-columns:repeat(2,1fr);gap:6mm}
+  .etiqueta{border-width:1.5px}
+}

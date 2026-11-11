@@ -21,7 +21,9 @@ export async function cargar() {
   o.cola = await cola.listar().catch(() => []);
   const b = o.cola.find(e => S.user && e.id === idBorrador());
   o.borrador = b ? b.flow : null;
-  o.cargando = false; render();
+  o.cargando = false;
+  if (o.qr && o.d) { const id = o.qr; o.qr = null; elegirPorQr(id); }
+  render();
 }
 
 // Cuando un checklist hecho sin señal llega al servidor.
@@ -29,6 +31,60 @@ export function alEnviar(ev) {
   const o = O(); if (!o) return;
   if (o.resultado && o.resultado.client_id === ev.envio.id) { o.resultado.enviado = true; render(); }
 }
+
+/* ------------------------------------------------------------ QR del equipo */
+// Desde el enlace del QR (main.js) o desde el escáner de la app.
+export function abrirDesdeQr(id) {
+  const o = O(); if (!o) return;
+  if (o.d) elegirPorQr(id); else o.qr = id;
+}
+function elegirPorQr(id) {
+  const o = O(), e = eqById(id);
+  if (!e) return toast('Ese equipo no está cargado en tu empresa.', 5000);
+  if (jornadaAbierta() && !(o.flow && o.flow.step === 0)) return toast('Tenés una jornada abierta: cerrala antes de iniciar otra.', 5000);
+  if (e.estado === 'bloqueado') return toast(`${e.codigo} está bloqueado: ${e.motivo_bloqueo || 'falla crítica'}. Avisá al supervisor.`, 7000);
+  if (e.estado === 'fuera_servicio') return toast(`${e.codigo} está fuera de servicio.`, 5000);
+  const uso = o.d.enUso.find(u => u.equipo_id === e.id);
+  if (uso) return toast(`${e.codigo} lo está usando ${uso.operario}.`, 5000);
+  if (!plDe(e)) return toast(`${e.codigo} no tiene checklist asignado.`, 5000);
+  if (!o.flow) o.flow = nuevoFlujo();
+  if (o.flow.equipoId !== e.id) { o.flow.equipoId = e.id; o.flow.resp = {}; o.flow.medIni = ''; }
+  o.flow.step = 0; o.flow.err = ''; o.resultado = null; o.cierre = null; o.detalle = null;
+  guardarBorrador(); render();
+  toast(`${e.codigo} · ${e.nombre} seleccionado.`);
+}
+export const puedeEscanear = () => 'BarcodeDetector' in window && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+let scan = null;
+async function abrirEscaner() {
+  // El escáner vive fuera de #app: así no se corta si la pantalla se redibuja.
+  const caja = document.createElement('div'); caja.id = 'escaner'; caja.innerHTML = vEscaner(); document.body.append(caja);
+  O().scan = true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    const v = $('#scan-video'); if (!v || !O() || !O().scan) { stream.getTracks().forEach(t => t.stop()); return; }
+    v.srcObject = stream; await v.play();
+    const det = new window.BarcodeDetector({ formats: ['qr_code'] });
+    scan = { stream, timer: setInterval(async () => {
+      try {
+        const r = await det.detect(v); if (!r.length) return;
+        const u = new URL(r[0].rawValue, location.href), id = u.searchParams.get('equipo');
+        if (!id) return toast('Ese código no es de un equipo de CheckObra.');
+        cerrarEscaner(); elegirPorQr(id);
+      } catch { /* sigue intentando */ }
+    }, 300) };
+  } catch {
+    cerrarEscaner(); toast('No se pudo abrir la cámara. Revisá el permiso o elegí el equipo de la lista.', 6000);
+  }
+}
+function cerrarEscaner() {
+  if (scan) { clearInterval(scan.timer); scan.stream.getTracks().forEach(t => t.stop()); scan = null; }
+  if (O()) O().scan = false;
+  const caja = $('#escaner'); if (caja) caja.remove();
+}
+const vEscaner = () => `<div class="modal" role="dialog" aria-modal="true" aria-label="Escanear QR"><div class="card scan">
+  <h2>Escaneá el QR del equipo</h2><video id="scan-video" playsinline muted></video>
+  <p class="small muted">Apuntá la cámara a la etiqueta pegada en la máquina.</p>
+  <button class="btn" data-act="opCerrarEscaner">Cancelar</button></div></div>`;
 
 /* ------------------------------------------------------------ helpers */
 const eqById = id => O().d && O().d.equipos.find(e => e.id === id);
@@ -119,7 +175,8 @@ function stEquipo() {
       ${chipEquipo(e, uso)}${uso ? `<span class="meta">Lo usa ${esc(uso.operario)}</span>` : ''}${e.estado === 'bloqueado' ? '<span class="meta">Avisá al supervisor</span>' : ''}</button>`;
   }).join('')}</div>` : '<div class="empty">No hay equipos cargados. Pedile al supervisor que los dé de alta.</div>';
   const e = eqById(f.equipoId);
-  return `<h1>¿Con qué equipo trabajás hoy?</h1>${grid}
+  return `<h1>¿Con qué equipo trabajás hoy?</h1>
+    ${puedeEscanear() ? '<button class="btn dark block" data-act="opEscanear">Escanear QR del equipo</button>' : ''}${grid}
     <label class="f">Obra o frente de trabajo<select class="inp" id="f-obra" data-fl="obraId"><option value="">Elegí la obra</option>
       ${d.obras.map(ob => `<option value="${ob.id}" ${ob.id === f.obraId ? 'selected' : ''}>${esc(ob.nombre)}</option>`).join('')}</select></label>
     ${e ? `<label class="f">${e.medidor === 'km' ? 'Odómetro inicial (km)' : 'Horómetro inicial (horas)'}
@@ -367,6 +424,8 @@ async function cerrar() {
 
 export const A = {
   opRecargar: () => cargar(),
+  opEscanear: () => abrirEscaner(),
+  opCerrarEscaner: () => cerrarEscaner(),
   opNueva: () => { O().flow = nuevoFlujo(); render(); },
   opSeguir: () => { const b = O().borrador; if (!b) return; O().flow = { ...nuevoFlujo(), ...b, t0: b.step === 3 ? Date.now() : null }; render(); },
   opDescartar: async () => { const o = O(); if (o.confirm !== 'borrador') { o.confirm = 'borrador'; return render(); } o.confirm = null; await cola.borrar(idBorrador()); o.borrador = null; render(); },

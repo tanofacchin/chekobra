@@ -21,7 +21,7 @@ trap 'run "$PGBIN/pg_ctl -D $DIR/data stop -m fast >/dev/null"; rm -rf "$DIR"' E
 PSQL=(psql -h "$DIR" -p "$PORT" -U "$USER_PG" -d postgres -v ON_ERROR_STOP=1 -q)
 "${PSQL[@]}" -f supabase/tests/stub_supabase.sql
 for f in supabase/migrations/*.sql; do
-  if grep -q "pg_cron" "$f"; then echo "migración: $f (se saltea: requiere pg_cron de Supabase)"; continue; fi
+  if grep -q "cron.schedule" "$f"; then echo "migración: $f (se saltea: requiere pg_cron de Supabase)"; continue; fi
   echo "migración: $f"; "${PSQL[@]}" -f "$f"
 done
 "${PSQL[@]}" -f supabase/tests/pruebas.sql
