@@ -122,6 +122,17 @@ Se separó el trabajo en **CheckObra · Desarrollo** y **CheckObra · Estrategia
 - **Oportunidad:** Teltonika puede mandar los datos a un servidor propio, así que CheckObra podría ofrecer su **propio kit
   de telemetría** para flotas mixtas. El receptor iría en un VPS (KVM 1 para empezar).
 
+## 13. Funciones para el piloto (11/11)
+
+**Pedido:** hacer consentimiento y política de privacidad, límite de intentos de PIN, QR por equipo, editor de
+plantillas y avisos al supervisor.
+
+**Se hizo:** las cinco, con pruebas de la base de datos y de los QR. Falta la prueba completa de pantallas en un
+proyecto de pruebas de Supabase (`checkobra-pruebas`, que tiene que crear el usuario).
+
+**Decisión del usuario:** dejar todo listo sin subir hasta pagar GitHub Pro y pasar el repositorio a privado.
+Se le entregó un respaldo (`.zip` y `.bundle`) porque los cambios solo estaban en la sesión.
+
 ## Pendientes al 11/11
 
 **Del usuario:**
