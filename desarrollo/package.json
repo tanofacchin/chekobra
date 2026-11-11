@@ -6,6 +6,6 @@
     "test": "node --test supabase/functions/_shared/*.test.mjs && supabase/tests/correr.sh"
   },
   "devDependencies": {
-    "fast-xml-parser": "4.5.0"
+    "fast-xml-parser": "5.12.0"
   }
 }
