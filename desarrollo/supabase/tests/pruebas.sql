@@ -23,10 +23,16 @@ exception when others then
   end if;
 end $$;
 
+create function pg_temp.foto_medidor() returns text language sql as $$
+  select (select empresa_id::text from public.miembros where user_id = auth.uid() limit 1) || '/' || auth.uid()::text || '/m.jpg'
+$$;
 create function pg_temp.respuestas(p_clave text, p_fallas jsonb default '{}') returns jsonb language sql as $$
-  select jsonb_object_agg(it->>'id', coalesce(p_fallas->(it->>'id'), '{"v":"ok"}'::jsonb))
-    from public.plantillas p, jsonb_array_elements(p.secciones) s, jsonb_array_elements(s->'items') it
-   where p.empresa_id is null and p.clave = p_clave
+  with pl as (select secciones from public.plantillas where empresa_id is null and clave = p_clave order by version desc limit 1),
+  pref as (select (select empresa_id::text from public.miembros where user_id = auth.uid() limit 1) || '/' || auth.uid()::text || '/f.jpg' as f)
+  select jsonb_object_agg(it->>'id',
+           coalesce(p_fallas->(it->>'id'), '{"v":"ok"}'::jsonb)
+           || case when it->>'foto' = 'obligatoria' then jsonb_build_object('foto', (select f from pref)) else '{}'::jsonb end)
+    from pl, jsonb_array_elements(pl.secciones) s, jsonb_array_elements(s->'items') it
 $$;
 
 -- ===== Empresa A: la crea su dueña
@@ -58,7 +64,7 @@ do $$ begin
   if (select count(*) from public.empresas) <> 1 then raise exception 'FALLÓ: B ve otras empresas'; end if;
   if exists (select 1 from public.equipos where codigo = 'EX-01') then raise exception 'FALLÓ: B ve equipos de A'; end if;
   if exists (select 1 from public.miembros where nombre like 'Operario A%') then raise exception 'FALLÓ: B ve personal de A'; end if;
-  if (select count(*) from public.plantillas) <> 13 then raise exception 'FALLÓ: B no ve las 13 plantillas base'; end if;
+  if (select count(*) from public.plantillas) <> 26 then raise exception 'FALLÓ: B no ve las 26 plantillas base (v1 y v2)'; end if;
 end $$;
 -- B no puede meterse en A
 select pg_temp.esperar_error($$insert into public.miembros (empresa_id, user_id, nombre, rol)
@@ -86,22 +92,22 @@ select (select v from ctx where k = 'A')::text || '/00000000-0000-0000-0000-0000
 -- validaciones del RPC
 select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object(
   'client_id', gen_random_uuid(), 'equipo_id', %L, 'obra_id', %L, 'med_ini', 50, 'lat', -31.4, 'lng', -64.2,
-  'selfie_path', %L, 'firma_path', %L, 'declaracion', true, 'dur_checklist_s', 300,
+  'selfie_path', %L, 'firma_path', %L, 'medidor_foto_path', pg_temp.foto_medidor(), 'declaracion', true, 'dur_checklist_s', 300,
   'respuestas', pg_temp.respuestas('excavadora')))$$,
   (select v from ctx where k = 'eqA'), (select v from ctx where k = 'obraA'), :'pref' || 's.jpg', :'pref' || 'f.png'), 'menor al último');
 select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object(
   'client_id', gen_random_uuid(), 'equipo_id', %L, 'med_ini', 120, 'lat', -31.4, 'lng', -64.2,
-  'selfie_path', %L, 'firma_path', %L, 'declaracion', true, 'dur_checklist_s', 300,
+  'selfie_path', %L, 'firma_path', %L, 'medidor_foto_path', pg_temp.foto_medidor(), 'declaracion', true, 'dur_checklist_s', 300,
   'respuestas', pg_temp.respuestas('excavadora') - 'cabina.3'))$$,
   (select v from ctx where k = 'eqA'), :'pref' || 's.jpg', :'pref' || 'f.png'), 'Falta responder');
 select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object(
   'client_id', gen_random_uuid(), 'equipo_id', %L, 'med_ini', 120, 'lat', -31.4, 'lng', -64.2,
-  'selfie_path', %L, 'firma_path', %L, 'declaracion', true, 'dur_checklist_s', 300,
+  'selfie_path', %L, 'firma_path', %L, 'medidor_foto_path', pg_temp.foto_medidor(), 'declaracion', true, 'dur_checklist_s', 300,
   'respuestas', pg_temp.respuestas('excavadora', '{"cabina.1":{"v":"na"}}')))$$,
   (select v from ctx where k = 'eqA'), :'pref' || 's.jpg', :'pref' || 'f.png'), 'No aplica');
 select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object(
   'client_id', gen_random_uuid(), 'equipo_id', %L, 'med_ini', 120, 'lat', -31.4, 'lng', -64.2,
-  'selfie_path', 'otra-empresa/x/s.jpg', 'firma_path', %L, 'declaracion', true, 'dur_checklist_s', 300,
+  'selfie_path', 'otra-empresa/x/s.jpg', 'firma_path', %L, 'medidor_foto_path', pg_temp.foto_medidor(), 'declaracion', true, 'dur_checklist_s', 300,
   'respuestas', pg_temp.respuestas('excavadora')))$$,
   (select v from ctx where k = 'eqA'), :'pref' || 'f.png'), 'Foto o firma inválida');
 
@@ -109,7 +115,7 @@ select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build
 do $$ begin if not public.privacidad_pendiente((select v from ctx where k = 'A')) then raise exception 'FALLÓ: privacidad no pendiente'; end if; end $$;
 select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object(
   'client_id', gen_random_uuid(), 'equipo_id', %L, 'med_ini', 120, 'lat', -31.4, 'lng', -64.2,
-  'selfie_path', %L, 'firma_path', %L, 'declaracion', true, 'dur_checklist_s', 300,
+  'selfie_path', %L, 'firma_path', %L, 'medidor_foto_path', pg_temp.foto_medidor(), 'declaracion', true, 'dur_checklist_s', 300,
   'respuestas', pg_temp.respuestas('excavadora')))$$,
   (select v from ctx where k = 'eqA'), :'pref' || 's.jpg', :'pref' || 'f.png'), 'política de privacidad');
 select public.aceptar_privacidad((select v from ctx where k = 'A'), 'prueba');
@@ -123,14 +129,14 @@ select gen_random_uuid() as cid \gset
 select public.enviar_checklist(jsonb_build_object(
   'client_id', :'cid', 'equipo_id', (select v from ctx where k = 'eqA'), 'obra_id', (select v from ctx where k = 'obraA'),
   'med_ini', 120, 'lat', -31.4, 'lng', -64.2, 'precision_m', 8,
-  'selfie_path', :'pref' || 's.jpg', 'firma_path', :'pref' || 'f.png', 'declaracion', true, 'dur_checklist_s', 70,
-  'respuestas', pg_temp.respuestas('excavadora', '{"fluidos.5":{"v":"falla","nota":"pierde aceite"},"trabajo.1":{"v":"falla","nota":"diente flojo"}}')
+  'selfie_path', :'pref' || 's.jpg', 'firma_path', :'pref' || 'f.png', 'medidor_foto_path', :'pref' || 'f.png', 'declaracion', true, 'dur_checklist_s', 70,
+  'respuestas', pg_temp.respuestas('excavadora', '{"fluidos.5":{"v":"falla","nota":"pierde aceite"},"trabajo.3":{"v":"falla","nota":"sin traba"}}')
 )) ->> 'resultado' as r \gset
 \echo resultado esperado no_apto: :r
 -- reenvío idéntico (sin señal) no duplica
 select (public.enviar_checklist(jsonb_build_object(
   'client_id', :'cid', 'equipo_id', (select v from ctx where k = 'eqA'), 'med_ini', 120, 'lat', -31.4, 'lng', -64.2,
-  'selfie_path', :'pref' || 's.jpg', 'firma_path', :'pref' || 'f.png', 'declaracion', true, 'dur_checklist_s', 70,
+  'selfie_path', :'pref' || 's.jpg', 'firma_path', :'pref' || 'f.png', 'medidor_foto_path', :'pref' || 'f.png', 'declaracion', true, 'dur_checklist_s', 70,
   'respuestas', pg_temp.respuestas('excavadora')))->>'repetido') as rep \gset
 \echo reenvío marcado como repetido: :rep
 reset role;
@@ -139,10 +145,11 @@ do $$ declare j public.jornadas; e public.equipos; begin
   select * into j from public.jornadas;
   select * into e from public.equipos where codigo = 'EX-01';
   if (select count(*) from public.jornadas) <> 1 then raise exception 'FALLÓ: jornadas duplicadas'; end if;
-  if j.resultado <> 'no_apto' or j.estado <> 'rechazada' or j.n_fallas <> 2 or j.n_criticas <> 1 or not j.rapido then
+  if j.resultado <> 'no_apto' or j.estado <> 'rechazada' or j.n_fallas <> 2 or j.n_criticas <> 1 or j.n_alertas <> 1 or not j.rapido then
     raise exception 'FALLÓ: jornada mal calculada %', row_to_json(j); end if;
   if e.estado <> 'bloqueado' or e.ultimo_medidor <> 120 then raise exception 'FALLÓ: equipo no bloqueado %', row_to_json(e); end if;
   if (select count(*) from public.fallas where jornada_id = j.id) <> 2 then raise exception 'FALLÓ: fallas no registradas'; end if;
+  if (select count(*) from public.fallas where jornada_id = j.id and grave and not critica) <> 1 then raise exception 'FALLÓ: la pérdida de aceite debe quedar como advertencia'; end if;
   if (select count(*) from public.eventos_equipo where tipo = 'bloqueo') <> 1 then raise exception 'FALLÓ: falta evento de bloqueo'; end if;
   if (select count(*) from public.notificaciones where tipo = 'equipo_bloqueado' and estado = 'pendiente' and datos->>'codigo' = 'EX-01'
         and datos->>'operario' = 'Operario A' and datos->>'obra' = 'Ruta 5') <> 1 then raise exception 'FALLÓ: falta aviso de bloqueo'; end if;
@@ -154,7 +161,7 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
 do $$ begin if exists (select 1 from public.jornadas) then raise exception 'FALLÓ: operario ve jornadas ajenas'; end if; end $$;
 select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object(
   'client_id', gen_random_uuid(), 'equipo_id', %L, 'med_ini', 130, 'lat', 1, 'lng', 1,
-  'selfie_path', 'x', 'firma_path', 'x', 'declaracion', true, 'respuestas', '{}'::jsonb))$$,
+  'selfie_path', 'x', 'firma_path', 'x', 'medidor_foto_path', 'x', 'declaracion', true, 'respuestas', '{}'::jsonb))$$,
   (select v from ctx where k = 'eqA')), 'bloqueado');
 select pg_temp.esperar_error(format($$select public.liberar_equipo(%L, 'lo arreglé yo')$$, (select v from ctx where k = 'eqA')), 'no encontrado');
 reset role;
@@ -178,7 +185,7 @@ select (select v from ctx where k = 'A')::text || '/00000000-0000-0000-0000-0000
 select public.aceptar_privacidad((select v from ctx where k = 'A'), 'prueba');
 select (public.enviar_checklist(jsonb_build_object(
   'client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqA'), 'med_ini', 121, 'ubic_ref', 'Obrador km 12',
-  'selfie_path', :'pref2' || 's.jpg', 'firma_path', :'pref2' || 'f.png', 'declaracion', true, 'dur_checklist_s', 400,
+  'selfie_path', :'pref2' || 's.jpg', 'firma_path', :'pref2' || 'f.png', 'medidor_foto_path', :'pref2' || 'f.png', 'declaracion', true, 'dur_checklist_s', 400,
   'respuestas', pg_temp.respuestas('excavadora')))->>'jornada_id') as jid \gset
 select pg_temp.esperar_error(format($$select public.cerrar_jornada(%L, 200, null, null, false, true)$$, :'jid'), 'demasiado grande');
 select pg_temp.esperar_error(format($$select public.cerrar_jornada(%L, 129, null, null, false, false)$$, :'jid'), 'Confirmá');
@@ -313,7 +320,7 @@ set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
 select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object(
   'client_id', gen_random_uuid(), 'equipo_id', %L, 'med_ini', 130, 'ubic_ref', 'Obrador km 12',
-  'selfie_path', %L, 'firma_path', %L, 'declaracion', true, 'dur_checklist_s', 400,
+  'selfie_path', %L, 'firma_path', %L, 'medidor_foto_path', pg_temp.foto_medidor(), 'declaracion', true, 'dur_checklist_s', 400,
   'respuestas', '{"doc.1":{"v":"ok"},"c.x1":{"v":"ok"}}'::jsonb))$$, (select v from ctx where k = 'eqA'), :'pref2' || 's2.jpg', :'pref2' || 'f2.png'), 'documentación vencida');
 do $$ begin
   if (select count(*) from public.documentos) <> 2 then raise exception 'FALLÓ: el operario debe ver el doc del equipo y el suyo'; end if;
@@ -330,7 +337,7 @@ set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
 select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object(
   'client_id', gen_random_uuid(), 'equipo_id', %L, 'med_ini', 130, 'ubic_ref', 'Obrador km 12',
-  'selfie_path', %L, 'firma_path', %L, 'declaracion', true, 'dur_checklist_s', 400,
+  'selfie_path', %L, 'firma_path', %L, 'medidor_foto_path', pg_temp.foto_medidor(), 'declaracion', true, 'dur_checklist_s', 400,
   'respuestas', '{"doc.1":{"v":"ok"},"c.x1":{"v":"ok"}}'::jsonb))$$, (select v from ctx where k = 'eqA'), :'pref2' || 's2.jpg', :'pref2' || 'f2.png'), 'Tu licencia venció');
 reset role;
 set role authenticated;
@@ -390,5 +397,63 @@ do $$ begin
 end $$;
 select pg_temp.esperar_error($$select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqA'), 'litros', 10))$$, 'No pertenecés');
 reset role;
+
+-- ===== Checklist v2: controles semanales, fotos obligatorias, foto del horómetro, advertencia roja
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+select public.aceptar_privacidad((select v from ctx where k = 'B'), 'prueba');
+insert into public.equipos (empresa_id, codigo, nombre, plantilla_clave, ultimo_medidor)
+  select v, 'EX-B', 'Excavadora B', 'excavadora', 10 from ctx where k = 'B' returning id \gset eqB2_
+insert into ctx values ('eqB2', :'eqB2_id');
+select (select v from ctx where k = 'B')::text || '/00000000-0000-0000-0000-0000000000b1/' as prefB \gset
+do $$ begin
+  if public.dia_iso('2026-11-06 10:00-03') <> 5 then raise exception 'FALLÓ: el 6/11/2026 es viernes'; end if;
+  if public.periodicos_pendientes((select v from ctx where k = 'eqB2'), '2026-11-06') <> array['rodaje.2'] then raise exception 'FALLÓ: zapatas pendientes el viernes'; end if;
+  if public.periodicos_pendientes((select v from ctx where k = 'eqB2'), '2026-11-05') <> array['rodaje.2'] then raise exception 'FALLÓ: zapatas atrasadas del viernes anterior'; end if;
+end $$;
+-- jueves: el control semanal no es obligatorio
+select (public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqB2'), 'inicio', '2026-11-05 07:00-03',
+  'med_ini', 10, 'ubic_ref', 'Obrador', 'selfie_path', :'prefb' || 's.jpg', 'firma_path', :'prefb' || 'f.png', 'medidor_foto_path', :'prefb' || 'm.jpg', 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('excavadora') - 'rodaje.2'))->>'jornada_id') as jb1 \gset
+select public.cerrar_jornada(:'jb1', 18, null, null, false, true);
+-- viernes: sin las zapatas no se acepta
+select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', %L, 'inicio', '2026-11-06 07:00-03',
+  'med_ini', 18, 'ubic_ref', 'Obrador', 'selfie_path', %L, 'firma_path', %L, 'medidor_foto_path', pg_temp.foto_medidor(), 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('excavadora') - 'rodaje.2'))$$, (select v from ctx where k = 'eqB2'), :'prefb' || 's.jpg', :'prefb' || 'f.png', :'prefb' || 'm.jpg'), 'Falta responder: Zapatas');
+-- sin la foto obligatoria del balde
+select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', %L, 'inicio', '2026-11-06 07:00-03',
+  'med_ini', 18, 'ubic_ref', 'Obrador', 'selfie_path', %L, 'firma_path', %L, 'medidor_foto_path', pg_temp.foto_medidor(), 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('excavadora') || '{"trabajo.1":{"v":"ok"}}'))$$, (select v from ctx where k = 'eqB2'), :'prefb' || 's.jpg', :'prefb' || 'f.png', :'prefb' || 'm.jpg'), 'Falta la foto: Balde');
+-- sin la foto del horómetro
+select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', %L, 'inicio', '2026-11-06 07:00-03',
+  'med_ini', 18, 'ubic_ref', 'Obrador', 'selfie_path', %L, 'firma_path', %L, 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('excavadora')))$$, (select v from ctx where k = 'eqB2'), :'prefb' || 's.jpg', :'prefb' || 'f.png'), 'Falta la foto del horómetro');
+-- viernes completo, con una pérdida de aceite: advertencia roja, el equipo NO se bloquea
+select public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqB2'), 'inicio', '2026-11-06 07:00-03',
+  'med_ini', 18, 'ubic_ref', 'Obrador', 'selfie_path', :'prefb' || 's.jpg', 'firma_path', :'prefb' || 'f.png', 'medidor_foto_path', :'prefb' || 'm.jpg', 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('excavadora', '{"fluidos.5":{"v":"falla","nota":"gotea el cárter"}}'))) ->> 'resultado' as rb \gset
+\echo resultado con advertencia (esperado observaciones): :rb
+do $$ declare j public.jornadas; begin
+  select * into j from public.jornadas where equipo_id = (select v from ctx where k = 'eqB2') and estado = 'abierta';
+  if j.resultado <> 'observaciones' or j.n_alertas <> 1 or j.n_criticas <> 0 or j.medidor_foto_path is null then raise exception 'FALLÓ: advertencia %', row_to_json(j); end if;
+  if (select estado from public.equipos where id = j.equipo_id) <> 'operativo' then raise exception 'FALLÓ: la advertencia no debe bloquear'; end if;
+  if not (select grave from public.fallas where jornada_id = j.id) then raise exception 'FALLÓ: falla grave'; end if;
+  if public.periodicos_pendientes(j.equipo_id, '2026-11-07') <> '{}' then raise exception 'FALLÓ: las zapatas ya se controlaron esta semana'; end if;
+end $$;
+-- plantilla propia con campos nuevos válidos e inválidos
+insert into public.plantillas (empresa_id, clave, nombre, rubro, version, secciones)
+  select v, 'p-ok', 'Con campos nuevos', 'construccion', 1, '[{"titulo":"X","items":[{"id":"a","texto":"Uno","critico":false,"alerta":true,"foto":"obligatoria","frecuencia":{"tipo":"semanal","dia":5},"ayuda":"Mirá bien"}]}]' from ctx where k = 'B';
+select pg_temp.esperar_error($$insert into public.plantillas (empresa_id, clave, nombre, rubro, version, secciones)
+  select v, 'p-mal', 'Mal', 'construccion', 1, '[{"titulo":"X","items":[{"id":"a","texto":"Uno","critico":true,"alerta":true}]}]' from ctx where k = 'B'$$, 'crítico y advertencia');
+select pg_temp.esperar_error($$insert into public.plantillas (empresa_id, clave, nombre, rubro, version, secciones)
+  select v, 'p-mal', 'Mal', 'construccion', 1, '[{"titulo":"X","items":[{"id":"a","texto":"Uno","critico":false,"frecuencia":{"tipo":"semanal","dia":9}}]}]' from ctx where k = 'B'$$, 'Frecuencia inválida');
+reset role;
+-- la base v2 no tiene el seguro, el matafuego no es crítico y la pérdida es advertencia
+do $$ declare it jsonb; begin
+  select x into it from public.plantillas p, jsonb_array_elements(p.secciones) s, jsonb_array_elements(s->'items') x where p.empresa_id is null and p.clave = 'excavadora' and p.version = 2 and x->>'texto' ilike 'matafuego%';
+  if (it->>'critico')::boolean then raise exception 'FALLÓ: matafuego crítico'; end if;
+  if exists (select 1 from public.plantillas p, jsonb_array_elements(p.secciones) s, jsonb_array_elements(s->'items') x where p.empresa_id is null and p.version = 2 and x->>'texto' ilike 'seguro%') then raise exception 'FALLÓ: quedó el seguro'; end if;
+  if (select s->>'clave' from public.plantillas p, jsonb_array_elements(p.secciones) with ordinality s(s, n) where p.empresa_id is null and p.clave = 'excavadora' and p.version = 2 and n = 1) <> 'fotos' then raise exception 'FALLÓ: el orden debe empezar por las fotos'; end if;
+end $$;
 
 \echo TODAS LAS PRUEBAS PASARON

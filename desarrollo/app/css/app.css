@@ -331,3 +331,23 @@ body{margin:0}
 .foto-chica{min-height:120px}
 .foto-chica img{max-height:240px}
 .cb-ref{min-height:40px;width:110px;padding:6px 8px;font-size:.95rem}
+
+/* ---- checklist v2: niveles, etiquetas, ayuda, fotos por punto ---- */
+.crit.alerta{background:transparent;color:var(--bad);border:1.5px solid var(--bad)}
+.tag{display:inline-block;font-size:.66rem;font-weight:700;letter-spacing:.07em;border:1.5px solid var(--line);color:var(--muted);border-radius:4px;padding:0 5px;margin-right:6px;vertical-align:2px}
+.ayuda{font-size:.88rem;color:var(--muted);background:var(--sunk);border-radius:8px;padding:8px 10px;line-height:1.45}
+.foto-item{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.foto-item .thumb{max-width:120px;border-radius:8px}
+.sum{grid-template-columns:repeat(auto-fit,minmax(68px,1fr))}
+.galeria{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.galeria a{display:flex;flex-direction:column;gap:4px;color:var(--ink);text-decoration:none;font-size:.82rem}
+.galeria img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;background:var(--sunk)}
+.ed-item{grid-template-columns:1fr auto auto}
+.ed-sel{min-height:40px;padding:6px 8px;font-size:.9rem;width:auto}
+.ed-nivel.n-crit{border-color:var(--bad);color:var(--bad);font-weight:700}
+.ed-nivel.n-alerta{border-color:var(--bad);color:var(--bad)}
+.ed-extra{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.ed-ayuda{flex:1 1 240px;min-height:40px!important;font-size:.9rem!important}
+@media (max-width:600px){.ed-item{grid-template-columns:1fr}.ed-item .ed-btns{justify-content:flex-end}}
+select.inp.ed-sel{width:auto;max-width:100%}
+.sum span{font-size:.68rem;letter-spacing:.03em}

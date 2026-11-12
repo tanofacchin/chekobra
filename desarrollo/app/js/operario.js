@@ -51,7 +51,7 @@ function elegirPorQr(id) {
   const dv = docBloqueante(e.id);
   if (dv) return toast(dv.equipo_id ? `${e.codigo} tiene ${nombreDoc(dv)} vencido. Avisá al supervisor.` : `Tu ${nombreDoc(dv)} está vencida. No podés iniciar jornada.`, 7000);
   if (!o.flow) o.flow = nuevoFlujo();
-  if (o.flow.equipoId !== e.id) { o.flow.equipoId = e.id; o.flow.resp = {}; o.flow.medIni = ''; }
+  if (o.flow.equipoId !== e.id) { o.flow.equipoId = e.id; o.flow.resp = {}; o.flow.medIni = ''; o.flow.medidorFoto = null; o.flow.periodicos = undefined; medUrl = null; }
   o.flow.step = 0; o.flow.err = ''; o.resultado = null; o.cierre = null; o.detalle = null;
   guardarBorrador(); render();
   toast(`${e.codigo} · ${e.nombre} seleccionado.`);
@@ -221,8 +221,12 @@ function stEquipo() {
       ${d.obras.map(ob => `<option value="${ob.id}" ${ob.id === f.obraId ? 'selected' : ''}>${esc(ob.nombre)}</option>`).join('')}</select></label>
     ${e ? `<label class="f">${e.medidor === 'km' ? 'Odómetro inicial (km)' : 'Horómetro inicial (horas)'}
       <input class="inp num" id="f-med" type="number" inputmode="decimal" step="0.1" data-fl="medIni" value="${esc(f.medIni)}">
-      <small>Último registrado: <span class="num">${fNum(e.ultimo_medidor)} ${unidad(e.medidor)}</span></small></label>` : ''}`;
+      <small>Último registrado: <span class="num">${fNum(e.ultimo_medidor)} ${unidad(e.medidor)}</span></small></label>
+    ${(() => { if (f.medidorFoto && !medUrl) medUrl = URL.createObjectURL(f.medidorFoto); return ''; })()}
+    <label class="photo foto-chica" for="f-medfoto">${f.medidorFoto ? `<img src="${medUrl}" alt="Foto del ${e.medidor === 'km' ? 'odómetro' : 'horómetro'}">` : `<b>Foto del ${e.medidor === 'km' ? 'odómetro' : 'horómetro'}</b><span class="small muted">Obligatoria: que se lea el número</span>`}
+      <input class="vh" type="file" id="f-medfoto" accept="image/*" capture="environment" data-file="medidor"></label>` : ''}`;
 }
+let medUrl = null;
 function stGps() {
   const f = O().flow, g = f.gps;
   const box = g ? `<div class="gps-box"><b>Ubicación registrada</b><span class="num">${g.lat.toFixed(6)}, ${g.lng.toFixed(6)}</span>
@@ -244,11 +248,28 @@ function stFoto() {
     ${f.selfie ? '<label class="btn" for="f-selfie">Sacar otra</label>' : ''}`;
 }
 const fotoUrls = {};
+const DIAS = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+const hoyIso = () => ((new Date().getDay() + 6) % 7) + 1;
+// Los controles semanales se muestran si están pendientes (dato del servidor) o, sin señal, si hoy es su día.
+const esVisible = (i, f) => !i.frecuencia || (f.periodicos ? f.periodicos.includes(i.id) : i.frecuencia.dia === hoyIso());
+const necesitaFoto = (it, r) => it.foto === 'obligatoria' && !(r && r.v === 'na');
+async function cargarPeriodicos(f) {
+  try {
+    const { data, error } = await sb.rpc('periodicos_pendientes', { p_equipo: f.equipoId });
+    if (!error && Array.isArray(data) && O().flow === f) { f.periodicos = data; guardarBorrador(); render(); }
+  } catch { /* sin señal: se usa el día de la semana */ }
+}
 function itemHtml(it, r) {
   const v = r && r.v, dom = it.id.replace(/\./g, '-');
   if (r && r.foto && !fotoUrls[it.id]) fotoUrls[it.id] = URL.createObjectURL(r.foto);
+  const tags = (it.critico ? '<span class="crit">CRÍTICO</span>' : '') + (it.alerta ? '<span class="crit alerta">ADVERTENCIA</span>' : '')
+    + (it.frecuencia ? `<span class="tag">SEMANAL · ${DIAS[it.frecuencia.dia]}</span>` : '') + (it.foto ? '<span class="tag">FOTO</span>' : '');
+  const conFoto = necesitaFoto(it, r);
   return `<div class="item" id="it-${dom}" data-v="${v || ''}">
-    <div class="it-t">${it.critico ? '<span class="crit">CRÍTICO</span>' : ''}${esc(it.texto)}</div>
+    <div class="it-t">${tags}${esc(it.texto)}</div>${it.ayuda ? `<div class="ayuda">${esc(it.ayuda)}</div>` : ''}
+    ${conFoto ? `<div class="foto-item">${r && r.foto ? `<img class="thumb" src="${fotoUrls[it.id]}" alt="Foto: ${esc(it.texto)}">` : ''}
+      <label class="btn sm ${r && r.foto ? '' : 'dark'}" for="fi-${dom}">${r && r.foto ? 'Cambiar foto' : 'Sacar foto (obligatoria)'}</label>
+      <input class="vh" type="file" id="fi-${dom}" accept="image/*" capture="environment" data-file="item" data-id="${it.id}"></div>` : ''}
     <div class="seg" role="group" aria-label="${esc(it.texto)}">
       <button class="${v === 'ok' ? 'on ok' : ''}" data-act="opResp" data-id="${it.id}" data-v="ok" aria-pressed="${v === 'ok'}">Bien</button>
       <button class="${v === 'falla' ? 'on falla' : ''}" data-act="opResp" data-id="${it.id}" data-v="falla" aria-pressed="${v === 'falla'}">Falla</button>
@@ -256,37 +277,40 @@ function itemHtml(it, r) {
     </div>
     ${v === 'falla' ? `<div class="falla-box">
       <textarea class="inp" id="n-${dom}" data-nota="${it.id}" placeholder="¿Qué encontraste? (obligatorio)" maxlength="300">${esc(r.nota || '')}</textarea>
-      ${r.foto ? `<img class="thumb" src="${fotoUrls[it.id]}" alt="Foto de la falla">` : ''}
+      ${conFoto ? '' : `${r.foto ? `<img class="thumb" src="${fotoUrls[it.id]}" alt="Foto de la falla">` : ''}
       <label class="btn sm" for="ff-${dom}">${r.foto ? 'Cambiar foto' : 'Agregar foto de la falla'}</label>
-      <input class="vh" type="file" id="ff-${dom}" accept="image/*" capture="environment" data-file="falla" data-id="${it.id}"></div>` : ''}
+      <input class="vh" type="file" id="ff-${dom}" accept="image/*" capture="environment" data-file="item" data-id="${it.id}">`}</div>` : ''}
   </div>`;
 }
 function stats() {
-  const f = O().flow, items = itemsDe(plDe(eqById(f.equipoId))), r = f.resp;
+  const f = O().flow, items = itemsDe(plDe(eqById(f.equipoId))).filter(i => esVisible(i, f)), r = f.resp;
   const fallas = items.filter(i => r[i.id] && r[i.id].v === 'falla');
-  return { items, done: items.filter(i => r[i.id] && r[i.id].v).length, total: items.length, fallas, crit: fallas.filter(i => i.critico) };
+  const done = items.filter(i => r[i.id] && r[i.id].v && !(necesitaFoto(i, r[i.id]) && !r[i.id].foto)).length;
+  return { items, done, total: items.length, fallas, crit: fallas.filter(i => i.critico), alertas: fallas.filter(i => i.alerta) };
 }
 function clHead() {
   const s = stats();
   return `<div class="cl-head" id="clhead"><div class="row" style="justify-content:space-between"><b class="num">${s.done} / ${s.total} revisados</b>
-    <span>${s.fallas.length ? `<span class="chip ${s.crit.length ? 'bad' : 'warn'}">${s.fallas.length} falla${s.fallas.length > 1 ? 's' : ''}${s.crit.length ? ` · ${s.crit.length} crítica${s.crit.length > 1 ? 's' : ''}` : ''}</span>` : '<span class="chip ok">Sin fallas</span>'}</span></div>
+    <span>${s.fallas.length ? `<span class="chip ${s.crit.length || s.alertas.length ? 'bad' : 'warn'}">${s.fallas.length} falla${s.fallas.length > 1 ? 's' : ''}${s.crit.length ? ` · ${s.crit.length} crítica${s.crit.length > 1 ? 's' : ''}` : ''}${s.alertas.length ? ` · ${s.alertas.length} advertencia${s.alertas.length > 1 ? 's' : ''}` : ''}</span>` : '<span class="chip ok">Sin fallas</span>'}</span></div>
     <div class="bar"><i style="width:${(s.done / s.total * 100).toFixed(1)}%"></i></div></div>`;
 }
 function stChecklist() {
   const f = O().flow, e = eqById(f.equipoId), pl = plDe(e);
   if (!f.t0) f.t0 = Date.now();
-  const secs = pl.secciones.map(s => `<section class="sec"><h3>${esc(s.titulo)} <span class="num">${s.items.length} puntos</span></h3>
+  const secs = pl.secciones.map(s => ({ ...s, items: s.items.filter(i => esVisible(i, f)) })).filter(s => s.items.length)
+    .map(s => `<section class="sec"><h3>${esc(s.titulo)} <span class="num">${s.items.length} punto${s.items.length > 1 ? 's' : ''}</span></h3>
     ${s.items.map(i => itemHtml(i, f.resp[i.id])).join('')}</section>`).join('');
-  return `<div><h1>${esc(pl.nombre)}</h1><p class="muted">${esc(e.codigo)} · ${esc(e.nombre)}. Revisá cada punto con el equipo apagado, salvo la prueba de funcionamiento.</p></div>${clHead()}${secs}`;
+  return `<div><h1>${esc(pl.nombre)}</h1><p class="muted">${esc(e.codigo)} · ${esc(e.nombre)}. El orden sigue tu recorrida: primero por fuera, después en la cabina con el equipo apagado y al final con el equipo encendido.</p></div>${clHead()}${secs}`;
 }
 const resultadoDe = s => s.crit.length ? 'no_apto' : s.fallas.length ? 'observaciones' : 'apto';
 const segundos = f => Math.round((f.tAcum + (f.t0 ? Date.now() - f.t0 : 0)) / 1000);
 function stFirma() {
   const f = O().flow, s = stats(), r = resultadoDe(s), dur = f.durS ?? segundos(f), rapido = dur < MIN_CHECK_S;
   return `<h1>Revisá y firmá</h1>
-    <div class="sum"><div><b>${s.total - s.fallas.length}</b><span>Bien / N/A</span></div><div><b style="color:var(--warn)">${s.fallas.length - s.crit.length}</b><span>Fallas</span></div><div><b style="color:var(--bad)">${s.crit.length}</b><span>Críticas</span></div></div>
+    <div class="sum"><div><b>${s.total - s.fallas.length}</b><span>Bien / N/A</span></div><div><b style="color:var(--warn)">${s.fallas.length - s.crit.length - s.alertas.length}</b><span>Fallas</span></div><div><b style="color:var(--bad)">${s.alertas.length}</b><span>Advertencias</span></div><div><b style="color:var(--bad)">${s.crit.length}</b><span>Críticas</span></div></div>
+    ${s.alertas.length ? `<div class="badbox"><b>Advertencia:</b> el equipo puede operar, pero hay que revisarlo cuanto antes. El supervisor lo ve en rojo.<ul style="margin:8px 0 0;padding-left:18px">${s.alertas.map(i => `<li>${esc(i.texto)}</li>`).join('')}</ul></div>` : ''}
     ${r === 'no_apto' ? `<div class="badbox"><b>El equipo no puede operar.</b> Hay fallas en puntos críticos. Al enviar, el equipo queda bloqueado hasta que el supervisor lo libere.<ul style="margin:8px 0 0;padding-left:18px">${s.crit.map(i => `<li>${esc(i.texto)}</li>`).join('')}</ul></div>`
-      : r === 'observaciones' ? `<div class="warnbox">El equipo puede operar, con ${s.fallas.length} observación${s.fallas.length > 1 ? 'es' : ''} que le llegan al supervisor.</div>` : ''}
+      : r === 'observaciones' && s.fallas.length > s.alertas.length ? `<div class="warnbox">El equipo puede operar, con ${s.fallas.length - s.alertas.length} observación${s.fallas.length - s.alertas.length > 1 ? 'es' : ''} que le llegan al supervisor.</div>` : ''}
     ${rapido ? `<div class="warnbox"><b>Completaste el checklist en ${fDur(dur)}.</b> Una revisión real lleva al menos ${MIN_CHECK_S / 60} minutos. Queda registrado para el supervisor.
       <label class="f" style="margin-top:10px;color:var(--ink)">¿Por qué fue tan rápido? <small>Opcional</small><input class="inp" id="f-rap" data-fl="motivoRapido" value="${esc(f.motivoRapido)}" maxlength="140"></label></div>` : ''}
     <label class="check"><input type="checkbox" id="f-decl" data-fl="decl" ${f.decl ? 'checked' : ''}><span>Declaro que revisé personalmente cada punto de este checklist y que la información es verdadera.</span></label>
@@ -335,7 +359,8 @@ function vResultado() {
   return `<main class="wrap"><section class="verdict ${res}"><p class="eyebrow" style="color:inherit;opacity:.8">${esc(r.codigo)} · ${fHora(r.inicio)} h</p>
     <h1>${RES[res][0]}</h1><p>${txt}</p></section>
     <div class="${r.enviado ? 'card flat' : 'warnbox'}">${r.enviado ? 'Registro enviado al servidor.' : 'Guardado en el teléfono. Se envía solo apenas haya señal; no hace falta que hagas nada.'}</div>
-    ${r.fallas.length ? `<section class="card flat"><h3>Fallas registradas</h3>${r.fallas.map(i => `<div class="fl">${i.critico ? '<span class="crit">CRÍTICO</span>' : ''}<b>${esc(i.texto)}</b><span class="muted">${esc(i.nota)}</span></div>`).join('')}</section>` : ''}
+    ${r.fallas.some(i => i.alerta) ? '<div class="badbox"><b>Hay advertencias:</b> podés operar, pero avisale al supervisor para que lo revisen cuanto antes.</div>' : ''}
+    ${r.fallas.length ? `<section class="card flat"><h3>Fallas registradas</h3>${r.fallas.map(i => `<div class="fl">${i.critico ? '<span class="crit">CRÍTICO</span>' : i.alerta ? '<span class="crit alerta">ADVERTENCIA</span>' : ''}<b>${esc(i.texto)}</b><span class="muted">${esc(i.nota)}</span></div>`).join('')}</section>` : ''}
     <button class="btn dark block" data-act="opInicio">Volver al inicio</button></main>`;
 }
 function vCierre() {
@@ -412,29 +437,28 @@ async function enviar() {
   if (!f.firma) { f.err = 'Falta tu firma.'; return render(); }
   const e = eqById(f.equipoId), s = stats(), res = resultadoDe(s);
   const base = `${S.m.empresa_id}/${S.user.id}/${f.client_id}/`;
-  const archivos = [{ path: base + 'selfie.jpg', blob: f.selfie, tipo: 'image/jpeg' }, { path: base + 'firma.png', blob: f.firma, tipo: 'image/png' }];
+  const archivos = [{ path: base + 'selfie.jpg', blob: f.selfie, tipo: 'image/jpeg' }, { path: base + 'firma.png', blob: f.firma, tipo: 'image/png' },
+    { path: base + 'medidor.jpg', blob: f.medidorFoto, tipo: 'image/jpeg' }];
   const respuestas = {};
   for (const i of s.items) {
     const r = f.resp[i.id];
     respuestas[i.id] = { v: r.v };
-    if (r.v === 'falla') {
-      respuestas[i.id].nota = r.nota.trim();
-      if (r.foto) { const p = `${base}falla-${i.id.replace(/\./g, '-')}.jpg`; archivos.push({ path: p, blob: r.foto, tipo: 'image/jpeg' }); respuestas[i.id].foto = p; }
-    }
+    if (r.v === 'falla') respuestas[i.id].nota = r.nota.trim();
+    if (r.foto && r.v !== 'na') { const p = `${base}punto-${i.id.replace(/\./g, '-')}.jpg`; archivos.push({ path: p, blob: r.foto, tipo: 'image/jpeg' }); respuestas[i.id].foto = p; }
   }
   const inicio = new Date().toISOString();
   const payload = {
     client_id: f.client_id, equipo_id: e.id, obra_id: f.obraId, inicio, med_ini: +f.medIni,
     lat: f.gps ? f.gps.lat : null, lng: f.gps ? f.gps.lng : null, precision_m: f.gps ? f.gps.acc : null, ubic_ref: f.gps ? null : f.ubicRef.trim(),
-    selfie_path: archivos[0].path, firma_path: archivos[1].path, dur_checklist_s: f.durS, motivo_rapido: f.motivoRapido || null,
+    selfie_path: archivos[0].path, firma_path: archivos[1].path, medidor_foto_path: archivos[2].path, dur_checklist_s: f.durS, motivo_rapido: f.motivoRapido || null,
     declaracion: true, respuestas,
   };
   try {
     await cola.agregar({ id: f.client_id, tipo: 'checklist', uid: S.user.id, empresa_id: S.m.empresa_id, payload, archivos, local: { resultado: res } });
     await cola.borrar(idBorrador());
   } catch (err) { f.err = 'No se pudo guardar en el teléfono: ' + msgError(err); return render(); }
-  o.resultado = { client_id: f.client_id, resultado: res, codigo: e.codigo, inicio, fallas: s.fallas.map(i => ({ texto: i.texto, critico: i.critico, nota: f.resp[i.id].nota })), enviado: false };
-  o.flow = null; o.borrador = null; selfieUrl = null; for (const k in fotoUrls) delete fotoUrls[k];
+  o.resultado = { client_id: f.client_id, resultado: res, codigo: e.codigo, inicio, fallas: s.fallas.map(i => ({ texto: i.texto, critico: i.critico, alerta: !!i.alerta, nota: f.resp[i.id].nota })), enviado: false };
+  o.flow = null; o.borrador = null; selfieUrl = null; medUrl = null; for (const k in fotoUrls) delete fotoUrls[k];
   o.cola = await cola.listar().catch(() => o.cola);
   render(); sync();
 }
@@ -442,7 +466,8 @@ async function enviar() {
 /* ------------------------------------------------------------ acciones */
 function setResp(id, v) {
   const f = O().flow, cur = f.resp[id] || {};
-  f.resp[id] = v === 'falla' ? { ...cur, v } : { v };
+  const { nota, ...sinNota } = cur;                 // la foto se conserva al cambiar la respuesta
+  f.resp[id] = v === 'falla' ? { ...cur, v } : { ...sinNota, v };
   const it = itemsDe(plDe(eqById(f.equipoId))).find(i => i.id === id);
   $('#it-' + id.replace(/\./g, '-')).outerHTML = itemHtml(it, f.resp[id]);
   $('#clhead').outerHTML = clHead();
@@ -471,14 +496,16 @@ function siguiente() {
     else if (!f.obraId) f.err = 'Elegí la obra.';
     else if (f.medIni === '' || isNaN(+f.medIni) || +f.medIni < 0) f.err = `Cargá el ${e.medidor === 'km' ? 'odómetro' : 'horómetro'} inicial.`;
     else if (e.ultimo_medidor != null && +f.medIni < +e.ultimo_medidor) f.err = `El valor es menor al último registrado (${fNum(e.ultimo_medidor)}). Revisá el número.`;
+    else if (!f.medidorFoto) f.err = `Falta la foto del ${e.medidor === 'km' ? 'odómetro' : 'horómetro'}.`;
   } else if (f.step === 1) { if (!f.gps && (f.ubicRef || '').trim().length < 3) f.err = f.gpsErr ? 'Escribí una referencia del lugar.' : 'Tomá la ubicación GPS.'; }
-  else if (f.step === 2) { if (!f.selfie) f.err = 'Falta la foto con el equipo.'; }
+  else if (f.step === 2) { if (!f.selfie) f.err = 'Falta la foto con el equipo.'; else cargarPeriodicos(f); }
   else if (f.step === 3) {
     const s = stats();
-    const miss = s.items.find(i => !(f.resp[i.id] && f.resp[i.id].v)) || s.fallas.find(i => !(f.resp[i.id].nota || '').trim());
+    const sinFoto = i => necesitaFoto(i, f.resp[i.id]) && !(f.resp[i.id] && f.resp[i.id].foto);
+    const miss = s.items.find(i => !(f.resp[i.id] && f.resp[i.id].v)) || s.fallas.find(i => !(f.resp[i.id].nota || '').trim()) || s.items.find(sinFoto);
     if (miss) {
-      const sinNota = f.resp[miss.id] && f.resp[miss.id].v === 'falla';
-      f.err = sinNota ? 'Describí la falla marcada.' : `Faltan ${s.total - s.done} punto${s.total - s.done > 1 ? 's' : ''} por revisar.`;
+      const sinNota = f.resp[miss.id] && f.resp[miss.id].v === 'falla' && !(f.resp[miss.id].nota || '').trim();
+      f.err = sinNota ? 'Describí la falla marcada.' : f.resp[miss.id] && f.resp[miss.id].v ? `Falta la foto: ${miss.texto}.` : `Faltan ${s.total - s.done} punto${s.total - s.done > 1 ? 's' : ''} por revisar.`;
       toast(f.err);
       const el = $('#it-' + miss.id.replace(/\./g, '-')); el.classList.add('miss'); el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
@@ -513,7 +540,7 @@ export const A = {
   opSeguir: () => { const b = O().borrador; if (!b) return; O().flow = { ...nuevoFlujo(), ...b, t0: b.step === 3 ? Date.now() : null }; render(); },
   opDescartar: async () => { const o = O(); if (o.confirm !== 'borrador') { o.confirm = 'borrador'; return render(); } o.confirm = null; await cola.borrar(idBorrador()); o.borrador = null; render(); },
   opDescartarEnvio: async b => { const o = O(); if (o.confirm !== b.dataset.id) { o.confirm = b.dataset.id; return render(); } o.confirm = null; await cola.borrar(b.dataset.id); o.cola = await cola.listar(); render(); sync(); },
-  opEquipo: b => { const f = O().flow; if (f.equipoId !== b.dataset.id) { f.equipoId = b.dataset.id; f.resp = {}; f.medIni = ''; } f.err = ''; guardarBorrador(); render(); },
+  opEquipo: b => { const f = O().flow; if (f.equipoId !== b.dataset.id) { f.equipoId = b.dataset.id; f.resp = {}; f.medIni = ''; f.medidorFoto = null; f.periodicos = undefined; if (medUrl) URL.revokeObjectURL(medUrl); medUrl = null; } f.err = ''; guardarBorrador(); render(); },
   opGps: tomarGps,
   opResp: b => setResp(b.dataset.id, b.dataset.v),
   opSiguiente: siguiente,
@@ -567,12 +594,18 @@ export async function alArchivo(input) {
         g ? `GPS ${g.lat.toFixed(5)}, ${g.lng.toFixed(5)} ±${Math.round(g.acc)} m` : `Sin GPS · ${f.ubicRef}`, ob ? ob.nombre : '']);
       if (selfieUrl) URL.revokeObjectURL(selfieUrl); selfieUrl = null; f.err = '';
       render();
+    } else if (input.dataset.file === 'medidor') {
+      f.medidorFoto = await comprimir(file, 1080, 0.7, [`${e.codigo} · ${e.medidor === 'km' ? 'Odómetro' : 'Horómetro'} ${f.medIni || ''}`, `${S.m.nombre} · ${fFecha(now)} ${fHora(now)} h`]);
+      if (medUrl) URL.revokeObjectURL(medUrl); medUrl = null;
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      render();
     } else {
-      const id = input.dataset.id;
-      f.resp[id].foto = await comprimir(file, 1080, 0.65, [`${e.codigo} · ${fFecha(now)} ${fHora(now)} h`]);
+      const id = input.dataset.id, it = itemsDe(plDe(e)).find(i => i.id === id);
+      f.resp[id] ||= {};
+      f.resp[id].foto = await comprimir(file, 900, 0.6, [`${e.codigo} · ${it ? it.texto : ''}`.slice(0, 70), `${fFecha(now)} ${fHora(now)} h`]);
       if (fotoUrls[id]) URL.revokeObjectURL(fotoUrls[id]); delete fotoUrls[id];
-      const it = itemsDe(plDe(e)).find(i => i.id === id);
       $('#it-' + id.replace(/\./g, '-')).outerHTML = itemHtml(it, f.resp[id]);
+      $('#clhead').outerHTML = clHead();
     }
     guardarBorrador();
   } catch { toast('No se pudo leer la foto. Probá sacarla de nuevo.'); }
