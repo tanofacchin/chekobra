@@ -8,6 +8,7 @@ import { VERSION_PRIVACIDAD } from './politica.js';
 import * as Mt from './mantenimiento.js';
 import * as Ind from './indicadores.js';
 import * as Rep from './reportes.js';
+import { jornadasParaExcel, generarExcel } from './excel.js';
 
 const T = () => S.adm;
 export function reiniciar() {
@@ -163,7 +164,7 @@ function vJornadas() {
       <label>Operario<select class="inp" id="fl-op" data-fa="operario" data-vivo>${opt('', 'Todos', f.operario)}${d.miembros.map(m => opt(m.id, m.nombre, f.operario)).join('')}</select></label>
       <label>Resultado<select class="inp" id="fl-res" data-fa="resultado" data-vivo>${opt('', 'Todos', f.resultado)}${Object.entries(RES).map(([k, [l]]) => opt(k, l, f.resultado)).join('')}</select></label>
     </div><div class="row" style="justify-content:space-between"><span class="muted">${rows ? `${rows.length} jornada${rows.length === 1 ? '' : 's'}${rows.length === 1000 ? ' (máximo; acotá las fechas)' : ''}` : 'Cargando…'}</span>
-    <button class="btn sm dark" data-act="admCsv" ${rows && rows.length ? '' : 'disabled'}>Exportar a Excel (CSV)</button></div></section>
+    <button class="btn sm dark" data-act="admExcel" ${rows && rows.length && !a.excelOcupado ? '' : 'disabled'}>${a.excelOcupado ? 'Armando el Excel…' : 'Descargar Excel'}</button></div></section>
     ${!rows ? '' : rows.length ? `<div class="list">${rows.map(j => `<button class="jrow" data-act="admVer" data-id="${j.id}">
       <span class="d">${fFecha(j.inicio)}<br>${fHora(j.inicio)}${j.fin ? '–' + fHora(j.fin) : ''}</span>
       <span><span class="t" style="display:block">${esc(j.equipo.codigo)} · ${esc(j.equipo.nombre)}</span><span class="s" style="display:block">${esc(j.obra ? j.obra.nombre : '—')}</span></span>
@@ -302,18 +303,6 @@ function vDetalle() {
     </div>`;
 }
 
-/* ------------------------------------------------------------ CSV */
-function csv() {
-  const q = v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const n = v => v == null ? '' : String(v).replace('.', ',');
-  const head = ['Fecha', 'Hora inicio', 'Hora cierre', 'Obra', 'Código', 'Equipo', 'Operario', 'Legajo', 'Medidor inicial', 'Medidor final', 'Uso', 'Unidad', 'Resultado', 'Fallas', 'Críticas', 'Detalle de fallas', 'Fallas abiertas', 'Duración checklist (s)', 'Checklist rápido', 'Latitud', 'Longitud', 'Precisión (m)', 'Referencia sin GPS', 'Estado', 'Combustible (L)', 'Novedades'];
-  const rows = T().jornadas.map(j => [fFecha(j.inicio), fHora(j.inicio), j.fin ? fHora(j.fin) : '', j.obra ? j.obra.nombre : '', j.equipo.codigo, j.equipo.nombre, j.operario.nombre, j.operario.legajo || '',
-    n(j.med_ini), n(j.med_fin), n(j.uso), unidad(j.equipo.medidor), RES[j.resultado][0], j.n_fallas, j.n_criticas, j.fallas.map(f => `${f.texto}: ${f.nota}`).join(' | '),
-    j.fallas.filter(f => f.estado === 'abierta').length, j.dur_checklist_s, j.rapido ? 'Sí' : 'No', j.lat != null ? n(j.lat.toFixed(6)) : '', j.lng != null ? n(j.lng.toFixed(6)) : '',
-    j.precision_m != null ? Math.round(j.precision_m) : '', j.ubic_ref || '', j.estado, n(j.litros), j.novedades || '']);
-  return '﻿' + [head, ...rows].map(r => r.map(q).join(';')).join('\r\n');
-}
-
 /* ------------------------------------------------------------ acciones */
 async function rpc(nombre, args, ok) {
   const { error } = await sb.rpc(nombre, args);
@@ -343,7 +332,15 @@ export const A = {
   },
   admVer: b => { T().detalle = b.dataset.id; cargarDetalle(b.dataset.id); },
   admVolver: () => { T().detalle = null; T().det = null; render(); },
-  admCsv: () => { descargar(`checkobra-jornadas-${dayKey(new Date())}.csv`, csv(), 'text/csv;charset=utf-8'); toast('Archivo descargado. Se abre con Excel.'); },
+  admExcel: () => {
+    const a = T(), f = a.f, d = a.d;
+    return exportarExcel({ ...f, equipoNombre: f.equipo && (d.equipos.find(e => e.id === f.equipo) || {}).codigo,
+      operarioNombre: f.operario && (d.miembros.find(m => m.id === f.operario) || {}).nombre });
+  },
+  inExcel: () => {
+    const a = T(), f = a.ind;
+    return exportarExcel({ desde: f.desde, hasta: f.hasta, obra: f.obra, obraNombre: f.obra && (a.d.obras.find(o => o.id === f.obra) || {}).nombre });
+  },
   admCancelar: () => { const a = T(); a.liberar = null; a.reparar = null; a.pin = null; a.nota = ''; render(); },
   admLiberar: b => { const a = T(); a.liberar = b.dataset.id; a.nota = ''; render(); },
   admLiberarOk: async b => { const a = T(); if (a.nota.trim().length < 3) return toast('Contá qué se reparó antes de liberar.'); if (await rpc('liberar_equipo', { p_equipo: b.dataset.id, p_reparacion: a.nota }, 'Equipo liberado.')) { a.liberar = null; a.nota = ''; render(); } },
@@ -417,6 +414,19 @@ export const A = {
     if (error) return toast(msgError(error)); cargar();
   },
 };
+// Excel con hojas, formato y gráficos (ver excel.js).
+async function exportarExcel(f) {
+  const a = T(); a.excelOcupado = true; render();
+  try {
+    const js = await jornadasParaExcel(f);
+    if (!js.length) { toast('No hay jornadas en ese período.'); return; }
+    const blob = await generarExcel(js, f);
+    const slug = S.m.empresa.slug;
+    descargar(`checkobra-${slug}-${f.desde}-al-${f.hasta}.xlsx`, blob, blob.type);
+    toast(`Excel descargado: ${js.length} jornada${js.length === 1 ? '' : 's'}.`);
+  } catch (e) { toast('No se pudo armar el Excel: ' + msgError(e), 6000); }
+  finally { a.excelOcupado = false; render(); }
+}
 async function errorFuncion(error) {
   try { const b = await error.context.json(); return b.error || error.message; } catch { return msgError(error); }
 }

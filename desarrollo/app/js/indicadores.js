@@ -79,7 +79,7 @@ export function vIndicadores() {
       <label>Desde<input class="inp" type="date" id="in-des" data-in="desde" data-vivo value="${f.desde}"></label>
       <label>Hasta<input class="inp" type="date" id="in-has" data-in="hasta" data-vivo value="${f.hasta}"></label>
       <label>Obra<select class="inp" id="in-obra" data-in="obra" data-vivo><option value="">Todas</option>${obras.map(o => `<option value="${o.id}" ${f.obra === o.id ? 'selected' : ''}>${esc(o.nombre)}</option>`).join('')}</select></label>
-      <label>&nbsp;<button class="btn sm dark" data-act="inImprimir" ${x ? '' : 'disabled'}>Imprimir / PDF</button></label></div></section>`;
+      <label>&nbsp;<span class="row"><button class="btn sm dark" data-act="inExcel" ${x && !a.excelOcupado ? '' : 'disabled'}>${a.excelOcupado ? 'Armando…' : 'Excel'}</button><button class="btn sm" data-act="inImprimir" ${x ? '' : 'disabled'}>PDF</button></span></label></div></section>`;
   if (!x) return filtros + '<p class="muted">Calculando…</p>';
   const pr = x.por_resultado || {}, tot = x.total;
   const obraNom = f.obra ? (obras.find(o => o.id === f.obra) || {}).nombre : 'Todas las obras';
