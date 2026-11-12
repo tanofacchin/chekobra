@@ -286,3 +286,45 @@ body{margin:0}
   .etiquetas{grid-template-columns:repeat(2,1fr);gap:6mm}
   .etiqueta{border-width:1.5px}
 }
+
+/* ---- flota: mantenimiento, indicadores, fichas ---- */
+:root{--st-ok:#0ca30c;--st-warn:#fab219;--st-bad:#d03b3b;--grid:#e1e0d9;--axis:#c3c2b7}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--grid:#2c2c2a;--axis:#383835}}
+:root[data-theme="dark"]{--grid:#2c2c2a;--axis:#383835}
+.mt-bar{height:8px;border-radius:4px;background:var(--sunk);overflow:hidden;margin:6px 0 4px;max-width:420px}
+.mt-bar i{display:block;height:100%;border-radius:4px}
+.mt-bar i.ok{background:var(--ok)} .mt-bar i.warn{background:var(--accent)} .mt-bar i.bad{background:var(--bad)}
+.mt-form{display:flex;flex-direction:column;gap:12px;padding:16px;border:1.5px solid var(--line);border-radius:12px;background:var(--sunk)}
+.tabla{overflow-x:auto;max-width:100%}
+.tabla table{width:100%;border-collapse:collapse;font-size:.92rem}
+.tabla th{text-align:left;font-weight:600;color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tabla td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.tabla .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.minibar{display:inline-block;width:70px;height:8px;border-radius:4px;background:var(--sunk);vertical-align:middle;overflow:hidden;margin-right:6px}
+.minibar i{display:block;height:100%;background:var(--ink);opacity:.7;border-radius:4px}
+.ind-filtros{grid-template-columns:repeat(5,1fr)}
+@media (max-width:860px){.ind-filtros{grid-template-columns:repeat(2,1fr)}}
+.chart{position:relative;width:100%;overflow-x:auto}
+.chart svg{width:100%;min-width:520px;height:auto;display:block}
+.chart .grid{stroke:var(--grid);stroke-width:1}
+.chart .base{stroke:var(--axis);stroke-width:1}
+.chart .ax{fill:var(--muted);font-size:11px;font-family:var(--f-body)}
+.chart .hit{fill:transparent;cursor:crosshair}
+.chart .hit:hover{fill:var(--ink);fill-opacity:.05}
+.st-ok{fill:var(--st-ok);background:var(--st-ok)} .st-warn{fill:var(--st-warn);background:var(--st-warn)} .st-bad{fill:var(--st-bad);background:var(--st-bad)}
+.tip{position:absolute;z-index:3;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:.85rem;box-shadow:var(--shadow);min-width:150px;line-height:1.5}
+.tip i,.leyenda i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+.leyenda{display:flex;gap:16px;flex-wrap:wrap;font-size:.88rem;color:var(--muted);margin-top:6px}
+.solo-print{display:none}
+.ficha h2{font-size:1.2rem}
+@media print{
+  .tabs,.no-print,.filters,.flow-nav,[data-act="admRecargar"]{display:none!important}
+  .solo-print{display:block!important}
+  .card{box-shadow:none;break-inside:avoid;border-color:#ccc}
+  .cols,.det-grid{grid-template-columns:1fr 1fr}
+  .kpis{grid-template-columns:repeat(4,1fr)}
+  .tabla{overflow:visible}
+  .chart svg{min-width:0}
+  .wrap{padding:0;max-width:none}
+  body{font-size:12px}
+}

@@ -15,6 +15,10 @@
   bloqueo por 5 intentos de PIN, etiquetas QR por equipo y escáner en la app, editor de plantillas, avisos por correo
   de equipos bloqueados.
 
+- Gestión de flota: mantenimiento preventivo por horas/km, historial de trabajos, vencimientos de documentación de
+  equipos y personas (con bloqueo opcional al vencer), ficha de equipo e informe de cumplimiento imprimibles,
+  indicadores por equipo, operario y obra.
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).
@@ -24,8 +28,7 @@
 ## Después
 
 - Avisos por WhatsApp (por correo ya está).
-- Mantenimiento: service por horas de motor, vencimientos de documentación (seguro, VTV, habilitaciones).
+- Avisos por correo de services y vencimientos próximos.
 - Otras marcas por ISO 15143-3 (Caterpillar, Komatsu, Volvo) y APIs de agro (CNH, AGCO).
-- Reportes PDF para auditorías de minería.
 - Dominio propio, correo propio y hosting definitivo.
 - Planes y cobro de suscripciones.

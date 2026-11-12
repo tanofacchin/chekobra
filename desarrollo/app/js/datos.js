@@ -57,16 +57,17 @@ export async function misMembresias(uid) {
 export async function cargarOperario(empresa, miembroId) {
   const k = 'co_op_' + empresa;
   try {
-    const [eq, ob, pl, uso, js] = await Promise.all([
+    const [eq, ob, pl, uso, js, dc] = await Promise.all([
       sb.from('equipos').select('*').eq('empresa_id', empresa).eq('activo', true).order('codigo'),
       sb.from('obras').select('id, nombre').eq('empresa_id', empresa).eq('activa', true).order('nombre'),
       sb.from('plantillas').select('id, empresa_id, clave, nombre, medidor, version, secciones').eq('activa', true),
       sb.rpc('equipos_en_uso', { p_empresa: empresa }),
       sb.from('jornadas').select('id, client_id, estado, resultado, inicio, fin, med_ini, med_fin, uso, n_fallas, n_criticas, equipo_id, obra_id, dur_checklist_s')
         .eq('operario_id', miembroId).order('inicio', { ascending: false }).limit(15),
+      sb.from('documentos').select('id, equipo_id, miembro_id, tipo, descripcion, vence, aviso_dias, bloquea').eq('empresa_id', empresa),
     ]);
-    for (const r of [eq, ob, pl, uso, js]) if (r.error) throw r.error;
-    const d = { equipos: eq.data, obras: ob.data, plantillas: vigentes(pl.data, empresa), enUso: uso.data, jornadas: js.data, actualizado: Date.now() };
+    for (const r of [eq, ob, pl, uso, js, dc]) if (r.error) throw r.error;
+    const d = { equipos: eq.data, obras: ob.data, plantillas: vigentes(pl.data, empresa), enUso: uso.data, jornadas: js.data, docs: dc.data, actualizado: Date.now() };
     ls.set(k, d);
     return { ...d, offline: false };
   } catch (e) {

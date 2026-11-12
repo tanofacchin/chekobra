@@ -133,6 +133,19 @@ proyecto de pruebas de Supabase (`checkobra-pruebas`, que tiene que crear el usu
 **Decisión del usuario:** dejar todo listo sin subir hasta pagar GitHub Pro y pasar el repositorio a privado.
 Se le entregó un respaldo (`.zip` y `.bundle`) porque los cambios solo estaban en la sesión.
 
+## 14. Subida de la app y empresa de demostración (11/11)
+
+- Se subió solo el código (repositorio todavía público); lo confidencial quedó local. Se quitó el nombre del cliente del código.
+- Servidor actualizado (PIN_PEPPER, migraciones 8 y 9, funciones ingresar/operarios/avisos) y probado de punta a punta.
+- Empresa **Constructora Demo** (código `demo`) vinculada a la cuenta del usuario, con 3 obras, 7 equipos,
+  3 operarios (101/111111, 102/222222, 103/333333) e historial del 7 al 11/11.
+
+## 15. Gestión de flota (12/11)
+
+Mantenimiento preventivo, vencimientos de documentación (bloquean al operario o al equipo si se marca), ficha de
+equipo e informe de cumplimiento imprimibles, e indicadores. Probado de punta a punta; se cargaron planes, trabajos y
+vencimientos de ejemplo en la empresa demo.
+
 ## Pendientes al 11/11
 
 **Del usuario:**
