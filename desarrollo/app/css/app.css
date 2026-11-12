@@ -328,3 +328,6 @@ body{margin:0}
   .wrap{padding:0;max-width:none}
   body{font-size:12px}
 }
+.foto-chica{min-height:120px}
+.foto-chica img{max-height:240px}
+.cb-ref{min-height:40px;width:110px;padding:6px 8px;font-size:.95rem}

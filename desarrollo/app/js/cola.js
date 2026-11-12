@@ -36,9 +36,9 @@ export function sincronizar(sb, alCambiar) {
     let enviados = 0;
     try {
       for (const e of await cola.listar()) {
-        if (e.estado === 'rechazado') continue;
+        if (e.estado === 'rechazado' || e.tipo === 'borrador') continue;
         try {
-          const r = e.tipo === 'checklist' ? await enviarChecklist(sb, e) : await enviarCierre(sb, e);
+          const r = await ({ checklist: enviarChecklist, cierre: enviarCierre, carga: enviarCarga }[e.tipo])(sb, e);
           if (r === 'esperar') continue;
           await cola.borrar(e.id); enviados++;
           alCambiar && alCambiar({ tipo: 'enviado', envio: e, respuesta: r });
@@ -66,6 +66,13 @@ async function subir(sb, a) {
 async function enviarChecklist(sb, e) {
   for (const a of e.archivos) await subir(sb, a);
   const { data, error } = await sb.rpc('enviar_checklist', { p: e.payload });
+  if (error) throw error.message && /fetch/i.test(error.message) ? new TypeError(error.message) : new Error(error.message);
+  return data;
+}
+
+async function enviarCarga(sb, e) {
+  for (const a of e.archivos) await subir(sb, a);
+  const { data, error } = await sb.rpc('registrar_carga', { p: e.payload });
   if (error) throw error.message && /fetch/i.test(error.message) ? new TypeError(error.message) : new Error(error.message);
   return data;
 }

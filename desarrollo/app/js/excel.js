@@ -26,6 +26,18 @@ export async function jornadasParaExcel(f) {
   return data;
 }
 
+export async function cargasParaExcel(f) {
+  let q = sb.from('cargas_combustible').select('*, equipo:equipos(id, codigo, nombre, medidor), quien:miembros(nombre), obra:obras(nombre)')
+    .eq('empresa_id', S.m.empresa_id).order('cargado_en', { ascending: true }).limit(5000);
+  if (f.desde) q = q.gte('cargado_en', new Date(f.desde + 'T00:00:00').toISOString());
+  if (f.hasta) q = q.lt('cargado_en', new Date(new Date(f.hasta + 'T00:00:00').getTime() + 864e5).toISOString());
+  if (f.equipo) q = q.eq('equipo_id', f.equipo);
+  if (f.obra) q = q.eq('obra_id', f.obra);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data;
+}
+
 /* ------------------------------------------------------------ estilo */
 const C = { tinta: '1A1E22', gris: '59616A', linea: 'D2D6CF', fondo: 'EEF0EC', acento: 'F0A500',
   ok: '0CA30C', warn: 'FAB219', bad: 'D03B3B', okF: 'DCF1E3', okT: '1D7F46', warnF: 'FBEAD0', warnT: '9A5B00', badF: 'F9DEDC', badT: 'B3261E' };
@@ -60,7 +72,7 @@ function tablaSimple(ws, fila, col, cabeceras, filas, formatos = []) {
 }
 
 /* ------------------------------------------------------------ libro */
-export async function generarExcel(js, f) {
+export async function generarExcel(js, f, cargas = []) {
   await cargarLibs();
   const ExcelJS = window.ExcelJS, wb = new ExcelJS.Workbook();
   wb.creator = 'CheckObra'; wb.created = new Date();
@@ -94,7 +106,9 @@ export async function generarExcel(js, f) {
   const kpis = [['Checklists', js.length, '0'], ['Aptos', cuenta('apto'), '0'], ['Con observaciones', cuenta('observaciones'), '0'], ['No aptos (equipo bloqueado)', cuenta('no_apto'), '0'],
     ['% aptos (sin fallas)', js.length ? cuenta('apto') / js.length : 0, '0.0%'], ['Fallas reportadas', fallas.length, '0'], ['Fallas críticas', fallas.filter(x => x.critica).length, '0'],
     ['Fallas sin reparar', fallas.filter(x => x.estado === 'abierta').length, '0'], ['Horas trabajadas', horas, '#,##0.0'], ['Kilómetros recorridos', km, '#,##0'],
-    ['Checklists hechos en menos de 2 minutos', rapidos, '0'], ['Duración promedio del checklist (min)', durProm / 60, '0.0']];
+    ['Checklists hechos en menos de 2 minutos', rapidos, '0'], ['Duración promedio del checklist (min)', durProm / 60, '0.0'],
+    ['Litros de combustible cargados', cargas.reduce((t, c) => t + Number(c.litros), 0), '#,##0.0'],
+    ['Costo de combustible ($)', cargas.reduce((t, c) => t + (c.precio_litro != null ? c.litros * c.precio_litro : 0), 0), '"$" #,##0']];
   tablaSimple(rs, 7, 1, ['Indicador', 'Valor'], kpis.map(k => [k[0], k[1]]));
   kpis.forEach((k, i) => { rs.getRow(8 + i).getCell(2).numFmt = k[2]; });
   const tRes = tablaSimple(rs, 7, 4, ['Resultado', 'Checklists'], Object.keys(RES).map(k => [RES[k][0], cuenta(k)]));
@@ -154,6 +168,43 @@ export async function generarExcel(js, f) {
     r.eachCell(c => { c.border = borde; });
   });
   wf.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, fallas.length + 1), column: colsF.length } };
+
+  // ---------- Combustible
+  if (cargas.length) {
+    const wc = wb.addWorksheet('Combustible', { views: [{ state: 'frozen', ySplit: 1 }], pageSetup: { ...IMPRESION, printTitlesRow: '1:1' } });
+    const colsC = [{ t: 'Fecha', w: 11, f: 'dd/mm/yyyy' }, { t: 'Hora', w: 7, f: 'hh:mm' }, { t: 'Código', w: 9 }, { t: 'Equipo', w: 28 }, { t: 'Cargó', w: 20 }, { t: 'Obra', w: 22 },
+      { t: 'Litros', w: 9, n: 1, f: '#,##0.0' }, { t: 'Medidor', w: 11, n: 1, f: '#,##0.0' }, { t: 'Unidad', w: 7 }, { t: 'Tanque', w: 8 }, { t: 'Origen', w: 18 },
+      { t: 'Proveedor', w: 16 }, { t: 'Precio por litro', w: 11, n: 1, f: '"$" #,##0.00' }, { t: 'Total', w: 12, n: 1, f: '"$" #,##0' }, { t: 'Notas', w: 30 }];
+    encabezado(wc, 1, colsC);
+    const ORI = { surtidor_propio: 'Surtidor propio', cisterna: 'Camión cisterna', estacion: 'Estación de servicio', otro: 'Otro' };
+    cargas.forEach((c, i) => {
+      const r = wc.getRow(i + 2);
+      r.values = [soloDia(c.cargado_en), xl(c.cargado_en), c.equipo.codigo, c.equipo.nombre, c.quien ? c.quien.nombre : '', c.obra ? c.obra.nombre : '', Number(c.litros),
+        c.medidor != null ? Number(c.medidor) : null, c.equipo.medidor === 'km' ? 'km' : 'h', c.tanque_lleno ? 'Lleno' : 'Parcial', ORI[c.origen] || c.origen, c.proveedor || '',
+        c.precio_litro != null ? Number(c.precio_litro) : null, c.precio_litro != null ? c.litros * c.precio_litro : null, c.notas || ''];
+      r.eachCell(x => { x.border = borde; });
+    });
+    wc.autoFilter = { from: { row: 1, column: 1 }, to: { row: cargas.length + 1, column: colsC.length } };
+    // Consumo por equipo en el período (tanque lleno a tanque lleno).
+    const porE = {};
+    for (const c of cargas) (porE[c.equipo.id] ||= { e: c.equipo, cargas: [] }).cargas.push(c);
+    const resumen = Object.values(porE).map(({ e, cargas: cs }) => {
+      let litros = 0, uso = 0, prev = null, acum = 0;
+      for (const c of cs) {
+        if (prev) acum += Number(c.litros);
+        if (c.tanque_lleno && c.medidor != null) { if (prev && c.medidor > prev.medidor) { litros += acum; uso += c.medidor - prev.medidor; } prev = c; acum = 0; }
+      }
+      const consumo = uso > 0 ? litros / uso * (e.medidor === 'km' ? 100 : 1) : null;
+      return [e.codigo, cs.reduce((t, c) => t + Number(c.litros), 0), consumo, e.medidor === 'km' ? 'L/100 km' : 'L/h'];
+    }).sort((a, b) => b[1] - a[1]);
+    const col0 = colsC.length + 2;
+    const tC = tablaSimple(wc, 1, col0, ['Equipo', 'Litros', 'Consumo', 'Unidad'], resumen, [null, '#,##0.0', '0.00', null]);
+    [10, 10, 10, 10].forEach((w, i) => { wc.getColumn(col0 + i).width = w; });
+    const letra = n => String.fromCharCode(64 + n);
+    graficos['Combustible'] = [{ titulo: 'Litros cargados por equipo', tipo: 'bar', desde: [col0 + 4, 0], hasta: [col0 + 12, Math.max(14, resumen.length * 2 + 6)],
+      cats: rango('Combustible', letra(col0), tC), series: [{ nombre: 'Litros', vals: rango('Combustible', letra(col0 + 1), tC), color: C.tinta, etiquetas: true }],
+      datosCats: resumen.map(r => r[0]), datosVals: [resumen.map(r => Math.round(r[1] * 10) / 10)] }];
+  }
 
   // ---------- Por equipo
   const we = wb.addWorksheet('Por equipo', { views: [{ state: 'frozen', ySplit: 1 }], pageSetup: { ...IMPRESION, printTitlesRow: '1:1' } });

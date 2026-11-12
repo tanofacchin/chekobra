@@ -344,4 +344,51 @@ select pg_temp.esperar_error($$select public.indicadores((select v from ctx wher
 select pg_temp.esperar_error($$insert into public.planes_mantenimiento (empresa_id, equipo_id, nombre, cada) select (select v from ctx where k = 'B'), (select v from ctx where k = 'eqA'), 'Truco', 10$$, 'row-level security');
 reset role;
 
+-- ===== Combustible
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+update public.equipos set capacidad_tanque = 300 where codigo = 'EX-01';
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
+create temp table cid as select gen_random_uuid() v;
+grant select on cid to authenticated;
+select public.registrar_carga(jsonb_build_object('client_id', (select v from cid), 'equipo_id', (select v from ctx where k = 'eqA'), 'cargado_en', now() - interval '4 days', 'litros', 200, 'medidor', 130, 'tanque_lleno', true, 'precio_litro', 1500));
+do $$ begin if (public.registrar_carga(jsonb_build_object('client_id', (select v from cid), 'equipo_id', (select v from ctx where k = 'eqA'), 'litros', 200)) ->> 'repetido')::boolean is not true then raise exception 'FALLÓ: carga repetida'; end if; end $$;
+select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqA'), 'cargado_en', now() - interval '3 days', 'litros', 150, 'medidor', 140, 'tanque_lleno', true));
+select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqA'), 'cargado_en', now() - interval '2 days', 'litros', 160, 'medidor', 150, 'tanque_lleno', true));
+select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqA'), 'cargado_en', now() - interval '1 day', 'litros', 300, 'medidor', 160, 'tanque_lleno', true));
+select pg_temp.esperar_error($$select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqA'), 'litros', 400, 'medidor', 170))$$, 'Revisá el número');
+select pg_temp.esperar_error($$select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqA'), 'litros', 50, 'medidor', 120))$$, 'menor al de la carga anterior');
+select pg_temp.esperar_error($$select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqA'), 'litros', 50, 'foto_path', 'otra/empresa/x.jpg'))$$, 'Foto inválida');
+select pg_temp.esperar_error($$insert into public.cargas_combustible (empresa_id, client_id, equipo_id, cargado_en, litros) values ((select v from ctx where k = 'A'), gen_random_uuid(), (select v from ctx where k = 'eqA'), now(), 10)$$, 'permission denied');
+do $$ begin
+  if (select count(*) from public.cargas_combustible) <> 4 then raise exception 'FALLÓ: el operario debe ver sus 4 cargas'; end if;
+  if exists (select 1 from public.consumo_combustible((select v from ctx where k = 'A'), current_date - 30, current_date)) then raise exception 'FALLÓ: operario ve consumo'; end if;
+  if (select ultimo_medidor from public.equipos where codigo = 'EX-01') <> 160 then raise exception 'FALLÓ: la carga no actualizó el horómetro'; end if;
+end $$;
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+do $$ declare r record; begin
+  select * into r from public.consumo_combustible((select v from ctx where k = 'A'), current_date - 30, current_date);
+  if r.litros <> 810 or r.cargas <> 4 or r.costo <> 300000 then raise exception 'FALLÓ: totales %', row_to_json(r); end if;
+  if r.ultimo_tramo <> 30 or r.referencia <> 15.5 or r.origen_referencia <> 'historial' or r.alerta <> 'consumo_alto' then raise exception 'FALLÓ: alerta de consumo %', row_to_json(r); end if;
+  if r.consumo_periodo <> round(610 / 30.0, 2) then raise exception 'FALLÓ: consumo del período %', r.consumo_periodo; end if;
+end $$;
+update public.equipos set consumo_referencia = 35 where codigo = 'EX-01';
+do $$ declare r record; begin
+  select * into r from public.consumo_combustible((select v from ctx where k = 'A'), current_date - 30, current_date);
+  if r.alerta is not null or r.origen_referencia <> 'cargada' then raise exception 'FALLÓ: con referencia cargada no debía alertar %', row_to_json(r); end if;
+end $$;
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+do $$ begin
+  if exists (select 1 from public.cargas_combustible) or exists (select 1 from public.consumo_combustible((select v from ctx where k = 'A'), current_date - 30, current_date))
+     or exists (select 1 from public.tramos_combustible((select v from ctx where k = 'A'))) then raise exception 'FALLÓ: B ve combustible de A'; end if;
+end $$;
+select pg_temp.esperar_error($$select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqA'), 'litros', 10))$$, 'No pertenecés');
+reset role;
+
 \echo TODAS LAS PRUEBAS PASARON

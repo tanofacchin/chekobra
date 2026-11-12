@@ -8,7 +8,8 @@ import { VERSION_PRIVACIDAD } from './politica.js';
 import * as Mt from './mantenimiento.js';
 import * as Ind from './indicadores.js';
 import * as Rep from './reportes.js';
-import { jornadasParaExcel, generarExcel } from './excel.js';
+import { jornadasParaExcel, cargasParaExcel, generarExcel } from './excel.js';
+import * as Cb from './combustible.js';
 
 const T = () => S.adm;
 export function reiniciar() {
@@ -29,7 +30,8 @@ export async function cargar() {
   a.cargando = true;
   try {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc] = await Promise.all([
+    const desde30 = new Date(); desde30.setDate(desde30.getDate() - 29);
+    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb] = await Promise.all([
       sb.from('equipos').select('*').eq('empresa_id', E()).order('codigo'),
       sb.from('miembros').select('id, nombre, legajo, rol, activo, user_id, intentos_fallidos, bloqueado_en, recibir_avisos').eq('empresa_id', E()).order('nombre'),
       sb.from('obras').select('*').eq('empresa_id', E()).order('nombre'),
@@ -44,13 +46,15 @@ export async function cargar() {
       sb.from('notificaciones').select('id, tipo, estado, datos, creada_en, enviada_en, error').eq('empresa_id', E()).order('creada_en', { ascending: false }).limit(8),
       sb.rpc('estado_mantenimiento', { p_empresa: E() }),
       sb.from('documentos').select('*').eq('empresa_id', E()),
+      sb.rpc('consumo_combustible', { p_empresa: E(), p_desde: dayKey(desde30), p_hasta: dayKey(new Date()) }),
     ]);
-    for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc]) if (r.error) throw r.error;
+    for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb]) if (r.error) throw r.error;
     a.d = { equipos: eq.data, miembros: mi.data, obras: ob.data, plantillas: vigentes(pl.data, E()), fallas: fa.data, abiertas: ab.data, hoy: jh.data,
       jd: tc.data.find(c => c.proveedor === 'john_deere') || null, tele: Object.fromEntries(tu.data.map(l => [l.equipo_id, l])), alertasTele: ta.data,
-      consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data };
+      consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data, combustible: cb.data };
     if (a.tab === 'mantenimiento' && !a.mt) Mt.cargarMant();
     if (a.tab === 'indicadores' && !(a.ind && a.ind.datos)) Ind.cargarIndicadores();
+    if (a.tab === 'combustible' && !(a.cb && a.cb.datos)) Cb.cargarCombustible();
     a.err = '';
     if (a.tab === 'jornadas') await cargarJornadas();
   } catch (e) { a.err = msgError(e); }
@@ -101,9 +105,9 @@ export function vista() {
   if (a.ficha) return Rep.vFicha();
   if (a.etiquetas) return vEtiquetas(a.d.equipos.filter(e => a.etiquetas.includes(e.id)), S.m.empresa.nombre);
   if (a.detalle) return `<main class="wrap wide"><button class="btn ghost sm" data-act="admVolver" style="align-self:flex-start">← Volver</button>${vDetalle()}</main>`;
-  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras']]
+  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['combustible', `Combustible${Cb.alertasCombustible(a.d.combustible).length ? ` (${Cb.alertasCombustible(a.d.combustible).length})` : ''}`], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras']]
     .map(([k, l]) => `<button class="tab ${a.tab === k ? 'on' : ''}" data-act="admTab" data-k="${k}">${l}</button>`).join('');
-  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
+  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
   return `<main class="wrap wide"><section class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="eyebrow">${esc(fechaLarga())}</p><h1>${esc(S.m.empresa.nombre)}</h1></div>
     <button class="btn sm ghost" data-act="admRecargar">${a.cargando ? 'Actualizando…' : 'Actualizar'}</button></section>
     ${a.err ? `<div class="badbox">${esc(a.err)}</div>` : ''}<nav class="tabs">${tabs}</nav>${body}</main>`;
@@ -133,6 +137,7 @@ function vResumen() {
   const TIT = { horometro: 'Horómetro distinto al de la máquina', lejos: 'Checklist lejos de la máquina', sin_checklist: 'Máquina usada sin checklist' };
   d.alertasTele.forEach(x => { const e = d.equipos.find(q => q.id === x.equipo_id); att.push([x.tipo === 'sin_checklist' ? 'bad' : 'warn', `${TIT[x.tipo]} · ${e ? e.codigo : ''}`, `${x.detalle} · ${fFecha(x.fecha + 'T12:00:00')} · dato de John Deere`, x.jornada_id ? `<button class="btn sm" data-act="admVer" data-id="${x.jornada_id}">Ver</button>` : '']); });
   alertasFlota().forEach(x => att.push(x));
+  Cb.alertasCombustible(d.combustible).forEach(x => att.push(x));
   d.miembros.filter(m => m.bloqueado_en).forEach(m => att.push(['bad', `Legajo bloqueado · ${m.nombre}`, `${m.intentos_fallidos} intentos fallidos de PIN · ${fFecha(m.bloqueado_en)} ${fHora(m.bloqueado_en)}`, `<button class="btn sm" data-act="admTab" data-k="personal">Desbloquear</button>`]));
   const sinCheck = activos.filter(e => e.estado === 'operativo' && !d.hoy.some(j => j.equipo_id === e.id));
   const vacio = !d.equipos.length ? `<section class="card"><h2>Primeros pasos</h2><ol class="pasos">
@@ -164,7 +169,7 @@ function vJornadas() {
       <label>Operario<select class="inp" id="fl-op" data-fa="operario" data-vivo>${opt('', 'Todos', f.operario)}${d.miembros.map(m => opt(m.id, m.nombre, f.operario)).join('')}</select></label>
       <label>Resultado<select class="inp" id="fl-res" data-fa="resultado" data-vivo>${opt('', 'Todos', f.resultado)}${Object.entries(RES).map(([k, [l]]) => opt(k, l, f.resultado)).join('')}</select></label>
     </div><div class="row" style="justify-content:space-between"><span class="muted">${rows ? `${rows.length} jornada${rows.length === 1 ? '' : 's'}${rows.length === 1000 ? ' (máximo; acotá las fechas)' : ''}` : 'Cargando…'}</span>
-    <button class="btn sm dark" data-act="admExcel" ${rows && rows.length && !a.excelOcupado ? '' : 'disabled'}>${a.excelOcupado ? 'Armando el Excel…' : 'Descargar Excel'}</button></div></section>
+    <button class="btn sm dark" data-act="admExcel" ${rows && !a.excelOcupado ? '' : 'disabled'}>${a.excelOcupado ? 'Armando el Excel…' : 'Descargar Excel'}</button></div></section>
     ${!rows ? '' : rows.length ? `<div class="list">${rows.map(j => `<button class="jrow" data-act="admVer" data-id="${j.id}">
       <span class="d">${fFecha(j.inicio)}<br>${fHora(j.inicio)}${j.fin ? '–' + fHora(j.fin) : ''}</span>
       <span><span class="t" style="display:block">${esc(j.equipo.codigo)} · ${esc(j.equipo.nombre)}</span><span class="s" style="display:block">${esc(j.obra ? j.obra.nombre : '—')}</span></span>
@@ -318,8 +323,9 @@ export const A = {
     if (a.tab === 'plantillas') Ed.cargarPlantillas();
     if (a.tab === 'mantenimiento') Mt.cargarMant();
     if (a.tab === 'indicadores') Ind.cargarIndicadores();
+    if (a.tab === 'combustible') Cb.cargarCombustible();
   },
-  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A,
+  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A,
   etqUno: b => { T().etiquetas = [b.dataset.id]; render(); },
   etqTodas: () => { T().etiquetas = T().d.equipos.filter(e => e.activo).map(e => e.id); render(); },
   etqCerrar: () => { T().etiquetas = null; render(); },
@@ -418,9 +424,9 @@ export const A = {
 async function exportarExcel(f) {
   const a = T(); a.excelOcupado = true; render();
   try {
-    const js = await jornadasParaExcel(f);
-    if (!js.length) { toast('No hay jornadas en ese período.'); return; }
-    const blob = await generarExcel(js, f);
+    const [js, cargas] = await Promise.all([jornadasParaExcel(f), cargasParaExcel(f)]);
+    if (!js.length && !cargas.length) { toast('No hay datos en ese período.'); return; }
+    const blob = await generarExcel(js, f, cargas);
     const slug = S.m.empresa.slug;
     descargar(`checkobra-${slug}-${f.desde}-al-${f.hasta}.xlsx`, blob, blob.type);
     toast(`Excel descargado: ${js.length} jornada${js.length === 1 ? '' : 's'}.`);
@@ -433,7 +439,7 @@ async function errorFuncion(error) {
 
 export function alEscribir(el, v) {
   const a = T(); if (!a) return false;
-  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v)) return true;
+  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v)) return true;
   if (el.dataset.fa) { a.f[el.dataset.fa] = v; a.jornadas = null; render(); cargarJornadas().then(render); return true; }
   if (el.dataset.ne && a.addEq) { a.addEq[el.dataset.ne] = v; if (el.dataset.ne === 'plantilla') render(); return true; }
   if (el.dataset.np && a.addPer) { a.addPer[el.dataset.np] = v; return true; }

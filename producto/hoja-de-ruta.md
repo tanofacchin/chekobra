@@ -19,6 +19,10 @@
   equipos y personas (con bloqueo opcional al vencer), ficha de equipo e informe de cumplimiento imprimibles,
   indicadores por equipo, operario y obra.
 
+- Combustible: cargas desde el celular (con foto y sin señal), consumo real tanque lleno a tanque lleno, alertas de
+  consumo alto y de carga sin uso, referencia por equipo, hoja de combustible en el Excel.
+- Excel con hojas, formato y gráficos; escáner de QR en iPhone.
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).

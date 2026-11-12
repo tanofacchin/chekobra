@@ -12,7 +12,7 @@ const O = () => S.op;
 export function reiniciar() {
   S.op = { d: null, cargando: false, err: '', flow: null, resultado: null, cierre: null, detalle: null, confirm: null, cola: [] };
 }
-export const clave = () => { const o = O(); return o ? [o.flow && o.flow.step, !!o.resultado, !!o.cierre, o.detalle].join(',') : ''; };
+export const clave = () => { const o = O(); return o ? [o.flow && o.flow.step, !!o.resultado, !!o.cierre, !!o.carga, o.detalle].join(',') : ''; };
 
 export async function cargar() {
   const o = O(); if (!o || o.cargando) return;
@@ -146,6 +146,7 @@ export function vista() {
   if (o.flow) return vFlow();
   if (o.resultado) return vResultado();
   if (o.cierre) return vCierre();
+  if (o.carga) return vCarga();
   if (o.detalle) return vDetalle();
   return vInicio();
 }
@@ -181,7 +182,7 @@ function vInicio() {
   const docsHtml = mios.map(({ x, st }) => `<div class="${st.clave === 'vencido' ? 'badbox' : 'warnbox'}"><b>${esc(nombreDoc(x))}:</b> ${esc(st.texto.toLowerCase())}.${st.clave === 'vencido' && x.bloquea ? ' No podés iniciar jornada hasta renovarla; avisale al supervisor.' : ' Avisale al supervisor para renovarla.'}</div>`).join('');
   return `<main class="wrap"><section><p class="eyebrow">${esc(fechaLarga())}</p><h1>Hola, ${esc(S.m.nombre.split(' ')[0])}</h1></section>${docsHtml}
     ${d.offline ? `<div class="warnbox">Sin conexión: estás viendo los datos guardados el ${fFecha(d.actualizado)} a las ${fHora(d.actualizado)}.</div>` : ''}
-    ${rechHtml}${main}<h2>Tus últimas jornadas</h2>${lista}</main>`;
+    ${rechHtml}${main}<button class="btn block" data-act="opCarga">Registrar carga de combustible</button><h2>Tus últimas jornadas</h2>${lista}</main>`;
 }
 
 /* ------------------------------------------------------------ flujo */
@@ -353,6 +354,46 @@ function vCierre() {
     ${c.err ? `<p class="err" role="alert">${esc(c.err)}</p>` : ''}
     <div class="row"><button class="btn" data-act="opCancelarCierre">Cancelar</button><button class="btn dark" data-act="opCerrar">Cerrar jornada</button></div></main>`;
 }
+const ORIGENES = [['surtidor_propio', 'Surtidor propio'], ['cisterna', 'Camión cisterna'], ['estacion', 'Estación de servicio'], ['otro', 'Otro']];
+function vCarga() {
+  const c = O().carga, d = O().d, e = eqById(c.equipoId), u = unidad(e && e.medidor);
+  if (c.foto && !c.fotoUrl) c.fotoUrl = URL.createObjectURL(c.foto);
+  return `<main class="wrap"><section><p class="eyebrow">Combustible</p><h1>Registrar carga</h1></section>
+    <label class="f">Equipo<select class="inp" id="cg-eq" data-cg="equipoId" data-vivo><option value="">Elegí el equipo</option>
+      ${d.equipos.map(x => `<option value="${x.id}" ${x.id === c.equipoId ? 'selected' : ''}>${esc(x.codigo)} · ${esc(x.nombre)}</option>`).join('')}</select></label>
+    <div class="form-grid"><label class="f">Litros cargados<input class="inp num" id="cg-l" type="number" inputmode="decimal" step="0.1" data-cg="litros" value="${esc(c.litros)}"></label>
+      <label class="f">${e && e.medidor === 'km' ? 'Odómetro (km)' : 'Horómetro (h)'}<input class="inp num" id="cg-m" type="number" inputmode="decimal" step="0.1" data-cg="medidor" value="${esc(c.medidor)}">
+        ${e && e.ultimo_medidor != null ? `<small>Último registrado: <span class="num">${fNum(e.ultimo_medidor)} ${u}</span></small>` : ''}</label></div>
+    <label class="check"><input type="checkbox" id="cg-ll" data-cg="lleno" ${c.lleno ? 'checked' : ''}><span>Llené el tanque <small class="muted">(sirve para calcular el consumo real)</small></span></label>
+    <label class="f">De dónde salió<select class="inp" id="cg-o" data-cg="origen" data-vivo>${ORIGENES.map(([v, l]) => `<option value="${v}" ${c.origen === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    ${c.origen === 'estacion' ? `<div class="form-grid"><label class="f">Estación <small>Opcional</small><input class="inp" id="cg-p" data-cg="proveedor" value="${esc(c.proveedor)}"></label>
+      <label class="f">Precio por litro <small>Opcional</small><input class="inp num" id="cg-pr" type="number" inputmode="decimal" data-cg="precio" value="${esc(c.precio)}"></label></div>` : ''}
+    <label class="photo foto-chica" for="cg-foto">${c.foto ? `<img src="${c.fotoUrl}" alt="Foto del surtidor o ticket">` : '<b>Foto del surtidor o del ticket</b><span class="small muted">Opcional, pero ayuda a controlar</span>'}
+      <input class="vh" type="file" id="cg-foto" accept="image/*" capture="environment" data-file="carga"></label>
+    <label class="f">Notas <small>Opcional</small><input class="inp" id="cg-n" data-cg="notas" value="${esc(c.notas)}" maxlength="200"></label>
+    ${c.err ? `<p class="err" role="alert">${esc(c.err)}</p>` : ''}
+    <div class="row"><button class="btn" data-act="opCargaCancelar">Cancelar</button><button class="btn primary" data-act="opCargaGuardar">Registrar carga</button></div></main>`;
+}
+async function guardarCarga() {
+  const o = O(), c = o.carga, e = eqById(c.equipoId); c.err = '';
+  if (!e) c.err = 'Elegí el equipo.';
+  else if (!(+c.litros > 0)) c.err = 'Indicá los litros cargados.';
+  else if (e.capacidad_tanque && +c.litros > e.capacidad_tanque * 1.05) c.err = `El tanque de ${e.codigo} es de ${fNum(e.capacidad_tanque)} L. Revisá los litros.`;
+  else if (c.lleno && c.medidor === '') c.err = `Para calcular el consumo hace falta el ${e.medidor === 'km' ? 'odómetro' : 'horómetro'}.`;
+  else if (c.medidor !== '' && e.ultimo_medidor != null && +c.medidor < +e.ultimo_medidor) c.err = `El valor es menor al último registrado (${fNum(e.ultimo_medidor)}). Revisá el número.`;
+  if (c.err) return render();
+  const id = uuid(), base = `${S.m.empresa_id}/${S.user.id}/combustible/${id}`;
+  const archivos = c.foto ? [{ path: base + '.jpg', blob: c.foto, tipo: 'image/jpeg' }] : [];
+  const ab = jornadaAbierta();
+  const payload = { client_id: id, equipo_id: e.id, obra_id: ab && ab.equipo_id === e.id ? ab.obra_id : null, cargado_en: new Date().toISOString(),
+    litros: +c.litros, medidor: c.medidor === '' ? null : +c.medidor, tanque_lleno: !!c.lleno, origen: c.origen,
+    proveedor: c.proveedor || null, precio_litro: c.precio === '' ? null : +c.precio, foto_path: archivos.length ? archivos[0].path : null, notas: c.notas || null };
+  await cola.agregar({ id, tipo: 'carga', uid: S.user.id, empresa_id: S.m.empresa_id, payload, archivos });
+  if (c.fotoUrl) URL.revokeObjectURL(c.fotoUrl);
+  o.carga = null; o.cola = await cola.listar().catch(() => o.cola);
+  toast(`Carga de ${fNum(payload.litros)} L registrada.`); render(); sync();
+}
+
 function vDetalle() {
   const j = O().d.jornadas.find(x => x.id === O().detalle); if (!j) return '<main class="wrap"><div class="empty">No encontrada.</div></main>';
   const e = eqById(j.equipo_id), ob = O().d.obras.find(x => x.id === j.obra_id), u = unidad(e && e.medidor);
@@ -463,6 +504,9 @@ async function cerrar() {
 
 export const A = {
   opRecargar: () => cargar(),
+  opCarga: () => { const ab = jornadaAbierta(), e = ab && eqById(ab.equipo_id); O().carga = { equipoId: e ? e.id : '', litros: '', medidor: e && e.ultimo_medidor != null ? e.ultimo_medidor : '', lleno: true, origen: 'surtidor_propio', proveedor: '', precio: '', notas: '', foto: null, err: '' }; render(); },
+  opCargaCancelar: () => { const c = O().carga; if (c && c.fotoUrl) URL.revokeObjectURL(c.fotoUrl); O().carga = null; render(); },
+  opCargaGuardar: () => guardarCarga(),
   opEscanear: () => abrirEscaner(),
   opCerrarEscaner: () => cerrarEscaner(),
   opNueva: () => { O().flow = nuevoFlujo(); render(); },
@@ -493,11 +537,28 @@ export function alEscribir(el, v) {
   if (el.dataset.fl && o.flow) { o.flow[el.dataset.fl] = v; guardarBorrador(); return true; }
   if (el.dataset.nota && o.flow) { o.flow.resp[el.dataset.nota].nota = v; guardarBorrador(); return true; }
   if (el.dataset.ci && o.cierre) { o.cierre[el.dataset.ci] = v; if (el.dataset.ci === 'falla') render(); return true; }
+  if (el.dataset.cg && o.carga) {
+    o.carga[el.dataset.cg] = v;
+    if (el.dataset.cg === 'equipoId') { const e = eqById(v); o.carga.medidor = e && e.ultimo_medidor != null ? e.ultimo_medidor : ''; render(); }
+    if (el.dataset.cg === 'origen') render();
+    return true;
+  }
   return false;
 }
 
 export async function alArchivo(input) {
-  const file = input.files && input.files[0], o = O(); if (!file || !o.flow) return;
+  const file = input.files && input.files[0], o = O(); if (!file) return;
+  if (input.dataset.file === 'carga' && o.carga) {
+    try {
+      const e = eqById(o.carga.equipoId), now = new Date();
+      o.carga.foto = await comprimir(file, 1080, 0.65, [`Combustible · ${e ? e.codigo : ''} · ${fFecha(now)} ${fHora(now)} h`, S.m.nombre]);
+      if (o.carga.fotoUrl) URL.revokeObjectURL(o.carga.fotoUrl); o.carga.fotoUrl = null;
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // mostrar la foto ya, aunque hubiera un campo activo
+      render();
+    } catch { toast('No se pudo leer la foto. Probá de nuevo.'); }
+    return;
+  }
+  if (!o.flow) return;
   const f = o.flow, e = eqById(f.equipoId), now = new Date();
   try {
     if (input.dataset.file === 'selfie') {
