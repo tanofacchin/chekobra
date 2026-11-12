@@ -56,7 +56,33 @@ function elegirPorQr(id) {
   guardarBorrador(); render();
   toast(`${e.codigo} · ${e.nombre} seleccionado.`);
 }
-export const puedeEscanear = () => 'BarcodeDetector' in window && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+// Android/Chrome traen lector de QR propio (BarcodeDetector); en iPhone se usa jsQR (vendor/), que se carga solo si hace falta.
+export const puedeEscanear = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+let jsqrCargado = null;
+const cargarJsQR = () => jsqrCargado ||= new Promise((ok, no) => {
+  if (window.jsQR) return ok(window.jsQR);
+  const s = document.createElement('script'); s.src = 'vendor/jsqr-1.4.0.js';
+  s.onload = () => ok(window.jsQR); s.onerror = () => { jsqrCargado = null; no(new Error('No se pudo cargar el lector de QR')); };
+  document.head.append(s);
+});
+// Devuelve una función que intenta leer un QR del video y resuelve el texto o null.
+async function crearLector(v) {
+  if ('BarcodeDetector' in window) {
+    try {
+      const det = new window.BarcodeDetector({ formats: ['qr_code'] });
+      return async () => { const r = await det.detect(v); return r.length ? r[0].rawValue : null; };
+    } catch { /* sin soporte real: usar jsQR */ }
+  }
+  const jsQR = await cargarJsQR();
+  const c = document.createElement('canvas'), x = c.getContext('2d', { willReadFrequently: true });
+  return async () => {
+    const w = v.videoWidth, h = v.videoHeight; if (!w || !h) return null;
+    const sc = Math.min(1, 640 / Math.max(w, h)); c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+    x.drawImage(v, 0, 0, c.width, c.height);
+    const r = jsQR(x.getImageData(0, 0, c.width, c.height).data, c.width, c.height, { inversionAttempts: 'dontInvert' });
+    return r ? r.data : null;
+  };
+}
 let scan = null;
 async function abrirEscaner() {
   // El escáner vive fuera de #app: así no se corta si la pantalla se redibuja.
@@ -65,22 +91,26 @@ async function abrirEscaner() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
     const v = $('#scan-video'); if (!v || !O() || !O().scan) { stream.getTracks().forEach(t => t.stop()); return; }
-    v.srcObject = stream; await v.play();
-    const det = new window.BarcodeDetector({ formats: ['qr_code'] });
-    scan = { stream, timer: setInterval(async () => {
+    v.setAttribute('playsinline', ''); v.srcObject = stream; await v.play();
+    scan = { stream, timer: null };
+    const leer = await crearLector(v);
+    if (!scan) return;                       // se cerró mientras cargaba
+    let ocupado = false;
+    scan.timer = setInterval(async () => {
+      if (ocupado) return; ocupado = true;
       try {
-        const r = await det.detect(v); if (!r.length) return;
-        const u = new URL(r[0].rawValue, location.href), id = u.searchParams.get('equipo');
+        const texto = await leer(); if (!texto) return;
+        const u = new URL(texto, location.href), id = u.searchParams.get('equipo');
         if (!id) return toast('Ese código no es de un equipo de CheckObra.');
         cerrarEscaner(); elegirPorQr(id);
-      } catch { /* sigue intentando */ }
-    }, 300) };
+      } catch { /* sigue intentando */ } finally { ocupado = false; }
+    }, 250);
   } catch {
     cerrarEscaner(); toast('No se pudo abrir la cámara. Revisá el permiso o elegí el equipo de la lista.', 6000);
   }
 }
 function cerrarEscaner() {
-  if (scan) { clearInterval(scan.timer); scan.stream.getTracks().forEach(t => t.stop()); scan = null; }
+  if (scan) { if (scan.timer) clearInterval(scan.timer); scan.stream.getTracks().forEach(t => t.stop()); scan = null; }
   if (O()) O().scan = false;
   const caja = $('#escaner'); if (caja) caja.remove();
 }
