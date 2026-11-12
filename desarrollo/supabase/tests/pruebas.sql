@@ -279,4 +279,69 @@ do $$ begin
   if (select count(*) from public.destinatarios_avisos((select v from ctx where k = 'A'))) <> 1 then raise exception 'FALLÓ: destinatarios (solo la dueña, sin operarios)'; end if;
 end $$;
 
+-- ===== Mantenimiento, vencimientos e indicadores
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+insert into public.planes_mantenimiento (empresa_id, equipo_id, nombre, cada, anticipo, ultimo_medidor)
+  select (select v from ctx where k = 'A'), (select v from ctx where k = 'eqA'), 'Service 50 h', 50, 10, 100;
+do $$ declare r record; begin
+  select * into r from public.estado_mantenimiento((select v from ctx where k = 'A'));
+  if r.estado <> 'al_dia' or r.proximo <> 150 or r.faltan <> 20.5 then raise exception 'FALLÓ: estado de service %', row_to_json(r); end if;
+end $$;
+update public.planes_mantenimiento set cada = 30;
+do $$ begin if (select estado from public.estado_mantenimiento((select v from ctx where k = 'A'))) <> 'proximo' then raise exception 'FALLÓ: service próximo'; end if; end $$;
+update public.planes_mantenimiento set cada = 20;
+do $$ begin if (select estado from public.estado_mantenimiento((select v from ctx where k = 'A'))) <> 'vencido' then raise exception 'FALLÓ: service vencido'; end if; end $$;
+insert into public.mantenimientos (empresa_id, equipo_id, plan_id, tipo, descripcion, medidor)
+  select (select v from ctx where k = 'A'), (select v from ctx where k = 'eqA'), (select id from public.planes_mantenimiento), 'service', 'Cambio de aceite y filtros', 129.5;
+do $$ declare r record; begin
+  select * into r from public.estado_mantenimiento((select v from ctx where k = 'A'));
+  if r.estado <> 'al_dia' or r.ultimo_medidor <> 129.5 then raise exception 'FALLÓ: el service no reinició el plan %', row_to_json(r); end if;
+  if (select registrado_por from public.mantenimientos) is null then raise exception 'FALLÓ: falta quién registró'; end if;
+end $$;
+-- documento vencido que bloquea el equipo
+insert into public.documentos (empresa_id, equipo_id, tipo, vence, bloquea)
+  select (select v from ctx where k = 'A'), (select v from ctx where k = 'eqA'), 'seguro', current_date - 5, true;
+insert into public.documentos (empresa_id, miembro_id, tipo, vence, bloquea)
+  select (select v from ctx where k = 'A'), (select id from public.miembros where nombre = 'Operario A2'), 'licencia', current_date + 20, true;
+do $$ begin
+  if (public.indicadores((select v from ctx where k = 'A'), current_date - 7, current_date)->>'total')::int <> 2 then raise exception 'FALLÓ: indicadores total'; end if;
+  if (public.indicadores((select v from ctx where k = 'A'), current_date - 7, current_date)->'por_resultado'->>'no_apto')::int <> 1 then raise exception 'FALLÓ: indicadores por resultado'; end if;
+end $$;
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
+select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object(
+  'client_id', gen_random_uuid(), 'equipo_id', %L, 'med_ini', 130, 'ubic_ref', 'Obrador km 12',
+  'selfie_path', %L, 'firma_path', %L, 'declaracion', true, 'dur_checklist_s', 400,
+  'respuestas', '{"doc.1":{"v":"ok"},"c.x1":{"v":"ok"}}'::jsonb))$$, (select v from ctx where k = 'eqA'), :'pref2' || 's2.jpg', :'pref2' || 'f2.png'), 'documentación vencida');
+do $$ begin
+  if (select count(*) from public.documentos) <> 2 then raise exception 'FALLÓ: el operario debe ver el doc del equipo y el suyo'; end if;
+  if exists (select 1 from public.estado_mantenimiento((select v from ctx where k = 'A'))) then raise exception 'FALLÓ: operario ve mantenimiento'; end if;
+  if exists (select 1 from public.mantenimientos) then raise exception 'FALLÓ: operario ve mantenimientos'; end if;
+end $$;
+select pg_temp.esperar_error($$select public.indicadores((select v from ctx where k = 'A'), current_date - 7, current_date)$$, 'permiso');
+select pg_temp.esperar_error($$insert into public.documentos (empresa_id, miembro_id, tipo, vence) select (select v from ctx where k = 'A'), (select id from public.miembros where nombre = 'Operario A2'), 'licencia', current_date + 900$$, 'row-level security');
+reset role;
+-- licencia del operario vencida
+update public.documentos set vence = current_date + 30 where tipo = 'seguro';
+update public.documentos set vence = current_date - 5 where tipo = 'licencia';
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
+select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object(
+  'client_id', gen_random_uuid(), 'equipo_id', %L, 'med_ini', 130, 'ubic_ref', 'Obrador km 12',
+  'selfie_path', %L, 'firma_path', %L, 'declaracion', true, 'dur_checklist_s', 400,
+  'respuestas', '{"doc.1":{"v":"ok"},"c.x1":{"v":"ok"}}'::jsonb))$$, (select v from ctx where k = 'eqA'), :'pref2' || 's2.jpg', :'pref2' || 'f2.png'), 'Tu licencia venció');
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+do $$ begin
+  if exists (select 1 from public.planes_mantenimiento) or exists (select 1 from public.documentos) or exists (select 1 from public.mantenimientos) then raise exception 'FALLÓ: B ve flota de A'; end if;
+  if exists (select 1 from public.estado_mantenimiento((select v from ctx where k = 'A'))) then raise exception 'FALLÓ: B ve estado de A'; end if;
+  if public.medidor_actual((select v from ctx where k = 'eqA')) is not null then raise exception 'FALLÓ: B ve medidor de A'; end if;
+end $$;
+select pg_temp.esperar_error($$select public.indicadores((select v from ctx where k = 'A'), current_date - 7, current_date)$$, 'permiso');
+select pg_temp.esperar_error($$insert into public.planes_mantenimiento (empresa_id, equipo_id, nombre, cada) select (select v from ctx where k = 'B'), (select v from ctx where k = 'eqA'), 'Truco', 10$$, 'row-level security');
+reset role;
+
 \echo TODAS LAS PRUEBAS PASARON

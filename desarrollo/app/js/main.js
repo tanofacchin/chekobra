@@ -19,7 +19,7 @@ function dibujar() {
   const k = claveVista(), y = scrollY;
   $('#app').innerHTML = vista();
   scrollTo(0, k === lastKey ? y : 0); lastKey = k;
-  Op.despues && Op.despues();
+  Op.despues && Op.despues(); Adm.despues && Adm.despues();
 }
 setRender(dibujar);
 document.addEventListener('focusout', () => setTimeout(() => { if (pendiente) { pendiente = false; dibujar(); } }, 0));

@@ -2,6 +2,7 @@
 import { $, esc, fFecha, fHora, fDur, fNum, unidad, fechaLarga, mapsUrl, uuid, RES, MIN_CHECK_S, toast, msgError, comprimir } from './util.js';
 import { sb, cargarOperario, itemsDe } from './datos.js';
 import { cola } from './cola.js';
+import { estadoDoc, nombreDoc } from './mantenimiento.js';
 import { S, render } from './estado.js';
 import { sync } from './main.js';
 
@@ -47,6 +48,8 @@ function elegirPorQr(id) {
   const uso = o.d.enUso.find(u => u.equipo_id === e.id);
   if (uso) return toast(`${e.codigo} lo está usando ${uso.operario}.`, 5000);
   if (!plDe(e)) return toast(`${e.codigo} no tiene checklist asignado.`, 5000);
+  const dv = docBloqueante(e.id);
+  if (dv) return toast(dv.equipo_id ? `${e.codigo} tiene ${nombreDoc(dv)} vencido. Avisá al supervisor.` : `Tu ${nombreDoc(dv)} está vencida. No podés iniciar jornada.`, 7000);
   if (!o.flow) o.flow = nuevoFlujo();
   if (o.flow.equipoId !== e.id) { o.flow.equipoId = e.id; o.flow.resp = {}; o.flow.medIni = ''; }
   o.flow.step = 0; o.flow.err = ''; o.resultado = null; o.cierre = null; o.detalle = null;
@@ -87,6 +90,9 @@ const vEscaner = () => `<div class="modal" role="dialog" aria-modal="true" aria-
   <button class="btn" data-act="opCerrarEscaner">Cancelar</button></div></div>`;
 
 /* ------------------------------------------------------------ helpers */
+// Documento vencido que impide iniciar jornada (del equipo o del propio operario).
+const docsDe = (filtro) => ((O().d && O().d.docs) || []).filter(filtro);
+const docBloqueante = equipoId => docsDe(x => x.bloquea && (x.equipo_id === equipoId || x.miembro_id === S.m.id)).find(x => estadoDoc(x).clave === 'vencido');
 const eqById = id => O().d && O().d.equipos.find(e => e.id === id);
 const plDe = eq => eq && O().d.plantillas[eq.plantilla_clave];
 const misEnvios = () => O().cola.filter(e => e.uid === S.user.id && e.empresa_id === S.m.empresa_id);
@@ -141,7 +147,9 @@ function vInicio() {
       <span class="t">${esc(e ? e.codigo + ' · ' + e.nombre : 'Equipo')}</span>${chipRes(j.resultado)}
       <span class="s">${fFecha(j.inicio)} ${fHora(j.inicio)}${ob ? ' · ' + esc(ob.nombre) : ''}${j.estado === 'abierta' ? ' · en curso' : ''}</span></button>`; }).join('')}</div>`
     : '<div class="empty">Todavía no registraste jornadas. Tu historial va a aparecer acá.</div>';
-  return `<main class="wrap"><section><p class="eyebrow">${esc(fechaLarga())}</p><h1>Hola, ${esc(S.m.nombre.split(' ')[0])}</h1></section>
+  const mios = docsDe(x => x.miembro_id === S.m.id).map(x => ({ x, st: estadoDoc(x) })).filter(({ st }) => st.clave !== 'vigente');
+  const docsHtml = mios.map(({ x, st }) => `<div class="${st.clave === 'vencido' ? 'badbox' : 'warnbox'}"><b>${esc(nombreDoc(x))}:</b> ${esc(st.texto.toLowerCase())}.${st.clave === 'vencido' && x.bloquea ? ' No podés iniciar jornada hasta renovarla; avisale al supervisor.' : ' Avisale al supervisor para renovarla.'}</div>`).join('');
+  return `<main class="wrap"><section><p class="eyebrow">${esc(fechaLarga())}</p><h1>Hola, ${esc(S.m.nombre.split(' ')[0])}</h1></section>${docsHtml}
     ${d.offline ? `<div class="warnbox">Sin conexión: estás viendo los datos guardados el ${fFecha(d.actualizado)} a las ${fHora(d.actualizado)}.</div>` : ''}
     ${rechHtml}${main}<h2>Tus últimas jornadas</h2>${lista}</main>`;
 }
@@ -169,10 +177,11 @@ function stEquipo() {
   const grid = d.equipos.length ? `<div class="eq-grid">${d.equipos.map(e => {
     const uso = d.enUso.find(u => u.equipo_id === e.id);
     const pl = plDe(e);
-    const dis = e.estado !== 'operativo' || !!uso || !pl;
+    const docEq = docsDe(x => x.bloquea && x.equipo_id === e.id).find(x => estadoDoc(x).clave === 'vencido');
+    const dis = e.estado !== 'operativo' || !!uso || !pl || !!docEq;
     return `<button class="eq ${f.equipoId === e.id ? 'sel' : ''}" data-act="opEquipo" data-id="${e.id}" ${dis ? 'disabled' : ''} aria-pressed="${f.equipoId === e.id}">
       <span class="code">${esc(e.codigo)}</span><span class="nm">${esc(e.nombre)}</span><span class="meta">${esc(pl ? pl.nombre : 'Sin plantilla')}</span>
-      ${chipEquipo(e, uso)}${uso ? `<span class="meta">Lo usa ${esc(uso.operario)}</span>` : ''}${e.estado === 'bloqueado' ? '<span class="meta">Avisá al supervisor</span>' : ''}</button>`;
+      ${chipEquipo(e, uso)}${uso ? `<span class="meta">Lo usa ${esc(uso.operario)}</span>` : ''}${e.estado === 'bloqueado' ? '<span class="meta">Avisá al supervisor</span>' : ''}${docEq && e.estado === 'operativo' ? `<span class="chip bad">${esc(nombreDoc(docEq))} vencido</span>` : ''}</button>`;
   }).join('')}</div>` : '<div class="empty">No hay equipos cargados. Pedile al supervisor que los dé de alta.</div>';
   const e = eqById(f.equipoId);
   return `<h1>¿Con qué equipo trabajás hoy?</h1>
