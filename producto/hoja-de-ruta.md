@@ -23,6 +23,11 @@
   consumo alto y de carga sin uso, referencia por equipo, hoja de combustible en el Excel.
 - Excel con hojas, formato y gráficos; escáner de QR en iPhone.
 
+- Checklist v2 (revisión en obra del 12/11): sin seguro, matafuego no crítico, pérdidas de fluidos como advertencia
+  roja, fotos obligatorias (horómetro, 4 lados, balde/dientes, tablero, caja de herramientas), controles semanales
+  con día configurable (zapatas y bulones los viernes), ayuda en el enganche rápido, orden exterior → cabina →
+  equipo encendido. Todo configurable en el editor de plantillas.
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).

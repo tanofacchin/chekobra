@@ -13,7 +13,7 @@ const cargarLibs = () => libs ||= Promise.all(LIBS.map(src => new Promise((ok, n
 /* ------------------------------------------------------------ datos */
 export async function jornadasParaExcel(f) {
   let q = sb.from('jornadas').select('id, inicio, fin, estado, resultado, med_ini, med_fin, uso, n_fallas, n_criticas, rapido, dur_checklist_s, lat, lng, precision_m, ubic_ref, litros, novedades, '
-    + 'equipo:equipos(id, codigo, nombre, medidor), operario:miembros(id, nombre, legajo), obra:obras(id, nombre), fallas(texto, nota, critica, estado, seccion, origen, reparacion, reparada_en)')
+    + 'equipo:equipos(id, codigo, nombre, medidor), operario:miembros(id, nombre, legajo), obra:obras(id, nombre), fallas(texto, nota, critica, grave, estado, seccion, origen, reparacion, reparada_en)')
     .eq('empresa_id', S.m.empresa_id).order('inicio', { ascending: true }).limit(5000);
   if (f.desde) q = q.gte('inicio', new Date(f.desde + 'T00:00:00').toISOString());
   if (f.hasta) q = q.lt('inicio', new Date(new Date(f.hasta + 'T00:00:00').getTime() + 864e5).toISOString());
@@ -104,7 +104,7 @@ export async function generarExcel(js, f, cargas = []) {
   titulo(rs, 'Informe de checklists', [empresa, `Período: ${periodo}`, filtros, generado]);
   rs.getColumn(1).width = 34; rs.getColumn(2).width = 14; rs.getColumn(3).width = 4; rs.getColumn(4).width = 30; rs.getColumn(5).width = 11; rs.getColumn(6).width = 18; rs.getColumn(7).width = 11;
   const kpis = [['Checklists', js.length, '0'], ['Aptos', cuenta('apto'), '0'], ['Con observaciones', cuenta('observaciones'), '0'], ['No aptos (equipo bloqueado)', cuenta('no_apto'), '0'],
-    ['% aptos (sin fallas)', js.length ? cuenta('apto') / js.length : 0, '0.0%'], ['Fallas reportadas', fallas.length, '0'], ['Fallas críticas', fallas.filter(x => x.critica).length, '0'],
+    ['% aptos (sin fallas)', js.length ? cuenta('apto') / js.length : 0, '0.0%'], ['Fallas reportadas', fallas.length, '0'], ['Fallas críticas', fallas.filter(x => x.critica).length, '0'], ['Advertencias rojas', fallas.filter(x => x.grave).length, '0'],
     ['Fallas sin reparar', fallas.filter(x => x.estado === 'abierta').length, '0'], ['Horas trabajadas', horas, '#,##0.0'], ['Kilómetros recorridos', km, '#,##0'],
     ['Checklists hechos en menos de 2 minutos', rapidos, '0'], ['Duración promedio del checklist (min)', durProm / 60, '0.0'],
     ['Litros de combustible cargados', cargas.reduce((t, c) => t + Number(c.litros), 0), '#,##0.0'],
@@ -156,12 +156,13 @@ export async function generarExcel(js, f, cargas = []) {
   // ---------- Fallas
   const wf = wb.addWorksheet('Fallas', { views: [{ state: 'frozen', ySplit: 1 }], pageSetup: { ...IMPRESION, printTitlesRow: '1:1' } });
   const colsF = [{ t: 'Fecha', w: 11, f: 'dd/mm/yyyy' }, { t: 'Código', w: 9 }, { t: 'Equipo', w: 28 }, { t: 'Operario', w: 22 }, { t: 'Obra', w: 24 }, { t: 'Sección', w: 22 },
-    { t: 'Falla', w: 40 }, { t: 'Crítica', w: 8 }, { t: 'Detalle', w: 44 }, { t: 'Origen', w: 11 }, { t: 'Estado', w: 11 }, { t: 'Reparación', w: 40 }, { t: 'Reparada el', w: 11, f: 'dd/mm/yyyy' }];
+    { t: 'Falla', w: 40 }, { t: 'Crítica', w: 8 }, { t: 'Detalle', w: 44 }, { t: 'Origen', w: 11 }, { t: 'Estado', w: 11 }, { t: 'Reparación', w: 40 }, { t: 'Reparada el', w: 11, f: 'dd/mm/yyyy' }, { t: 'Advertencia roja', w: 11 }];
   encabezado(wf, 1, colsF);
   fallas.forEach((x, i) => {
     const r = wf.getRow(i + 2);
     r.values = [soloDia(x.j.inicio), x.j.equipo.codigo, x.j.equipo.nombre, x.j.operario.nombre, x.j.obra ? x.j.obra.nombre : '', x.seccion || '', x.texto, x.critica ? 'Sí' : 'No', x.nota,
-      x.origen === 'cierre' ? 'Al cierre' : 'Checklist', x.estado === 'reparada' ? 'Reparada' : 'Abierta', x.reparacion || '', x.reparada_en ? soloDia(x.reparada_en) : null];
+      x.origen === 'cierre' ? 'Al cierre' : 'Checklist', x.estado === 'reparada' ? 'Reparada' : 'Abierta', x.reparacion || '', x.reparada_en ? soloDia(x.reparada_en) : null, x.grave ? 'Sí' : 'No'];
+    if (x.grave) { const c = r.getCell(14); c.fill = fill(C.badF); c.font = { bold: true, color: { argb: 'FF' + C.badT } }; }
     if (x.critica) r.getCell(8).font = { bold: true, color: { argb: 'FF' + C.badT } };
     r.getCell(11).fill = fill(x.estado === 'reparada' ? C.okF : C.warnF);
     [7, 9, 12].forEach(k => { r.getCell(k).alignment = { wrapText: true, vertical: 'top' }; });

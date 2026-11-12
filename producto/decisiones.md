@@ -11,3 +11,6 @@
 | 2026-11-10 | Bandeja de salida en el teléfono | Las obras y campos tienen poca señal; nada se pierde ni se duplica |
 | 2026-11-10 | Telemetría por el estándar ISO 15143-3 | Una integración sirve para varias marcas |
 | 2026-11-10 | Plantillas versionadas con ids de ítem fijos | Las jornadas viejas siguen mostrándose bien aunque cambie la plantilla |
+| 2026-11-12 | Tres niveles por punto: crítico (bloquea), advertencia roja (no bloquea), normal | Las pérdidas de fluidos tienen que verse pero no siempre justifican parar la máquina (revisión en obra) |
+| 2026-11-12 | Controles semanales: obligatorios el día que tocan, se piden atrasados al siguiente uso | Ahorrar tiempo diario sin perder el control; el servidor no rechaza un atrasado si el teléfono estaba sin señal |
+| 2026-11-12 | Orden del checklist según la recorrida: exterior → cabina apagada → equipo encendido | Optimizar el tiempo del operario |

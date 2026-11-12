@@ -63,7 +63,7 @@ export async function cargar() {
 
 async function cargarJornadas() {
   const a = T(), f = a.f;
-  let q = sb.from('jornadas').select('id, inicio, fin, estado, resultado, med_ini, med_fin, uso, n_fallas, n_criticas, rapido, dur_checklist_s, lat, lng, precision_m, ubic_ref, litros, novedades, equipo:equipos(id, codigo, nombre, medidor, plantilla_clave), operario:miembros(id, nombre, legajo), obra:obras(nombre), fallas(texto, nota, critica, estado)')
+  let q = sb.from('jornadas').select('id, inicio, fin, estado, resultado, med_ini, med_fin, uso, n_fallas, n_criticas, n_alertas, rapido, dur_checklist_s, lat, lng, precision_m, ubic_ref, litros, novedades, equipo:equipos(id, codigo, nombre, medidor, plantilla_clave), operario:miembros(id, nombre, legajo), obra:obras(nombre), fallas(texto, nota, critica, estado)')
     .eq('empresa_id', E()).order('inicio', { ascending: false }).limit(1000);
   if (f.desde) q = q.gte('inicio', new Date(f.desde + 'T00:00:00').toISOString());
   if (f.hasta) q = q.lt('inicio', new Date(new Date(f.hasta + 'T00:00:00').getTime() + 864e5).toISOString());
@@ -81,7 +81,8 @@ async function cargarDetalle(id) {
     .select('*, equipo:equipos(codigo, nombre, medidor), operario:miembros(nombre, legajo), obra:obras(nombre), plantilla:plantillas(nombre, version, secciones), fallas(*)')
     .eq('id', id).single();
   if (error) { a.det = { err: msgError(error) }; return render(); }
-  const paths = [j.selfie_path, j.firma_path, ...j.fallas.map(f => f.foto_path)].filter(Boolean);
+  const fotosPuntos = Object.values(j.respuestas || {}).map(r => r && r.foto).filter(Boolean);
+  const paths = [...new Set([j.selfie_path, j.firma_path, j.medidor_foto_path, ...j.fallas.map(f => f.foto_path), ...fotosPuntos].filter(Boolean))];
   const urls = {};
   if (paths.length) {
     const { data } = await sb.storage.from('evidencias').createSignedUrls(paths, 3600);
@@ -131,7 +132,7 @@ function vResumen() {
   const bloq = activos.filter(e => e.estado === 'bloqueado');
   const att = [];
   bloq.forEach(e => att.push(['bad', `${e.codigo} bloqueado`, `${e.motivo_bloqueo || 'Falla crítica'} · desde ${e.bloqueado_en ? fFecha(e.bloqueado_en) + ' ' + fHora(e.bloqueado_en) : '—'}`, `<button class="btn sm" data-act="admTab" data-k="equipos">Liberar</button>`]));
-  d.fallas.filter(f => !f.critica).slice(0, 8).forEach(f => att.push(['warn', `${f.equipo.codigo} · ${f.texto}`, `${f.nota} · ${f.jornada && f.jornada.operario ? f.jornada.operario.nombre + ' · ' : ''}${fFecha(f.creada_en)}`, `<button class="btn sm" data-act="admTab" data-k="fallas">Ver</button>`]));
+  d.fallas.filter(f => !f.critica).sort((a, b) => b.grave - a.grave).slice(0, 8).forEach(f => att.push([f.grave ? 'bad' : 'warn', `${f.grave ? 'Advertencia · ' : ''}${f.equipo.codigo} · ${f.texto}`, `${f.nota} · ${f.jornada && f.jornada.operario ? f.jornada.operario.nombre + ' · ' : ''}${fFecha(f.creada_en)}`, `<button class="btn sm" data-act="admTab" data-k="fallas">Ver</button>`]));
   d.hoy.filter(j => j.rapido).forEach(j => { const e = activos.find(x => x.id === j.equipo_id); att.push(['warn', `Checklist muy rápido · ${e ? e.codigo : ''}`, `${j.operario.nombre} lo completó en ${fDur(j.dur_checklist_s)}`, `<button class="btn sm" data-act="admVer" data-id="${j.id}">Ver</button>`]); });
   d.abiertas.filter(j => Date.now() - new Date(j.inicio) > 14 * 36e5).forEach(j => { const e = activos.find(x => x.id === j.equipo_id); att.push(['warn', `Jornada sin cerrar · ${e ? e.codigo : ''}`, `${j.operario.nombre} · desde ${fFecha(j.inicio)} ${fHora(j.inicio)}`, `<button class="btn sm" data-act="admVer" data-id="${j.id}">Ver</button>`]); });
   const TIT = { horometro: 'Horómetro distinto al de la máquina', lejos: 'Checklist lejos de la máquina', sin_checklist: 'Máquina usada sin checklist' };
@@ -175,7 +176,7 @@ function vJornadas() {
       <span><span class="t" style="display:block">${esc(j.equipo.codigo)} · ${esc(j.equipo.nombre)}</span><span class="s" style="display:block">${esc(j.obra ? j.obra.nombre : '—')}</span></span>
       <span class="t">${esc(j.operario.nombre)}</span>
       <span class="s">${j.n_fallas ? `${j.n_fallas} falla${j.n_fallas > 1 ? 's' : ''}${j.n_criticas ? ` (${j.n_criticas} crít.)` : ''}` : 'Sin fallas'} · ${j.estado === 'abierta' ? 'en curso' : j.estado === 'cerrada' ? 'cerrada' : 'rechazada'}</span>
-      <span class="flags">${j.rapido ? '<span class="chip warn">Rápido</span>' : ''}${chipRes(j.resultado)}</span></button>`).join('')}</div>`
+      <span class="flags">${j.n_alertas ? '<span class="chip bad">Advertencia</span>' : ''}${j.rapido ? '<span class="chip warn">Rápido</span>' : ''}${chipRes(j.resultado)}</span></button>`).join('')}</div>`
       : '<div class="empty">No hay jornadas con estos filtros.</div>'}`;
 }
 
@@ -183,7 +184,7 @@ function vFallas() {
   const a = T(), fs = a.d.fallas;
   if (!fs.length) return '<div class="empty">No hay fallas abiertas.</div>';
   return `<div class="list">${fs.map(f => `<div class="eqrow"><span class="eqcode">${esc(f.equipo.codigo)}</span><div>
-      <div>${f.critica ? '<span class="crit">CRÍTICO</span>' : ''}<b>${esc(f.texto)}</b></div><div class="small">${esc(f.nota)}</div>
+      <div>${f.critica ? '<span class="crit">CRÍTICO</span>' : f.grave ? '<span class="crit alerta">ADVERTENCIA</span>' : ''}<b>${esc(f.texto)}</b></div><div class="small">${esc(f.nota)}</div>
       <div class="small muted">${f.jornada && f.jornada.operario ? esc(f.jornada.operario.nombre) + ' · ' : ''}${fFecha(f.creada_en)} ${fHora(f.creada_en)}${f.origen === 'cierre' ? ' · al cierre' : ''}</div></div>
       <div class="row" style="justify-content:flex-end"><button class="btn sm" data-act="admVer" data-id="${f.jornada_id}">Ver jornada</button>${f.critica ? '' : `<button class="btn sm primary" data-act="admReparar" data-id="${f.id}">Reparada</button>`}</div>
       ${a.reparar === f.id ? `<div style="grid-column:1/-1;display:flex;flex-direction:column;gap:8px"><label class="f">¿Qué se hizo?<textarea class="inp" id="rep-nota" data-ad="nota" placeholder="Ej.: se cambió el neumático">${esc(a.nota)}</textarea></label>
@@ -285,7 +286,7 @@ function vDetalle() {
   if (det.err) return `<div class="badbox">${esc(det.err)}</div>`;
   const j = det.j, u = unidad(j.equipo.medidor), url = p => p && det.urls[p];
   const flags = [j.rapido ? `<span class="chip warn">Checklist en ${fDur(j.dur_checklist_s)}</span>` : '', j.lat == null ? '<span class="chip warn">Sin GPS</span>' : ''].join('');
-  const fallas = j.fallas.map(f => `<div class="fl">${f.critica ? '<span class="crit">CRÍTICO</span>' : ''}<b>${esc(f.texto)}</b><span class="small muted">${esc(f.seccion || (f.origen === 'cierre' ? 'Reportada al cierre' : ''))}</span><span>${esc(f.nota)}</span>
+  const fallas = j.fallas.map(f => `<div class="fl">${f.critica ? '<span class="crit">CRÍTICO</span>' : f.grave ? '<span class="crit alerta">ADVERTENCIA</span>' : ''}<b>${esc(f.texto)}</b><span class="small muted">${esc(f.seccion || (f.origen === 'cierre' ? 'Reportada al cierre' : ''))}</span><span>${esc(f.nota)}</span>
     ${url(f.foto_path) ? `<img src="${url(f.foto_path)}" alt="Foto de la falla" style="max-width:260px;border-radius:8px">` : ''}
     ${f.estado === 'reparada' ? `<span class="chip ok">Reparada ${fFecha(f.reparada_en)}${f.reparacion ? ': ' + esc(f.reparacion) : ''}</span>` : '<span class="chip warn">Abierta</span>'}</div>`).join('');
   const all = j.plantilla.secciones.map(s => s.items.map(i => { const r = j.respuestas[i.id] || {}; return `<div><span>${i.critico ? '<span class="crit">C</span>' : ''}${esc(i.texto)}</span><span class="chip ${r.v === 'ok' ? 'ok' : r.v === 'falla' ? 'bad' : 'plain'}">${r.v === 'ok' ? 'Bien' : r.v === 'falla' ? 'Falla' : r.v === 'na' ? 'N/A' : '—'}</span></div>`; }).join('')).join('');
@@ -301,6 +302,14 @@ function vDetalle() {
       <dt>Recibido</dt><dd>${fFecha(j.recibido_en)} ${fHora(j.recibido_en)} h</dd></dl>
     ${j.novedades ? `<div class="card flat"><b>Novedades al cierre:</b> ${esc(j.novedades)}</div>` : ''}</section>
     <div class="det-grid">
+      ${(() => {
+        const items = j.plantilla.secciones.flatMap(s => s.items);
+        const fotos = [j.medidor_foto_path ? [j.medidor_foto_path, j.equipo.medidor === 'km' ? 'Odómetro' : 'Horómetro'] : null,
+          ...items.map(i => j.respuestas[i.id] && j.respuestas[i.id].foto ? [j.respuestas[i.id].foto, i.texto] : null)].filter(x => x && url(x[0]));
+        return fotos.length ? `<section class="card flat galeria-card" style="grid-column:1/-1"><h3>Fotos del checklist (${fotos.length})</h3><div class="galeria">${fotos.map(([pth, t]) =>
+          `<a href="${url(pth)}" target="_blank" rel="noopener"><img src="${url(pth)}" alt="${esc(t)}" loading="lazy"><span>${esc(t)}</span></a>`).join('')}</div></section>` : '';
+      })()}
+
       <section class="card flat"><h3>Fallas (${j.fallas.length})</h3>${fallas || '<p class="muted">Sin fallas registradas.</p>'}
         <details><summary>Ver los ${j.total_items} puntos</summary><div class="allitems">${all}</div></details></section>
       <section class="card flat"><h3>Foto y firma</h3>${url(j.selfie_path) ? `<img src="${url(j.selfie_path)}" alt="Foto del operario con el equipo">` : '<div class="empty">Foto no disponible</div>'}
