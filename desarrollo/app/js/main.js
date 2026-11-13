@@ -2,16 +2,17 @@ import { $, esc, ls, toast, msgError } from './util.js';
 import { sb, ingresarOperario, ingresarConCorreo, registrarse, salir, misMembresias, privacidadPendiente, aceptarPrivacidad } from './datos.js';
 import { politicaHtml, RESUMEN } from './politica.js';
 import { sincronizar, cola } from './cola.js';
-import { S, setRender, render, esGestor } from './estado.js';
+import { S, setRender, render, esGestor, esMecanico } from './estado.js';
 import * as Op from './operario.js';
 import * as Adm from './admin.js';
+import * as Tal from './taller.js';
 
 const MARK = (n = 26) => `<svg width="${n}" height="${n}" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="5" fill="var(--accent)"/><path d="M7 13.5l4 4 8-9" fill="none" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /* ---------------------------------------------------------------- render */
 let lastKey = '', pendiente = false;
 function claveVista() {
-  return [S.vista, S.m && S.m.id, S.modoOperario, Op.clave(), Adm.clave()].join('|');
+  return [S.vista, S.m && S.m.id, S.modoOperario, Op.clave(), Adm.clave(), Tal.clave()].join('|');
 }
 function dibujar() {
   const a = document.activeElement;
@@ -33,13 +34,13 @@ function vista() {
     case 'elegir': return vTop() + vElegir();
     case 'privacidad': return vTop() + vPrivacidad();
     case 'politica': return `<main class="wrap politica"><button class="btn ghost sm" data-act="cerrarPolitica" style="align-self:flex-start">← Volver</button>${politicaHtml()}</main>`;
-    default: return vTop() + (esGestor() && !S.modoOperario ? Adm.vista() : Op.vista());
+    default: return vTop() + (S.modoOperario ? Op.vista() : esGestor() ? Adm.vista() : esMecanico() ? Tal.vistaMecanico() : Op.vista());
   }
 }
 
 function vTop() {
   const nom = S.m ? S.m.nombre : (S.user && S.user.email) || '';
-  const rol = S.m ? { dueno: 'Dueño', admin: 'Administración', supervisor: 'Supervisor', operario: 'Operario' }[S.m.rol] : '';
+  const rol = S.m ? { dueno: 'Dueño', admin: 'Administración', supervisor: 'Supervisor', operario: 'Operario', mecanico: 'Mecánico' }[S.m.rol] : '';
   const estado = !S.online ? ['local', 'Sin señal'] : S.pendientes ? ['lento', `${S.pendientes} por enviar`] : ['ok', 'Conectado'];
   const ban = !S.online ? `Sin señal. Podés seguir cargando: se envía solo cuando vuelva la conexión.${S.pendientes ? ` (${S.pendientes} pendiente${S.pendientes > 1 ? 's' : ''})` : ''}`
     : S.pendientes ? `${S.pendientes} registro${S.pendientes > 1 ? 's' : ''} enviándose…` : '';
@@ -47,7 +48,7 @@ function vTop() {
     <div class="brand">${MARK()}<span>CheckObra</span></div>
     <div class="who"><b>${esc(nom)}</b><span>${esc(rol)}${S.m ? ' · ' + esc(S.m.empresa.nombre) : ''}</span></div>
     <span class="conn ${estado[0]}" title="${estado[1]}" aria-label="${estado[1]}"></span>
-    ${S.m && esGestor() ? `<button class="btn-s" data-act="modo">${S.modoOperario ? 'Panel' : 'Checklist'}</button>` : ''}
+    ${S.m && (esGestor() || esMecanico()) ? `<button class="btn-s" data-act="modo">${S.modoOperario ? (esGestor() ? 'Panel' : 'Taller') : 'Checklist'}</button>` : ''}
     ${S.membresias.length > 1 ? '<button class="btn-s" data-act="cambiarEmpresa">Empresa</button>' : ''}
     <button class="btn-s" data-act="salir">Salir</button>
   </div></header>${ban ? `<div class="banner-band"><div class="banner">${esc(ban)}</div></div>` : ''}`;
@@ -125,7 +126,7 @@ async function alIniciarSesion(user) {
 }
 async function entrar(m) {
   S.m = m; ls.set('co_membresia', m.id); S.modoOperario = false;
-  Op.reiniciar(); Adm.reiniciar();
+  Op.reiniciar(); Adm.reiniciar(); Tal.reiniciar();
   // Consentimiento de privacidad (Ley 25.326): sin aceptarlo no se puede usar la app.
   if (await privacidadPendiente(m.empresa_id, m.id)) { S.vista = 'privacidad'; S.priv = {}; render(); return; }
   S.vista = 'app';
@@ -138,7 +139,7 @@ async function entrar(m) {
     else toast('No se pudo conectar John Deere: ' + (q.get('msg') || 'error desconocido'), 8000);
   }
   render();
-  if (esGestor()) Adm.cargar(); else Op.cargar();
+  cargarVista();
   sync();
   abrirQrPendiente();
 }
@@ -154,7 +155,7 @@ function abrirQrPendiente() {
   const qr = ls.get('co_qr', null); if (!qr) return;
   ls.del('co_qr');
   if (Date.now() - qr.ts > 30 * 60000) return;
-  if (esGestor()) S.modoOperario = true;
+  if (esGestor() || esMecanico()) { S.modoOperario = true; Op.cargar(); }
   Op.abrirDesdeQr(qr.id);
 }
 
@@ -167,10 +168,17 @@ async function sync() {
   const pend = l.filter(x => x.estado === 'pendiente');
   const cambio = pend.length !== S.pendientes || (r && r.enviados);
   S.pendientes = pend.length; S.rechazados = l.filter(x => x.estado === 'rechazado');
-  if (r && r.enviados) { toast(r.enviados === 1 ? 'Registro enviado.' : `${r.enviados} registros enviados.`); if (S.vista === 'app') (esGestor() && !S.modoOperario ? Adm.cargar() : Op.cargar()); }
+  if (r && r.enviados) { toast(r.enviados === 1 ? 'Registro enviado.' : `${r.enviados} registros enviados.`); if (S.vista === 'app') cargarVista(); }
   if (cambio) render();
 }
 export { sync };
+// Carga los datos de la vista activa: panel, taller del mecánico o checklist.
+function cargarVista() {
+  if (S.modoOperario) return Op.cargar();
+  if (esGestor()) return Adm.cargar();
+  if (esMecanico()) return Tal.cargar();
+  return Op.cargar();
+}
 
 /* ---------------------------------------------------------------- acciones */
 const A = {
@@ -192,7 +200,7 @@ const A = {
     try { await aceptarPrivacidad(S.m.empresa_id, S.m.id); S.priv = null; await entrar(S.m); }
     catch (e) { p.ocupado = false; p.err = msgError(e); render(); }
   },
-  modo: () => { S.modoOperario = !S.modoOperario; render(); S.modoOperario ? Op.cargar() : Adm.cargar(); },
+  modo: () => { S.modoOperario = !S.modoOperario; render(); cargarVista(); },
 };
 
 const FORMS = {
@@ -242,7 +250,7 @@ const FORMS = {
 
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
-  const f = A[b.dataset.act] || Op.A[b.dataset.act] || Adm.A[b.dataset.act];
+  const f = A[b.dataset.act] || Op.A[b.dataset.act] || Adm.A[b.dataset.act] || Tal.A[b.dataset.act];
   if (f) { e.preventDefault(); f(b, e); }
 });
 document.addEventListener('submit', e => {
@@ -253,14 +261,14 @@ document.addEventListener('input', e => {
   if (el.dataset.l) S.login[el.dataset.l] = v;
   else if (el.dataset.priv) S.priv.ok = v;
   else if (el.dataset.o) S.onb[el.dataset.o] = v;
-  else (Op.alEscribir(el, v) || Adm.alEscribir(el, v));
+  else (Tal.alEscribir(el, v) || Op.alEscribir(el, v) || Adm.alEscribir(el, v));
 });
-document.addEventListener('change', e => { if (e.target.dataset.file) Op.alArchivo(e.target); });
+document.addEventListener('change', e => { if (e.target.dataset.file === 'ot') Tal.alArchivo(e.target); else if (e.target.dataset.file) Op.alArchivo(e.target); });
 
 addEventListener('online', () => { S.online = true; render(); sync(); });
 addEventListener('offline', () => { S.online = false; render(); });
 setInterval(() => { if (S.online && S.user) sync(); }, 30000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden && S.user && S.vista === 'app') { sync(); esGestor() && !S.modoOperario ? Adm.cargar() : Op.cargar(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.user && S.vista === 'app') { sync(); cargarVista(); } });
 
 /* ---------------------------------------------------------------- arranque */
 guardarQr();

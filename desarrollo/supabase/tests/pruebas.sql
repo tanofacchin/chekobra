@@ -440,6 +440,12 @@ do $$ declare j public.jornadas; begin
   if not (select grave from public.fallas where jornada_id = j.id) then raise exception 'FALLÓ: falla grave'; end if;
   if public.periodicos_pendientes(j.equipo_id, '2026-11-07') <> '{}' then raise exception 'FALLÓ: las zapatas ya se controlaron esta semana'; end if;
 end $$;
+-- segundo checklist del mismo viernes (otro turno): ya no pide las zapatas
+select public.cerrar_jornada((select id from public.jornadas where equipo_id = (select v from ctx where k = 'eqB2') and estado = 'abierta'), 26, null, null, false, true);
+select public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', (select v from ctx where k = 'eqB2'), 'inicio', '2026-11-06 15:00-03',
+  'med_ini', 26, 'ubic_ref', 'Obrador', 'selfie_path', :'prefb' || 's.jpg', 'firma_path', :'prefb' || 'f.png', 'medidor_foto_path', :'prefb' || 'm.jpg', 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('excavadora') - 'rodaje.2')) ->> 'resultado' as rb2 \gset
+\echo segundo turno del viernes sin repetir el semanal (esperado apto): :rb2
 -- plantilla propia con campos nuevos válidos e inválidos
 insert into public.plantillas (empresa_id, clave, nombre, rubro, version, secciones)
   select v, 'p-ok', 'Con campos nuevos', 'construccion', 1, '[{"titulo":"X","items":[{"id":"a","texto":"Uno","critico":false,"alerta":true,"foto":"obligatoria","frecuencia":{"tipo":"semanal","dia":5},"ayuda":"Mirá bien"}]}]' from ctx where k = 'B';
@@ -455,5 +461,146 @@ do $$ declare it jsonb; begin
   if exists (select 1 from public.plantillas p, jsonb_array_elements(p.secciones) s, jsonb_array_elements(s->'items') x where p.empresa_id is null and p.version = 2 and x->>'texto' ilike 'seguro%') then raise exception 'FALLÓ: quedó el seguro'; end if;
   if (select s->>'clave' from public.plantillas p, jsonb_array_elements(p.secciones) with ordinality s(s, n) where p.empresa_id is null and p.clave = 'excavadora' and p.version = 2 and n = 1) <> 'fotos' then raise exception 'FALLÓ: el orden debe empezar por las fotos'; end if;
 end $$;
+
+
+-- ===== Taller: órdenes de trabajo con mecánico, y costos por obra
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000000a4', 'mecanico-a@ejemplo.com'),
+  ('00000000-0000-0000-0000-0000000000a5', 'operario3-a@ejemplo.com');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+insert into public.miembros (empresa_id, user_id, nombre, rol)
+  select v, '00000000-0000-0000-0000-0000000000a4', 'Mecánico A', 'mecanico' from ctx where k = 'A' returning id \gset mecA_
+insert into public.miembros (empresa_id, user_id, nombre, rol)
+  select v, '00000000-0000-0000-0000-0000000000a5', 'Operario A3', 'operario' from ctx where k = 'A' returning id \gset opA3_
+insert into public.equipos (empresa_id, codigo, nombre, plantilla_clave, ultimo_medidor, tarifa_hora)
+  select v, 'RE-OT', 'Retro taller', 'retroexcavadora', 500, 1000 from ctx where k = 'A' returning id \gset eqOT_
+insert into public.obras (empresa_id, nombre) select v, 'Ruta 9' from ctx where k = 'A' returning id \gset obraA2_
+reset role;
+
+-- el operario encuentra dos fallas (una crítica) y el equipo queda bloqueado
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a5';
+select public.aceptar_privacidad((select v from ctx where k = 'A'), 'prueba');
+select (select v from ctx where k = 'A')::text || '/00000000-0000-0000-0000-0000000000a5/' as prefo \gset
+select (public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', :'eqOT_id', 'obra_id', :'obraA_id', 'inicio', '2026-11-10 07:00-03',
+  'med_ini', 500, 'ubic_ref', 'Obrador', 'selfie_path', :'prefo' || 's.jpg', 'firma_path', :'prefo' || 'f.png', 'medidor_foto_path', :'prefo' || 'm.jpg', 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('retroexcavadora', jsonb_build_object('cabina.1', jsonb_build_object('v','falla','nota','cinturón cortado','foto', :'prefo' || 'c.jpg'),
+                                                                    'fluidos.5', '{"v":"falla","nota":"gotea"}'::jsonb))))->>'jornada_id') as jot1 \gset
+reset role;
+do $$ begin
+  if (select estado from public.equipos where codigo = 'RE-OT') <> 'bloqueado' then raise exception 'FALLÓ: RE-OT debería estar bloqueado'; end if;
+end $$;
+
+-- el mecánico no ve nada que no le asignaron y no puede crear órdenes
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a4';
+select pg_temp.esperar_error(format($$select public.crear_orden(jsonb_build_object('equipo_id', %L, 'titulo', 'Yo solo'))$$, :'eqOT_id'), 'No tenés permiso');
+do $$ begin
+  if exists (select 1 from public.fallas) then raise exception 'FALLÓ: el mecánico ve fallas sin orden'; end if;
+end $$;
+reset role;
+
+-- la supervisión crea la orden con las fallas del equipo
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+select string_agg(id::text, ',') as fallas_ot from public.fallas where equipo_id = :'eqOT_id' \gset
+select public.crear_orden(jsonb_build_object('equipo_id', :'eqOT_id', 'falla_ids', string_to_array(:'fallas_ot', ','), 'titulo', 'Cinturón y pérdida',
+  'prioridad', 'alta', 'asignado_a', :'mecA_id'))->>'orden_id' as ot1 \gset
+select pg_temp.esperar_error(format($$select public.crear_orden(jsonb_build_object('equipo_id', %L, 'falla_ids', string_to_array(%L, ','), 'titulo', 'Otra'))$$, :'eqOT_id', :'fallas_ot'), 'otra orden abierta');
+select pg_temp.esperar_error(format($$select public.crear_orden(jsonb_build_object('equipo_id', %L, 'falla_ids', string_to_array(%L, ','), 'titulo', 'Mezcla'))$$, (select v from ctx where k = 'eqA'), :'fallas_ot'), 'mismo equipo');
+-- orden preventiva sin fallas, numerada 2
+select (public.crear_orden(jsonb_build_object('equipo_id', :'eqOT_id', 'titulo', 'Engrase general', 'prioridad', 'baja'))->>'numero') as n2 \gset
+\echo número de la segunda orden (esperado 2): :n2
+reset role;
+
+-- B no ve ni toca las órdenes de A
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+do $$ begin if exists (select 1 from public.ordenes_trabajo) then raise exception 'FALLÓ: B ve órdenes de A'; end if; end $$;
+select pg_temp.esperar_error(format($$select public.agregar_repuesto(%L, 'Intruso', 1, 1)$$, :'ot1'), 'No tenés permiso');
+select pg_temp.esperar_error(format($$select public.terminar_orden(%L, '{"trabajo_realizado":"intruso total"}')$$, :'ot1'), 'No tenés permiso');
+select pg_temp.esperar_error(format($$select public.costos_por_obra(%L, '2026-11-01', '2026-11-30')$$, (select v from ctx where k = 'A')), 'No tenés permiso');
+reset role;
+
+-- otro operario no puede trabajar la orden
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a5';
+select pg_temp.esperar_error(format($$select public.cambiar_estado_orden(%L, 'en_curso')$$, :'ot1'), 'No tenés permiso');
+reset role;
+
+-- el mecánico la trabaja
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a4';
+select (select v from ctx where k = 'A')::text || '/00000000-0000-0000-0000-0000000000a4/' as prefm \gset
+do $$ begin
+  if (select count(*) from public.ordenes_trabajo) <> 1 then raise exception 'FALLÓ: el mecánico debe ver solo su orden'; end if;
+  if (select count(*) from public.fallas) <> 2 then raise exception 'FALLÓ: el mecánico debe ver las fallas de su orden'; end if;
+  if not public.foto_de_mi_orden((select foto_path from public.fallas where critica)) then raise exception 'FALLÓ: el mecánico debe ver la foto de la falla'; end if;
+  if public.foto_de_mi_orden((select selfie_path from public.jornadas limit 1)) then raise exception 'FALLÓ: el mecánico no debe ver selfies'; end if;
+end $$;
+select public.cambiar_estado_orden(:'ot1', 'en_curso');
+select pg_temp.esperar_error(format($$select public.cambiar_estado_orden(%L, 'cancelada')$$, :'ot1'), 'Solo la supervisión');
+select public.agregar_repuesto(:'ot1', 'Cinturón de seguridad', 1, 45000) as rep1 \gset
+select public.agregar_repuesto(:'ot1', 'Junta del cárter', 2, 5000);
+select public.agregar_repuesto(:'ot1', 'Repuesto equivocado', 1, 99999) as rep3 \gset
+select public.quitar_repuesto(:'rep3');
+select pg_temp.esperar_error(format($$select public.terminar_orden(%L, '{"trabajo_realizado":"ok"}')$$, :'ot1'), 'Contá qué trabajo');
+select pg_temp.esperar_error(format($$select public.terminar_orden(%L, jsonb_build_object('trabajo_realizado', 'Cambio de cinturón', 'foto_path', %L))$$, :'ot1', :'prefo' || 'x.jpg'), 'Foto inválida');
+select public.terminar_orden(:'ot1', jsonb_build_object('trabajo_realizado', 'Cambio de cinturón y junta del cárter', 'horas', 3, 'costo_mano_obra', 30000,
+  'medidor', 508, 'foto_path', :'prefm' || 'ot.jpg'))->>'libero_equipo' as libero \gset
+\echo la orden liberó el equipo (esperado true): :libero
+select pg_temp.esperar_error(format($$select public.agregar_repuesto(%L, 'Tarde', 1, 1)$$, :'ot1'), 'ya está cerrada');
+reset role;
+
+do $$ declare o public.ordenes_trabajo; m public.mantenimientos; begin
+  select * into o from public.ordenes_trabajo where numero = 1 and empresa_id = (select v from ctx where k = 'A');
+  if o.estado <> 'terminada' or not o.libero_equipo or o.iniciada_en is null then raise exception 'FALLÓ: orden %', row_to_json(o); end if;
+  if exists (select 1 from public.fallas where orden_id = o.id and estado = 'abierta') then raise exception 'FALLÓ: quedaron fallas abiertas'; end if;
+  if (select reparacion from public.fallas where orden_id = o.id limit 1) not like 'OT 1:%' then raise exception 'FALLÓ: la reparación cita la OT'; end if;
+  select * into m from public.mantenimientos where equipo_id = o.equipo_id;
+  if m.tipo <> 'reparacion' or m.costo <> 85000 or m.responsable <> 'Mecánico A' then raise exception 'FALLÓ: historial %', row_to_json(m); end if;
+  if (select estado from public.equipos where id = o.equipo_id) <> 'operativo' then raise exception 'FALLÓ: el equipo no se liberó'; end if;
+  if not exists (select 1 from public.eventos_equipo where equipo_id = o.equipo_id and tipo = 'liberacion' and detalle like 'OT 1:%') then raise exception 'FALLÓ: falta el evento de liberación'; end if;
+end $$;
+
+-- cancelar libera las fallas para otra orden; el mecánico no ve las órdenes de otro
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+select (select id from public.ordenes_trabajo where numero = 2 and empresa_id = (select v from ctx where k = 'A')) as ot2 \gset
+select public.editar_orden(:'ot2', jsonb_build_object('prioridad', 'media', 'asignado_a', :'mecA_id'));
+select public.cambiar_estado_orden(:'ot2', 'cancelada');
+select pg_temp.esperar_error(format($$select public.cambiar_estado_orden(%L, 'en_curso')$$, :'ot2'), 'ya está cerrada');
+
+-- costos: segunda jornada en otra obra, carga de combustible sin obra y tarifa por hora
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a5';
+select (public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', :'eqOT_id', 'obra_id', :'obraA2_id', 'inicio', '2026-11-11 07:00-03',
+  'med_ini', 508, 'ubic_ref', 'Obrador', 'selfie_path', :'prefo' || 's.jpg', 'firma_path', :'prefo' || 'f.png', 'medidor_foto_path', :'prefo' || 'm.jpg', 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('retroexcavadora')))->>'jornada_id') as jot2 \gset
+select public.cerrar_jornada(:'jot2', 532, null, null, false, true);
+select (public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', :'eqOT_id', 'obra_id', :'obraA_id', 'inicio', '2026-11-12 07:00-03',
+  'med_ini', 532, 'ubic_ref', 'Obrador', 'selfie_path', :'prefo' || 's.jpg', 'firma_path', :'prefo' || 'f.png', 'medidor_foto_path', :'prefo' || 'm.jpg', 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('retroexcavadora')))->>'jornada_id') as jot3 \gset
+select public.cerrar_jornada(:'jot3', 540, null, null, false, true);
+select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', :'eqOT_id', 'cargado_en', '2026-11-11 18:00-03',
+  'litros', 320, 'medidor', 532, 'tanque_lleno', true, 'precio_litro', 1000));
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+do $$ declare c jsonb; r1 jsonb; r2 jsonb; begin
+  c := public.costos_por_obra((select v from ctx where k = 'A'), '2026-11-01', '2026-11-30');
+  select x into r1 from jsonb_array_elements(c->'filas') x where x->>'codigo' = 'RE-OT' and x->>'obra' = 'Ruta 5';
+  select x into r2 from jsonb_array_elements(c->'filas') x where x->>'codigo' = 'RE-OT' and x->>'obra' = 'Ruta 9';
+  -- Ruta 5: 8 h (la jornada no apta no cuenta), Ruta 9: 24 h. Combustible 320 l / $320.000 y reparación $85.000 se reparten 25 % / 75 %
+  if (r1->>'uso')::numeric <> 8 or (r1->>'costo_equipo')::numeric <> 8000 or (r1->>'litros')::numeric <> 80
+     or (r1->>'combustible')::numeric <> 80000 or (r1->>'reparaciones')::numeric <> 21250 or (r1->>'total')::numeric <> 109250 then
+    raise exception 'FALLÓ: costos Ruta 5 %', r1; end if;
+  if (r2->>'dias')::int <> 1 or (r2->>'costo_equipo')::numeric <> 24000 or (r2->>'total')::numeric <> 24000 + 240000 + 63750 then
+    raise exception 'FALLÓ: costos Ruta 9 %', r2; end if;
+  if c->'sin_tarifa' ? 'RE-OT' then raise exception 'FALLÓ: RE-OT tiene tarifa'; end if;
+end $$;
+reset role;
 
 \echo TODAS LAS PRUEBAS PASARON

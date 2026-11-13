@@ -10,6 +10,8 @@ import * as Ind from './indicadores.js';
 import * as Rep from './reportes.js';
 import { jornadasParaExcel, cargasParaExcel, generarExcel } from './excel.js';
 import * as Cb from './combustible.js';
+import * as Tal from './taller.js';
+import * as Cs from './costos.js';
 
 const T = () => S.adm;
 export function reiniciar() {
@@ -31,7 +33,7 @@ export async function cargar() {
   try {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
     const desde30 = new Date(); desde30.setDate(desde30.getDate() - 29);
-    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb] = await Promise.all([
+    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot] = await Promise.all([
       sb.from('equipos').select('*').eq('empresa_id', E()).order('codigo'),
       sb.from('miembros').select('id, nombre, legajo, rol, activo, user_id, intentos_fallidos, bloqueado_en, recibir_avisos').eq('empresa_id', E()).order('nombre'),
       sb.from('obras').select('*').eq('empresa_id', E()).order('nombre'),
@@ -47,14 +49,17 @@ export async function cargar() {
       sb.rpc('estado_mantenimiento', { p_empresa: E() }),
       sb.from('documentos').select('*').eq('empresa_id', E()),
       sb.rpc('consumo_combustible', { p_empresa: E(), p_desde: dayKey(desde30), p_hasta: dayKey(new Date()) }),
+      sb.from('ordenes_trabajo').select('id, numero, titulo, estado, prioridad, asignado_a, creada_en, equipo_id, equipo:equipos(codigo), fallas(id)').eq('empresa_id', E()).in('estado', Tal.ABIERTAS).order('numero'),
     ]);
-    for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb]) if (r.error) throw r.error;
+    for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot]) if (r.error) throw r.error;
     a.d = { equipos: eq.data, miembros: mi.data, obras: ob.data, plantillas: vigentes(pl.data, E()), fallas: fa.data, abiertas: ab.data, hoy: jh.data,
       jd: tc.data.find(c => c.proveedor === 'john_deere') || null, tele: Object.fromEntries(tu.data.map(l => [l.equipo_id, l])), alertasTele: ta.data,
-      consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data, combustible: cb.data };
+      consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data, combustible: cb.data, ordenes: ot.data };
     if (a.tab === 'mantenimiento' && !a.mt) Mt.cargarMant();
     if (a.tab === 'indicadores' && !(a.ind && a.ind.datos)) Ind.cargarIndicadores();
     if (a.tab === 'combustible' && !(a.cb && a.cb.datos)) Cb.cargarCombustible();
+    if (a.tab === 'taller' && !(a.ot && a.ot.lista)) Tal.cargarTaller();
+    if (a.tab === 'costos' && !(a.cs && a.cs.datos)) Cs.cargarCostos();
     a.err = '';
     if (a.tab === 'jornadas') await cargarJornadas();
   } catch (e) { a.err = msgError(e); }
@@ -106,9 +111,9 @@ export function vista() {
   if (a.ficha) return Rep.vFicha();
   if (a.etiquetas) return vEtiquetas(a.d.equipos.filter(e => a.etiquetas.includes(e.id)), S.m.empresa.nombre);
   if (a.detalle) return `<main class="wrap wide"><button class="btn ghost sm" data-act="admVolver" style="align-self:flex-start">← Volver</button>${vDetalle()}</main>`;
-  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['combustible', `Combustible${Cb.alertasCombustible(a.d.combustible).length ? ` (${Cb.alertasCombustible(a.d.combustible).length})` : ''}`], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras']]
+  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['taller', `Taller${a.d.ordenes.length ? ` (${a.d.ordenes.length})` : ''}`], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['combustible', `Combustible${Cb.alertasCombustible(a.d.combustible).length ? ` (${Cb.alertasCombustible(a.d.combustible).length})` : ''}`], ['costos', 'Costos por obra'], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras']]
     .map(([k, l]) => `<button class="tab ${a.tab === k ? 'on' : ''}" data-act="admTab" data-k="${k}">${l}</button>`).join('');
-  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
+  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, taller: Tal.vTaller, costos: Cs.vCostos, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
   return `<main class="wrap wide"><section class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="eyebrow">${esc(fechaLarga())}</p><h1>${esc(S.m.empresa.nombre)}</h1></div>
     <button class="btn sm ghost" data-act="admRecargar">${a.cargando ? 'Actualizando…' : 'Actualizar'}</button></section>
     ${a.err ? `<div class="badbox">${esc(a.err)}</div>` : ''}<nav class="tabs">${tabs}</nav>${body}</main>`;
@@ -137,6 +142,7 @@ function vResumen() {
   d.abiertas.filter(j => Date.now() - new Date(j.inicio) > 14 * 36e5).forEach(j => { const e = activos.find(x => x.id === j.equipo_id); att.push(['warn', `Jornada sin cerrar · ${e ? e.codigo : ''}`, `${j.operario.nombre} · desde ${fFecha(j.inicio)} ${fHora(j.inicio)}`, `<button class="btn sm" data-act="admVer" data-id="${j.id}">Ver</button>`]); });
   const TIT = { horometro: 'Horómetro distinto al de la máquina', lejos: 'Checklist lejos de la máquina', sin_checklist: 'Máquina usada sin checklist' };
   d.alertasTele.forEach(x => { const e = d.equipos.find(q => q.id === x.equipo_id); att.push([x.tipo === 'sin_checklist' ? 'bad' : 'warn', `${TIT[x.tipo]} · ${e ? e.codigo : ''}`, `${x.detalle} · ${fFecha(x.fecha + 'T12:00:00')} · dato de John Deere`, x.jornada_id ? `<button class="btn sm" data-act="admVer" data-id="${x.jornada_id}">Ver</button>` : '']); });
+  Tal.alertasTaller(d.ordenes).forEach(x => att.push(x));
   alertasFlota().forEach(x => att.push(x));
   Cb.alertasCombustible(d.combustible).forEach(x => att.push(x));
   d.miembros.filter(m => m.bloqueado_en).forEach(m => att.push(['bad', `Legajo bloqueado · ${m.nombre}`, `${m.intentos_fallidos} intentos fallidos de PIN · ${fFecha(m.bloqueado_en)} ${fHora(m.bloqueado_en)}`, `<button class="btn sm" data-act="admTab" data-k="personal">Desbloquear</button>`]));
@@ -186,10 +192,11 @@ function vFallas() {
   return `<div class="list">${fs.map(f => `<div class="eqrow"><span class="eqcode">${esc(f.equipo.codigo)}</span><div>
       <div>${f.critica ? '<span class="crit">CRÍTICO</span>' : f.grave ? '<span class="crit alerta">ADVERTENCIA</span>' : ''}<b>${esc(f.texto)}</b></div><div class="small">${esc(f.nota)}</div>
       <div class="small muted">${f.jornada && f.jornada.operario ? esc(f.jornada.operario.nombre) + ' · ' : ''}${fFecha(f.creada_en)} ${fHora(f.creada_en)}${f.origen === 'cierre' ? ' · al cierre' : ''}</div></div>
-      <div class="row" style="justify-content:flex-end"><button class="btn sm" data-act="admVer" data-id="${f.jornada_id}">Ver jornada</button>${f.critica ? '' : `<button class="btn sm primary" data-act="admReparar" data-id="${f.id}">Reparada</button>`}</div>
+      <div class="row" style="justify-content:flex-end"><button class="btn sm" data-act="admVer" data-id="${f.jornada_id}">Ver jornada</button>${(() => { const o = f.orden_id && a.d.ordenes.find(x => x.id === f.orden_id);
+        return o ? `<button class="btn sm ghost" data-act="otAbrirPanel" data-id="${o.id}">OT ${o.numero} · ${Tal.ESTADO[o.estado][0].toLowerCase()}</button>` : `<button class="btn sm dark" data-act="otDesdeFalla" data-id="${f.id}">Orden de trabajo</button>`; })()}${f.critica ? '' : `<button class="btn sm primary" data-act="admReparar" data-id="${f.id}">Reparada</button>`}</div>
       ${a.reparar === f.id ? `<div style="grid-column:1/-1;display:flex;flex-direction:column;gap:8px"><label class="f">¿Qué se hizo?<textarea class="inp" id="rep-nota" data-ad="nota" placeholder="Ej.: se cambió el neumático">${esc(a.nota)}</textarea></label>
         <div class="row"><button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admRepararOk" data-id="${f.id}">Guardar</button></div></div>` : ''}</div>`).join('')}</div>
-    <p class="small muted">Las fallas críticas se cierran al liberar el equipo desde la pestaña Equipos.</p>`;
+    <p class="small muted">Las fallas críticas se cierran al terminar su orden de trabajo o al liberar el equipo desde la pestaña Equipos.</p>`;
 }
 
 function vEquipos() {
@@ -259,7 +266,7 @@ function vAvisos() {
 
 function vPersonal() {
   const a = T(), d = a.d, adm = esAdmin(), n = a.addPer;
-  const roles = { dueno: 'Dueño', admin: 'Administración', supervisor: 'Supervisor', operario: 'Operario' };
+  const roles = { dueno: 'Dueño', admin: 'Administración', supervisor: 'Supervisor', operario: 'Operario', mecanico: 'Mecánico' };
   const gestor = m => ['dueno', 'admin', 'supervisor'].includes(m.rol);
   const per = d.miembros.map(m => `<div class="eqrow"><span class="eqcode">${esc(m.legajo || '—')}</span><div><b>${esc(m.nombre)}</b> <span class="chip plain">${roles[m.rol]}</span>${m.activo ? '' : ' <span class="chip">Inactivo</span>'}${m.bloqueado_en ? ' <span class="chip bad">Bloqueado por PIN</span>' : ''}
       <div class="small muted">${d.consent[m.id] ? `Aceptó la política de privacidad el ${fFecha(d.consent[m.id])}` : 'Todavía no aceptó la política de privacidad'}${gestor(m) ? ` · ${m.recibir_avisos ? 'recibe avisos por correo' : 'no recibe avisos'}` : ''}</div></div>
@@ -271,11 +278,11 @@ function vPersonal() {
   const form = n ? `<div class="form-grid"><label class="f">Nombre y apellido<input class="inp" id="np-nom" data-np="nombre" value="${esc(n.nombre)}"></label>
       <label class="f">Legajo<input class="inp" id="np-leg" data-np="legajo" value="${esc(n.legajo)}" autocapitalize="none"></label>
       <label class="f">PIN de 6 números<input class="inp num" id="np-pin" data-np="pin" inputmode="numeric" maxlength="6" value="${esc(n.pin)}"></label>
-      <label class="f">Rol<select class="inp" id="np-rol" data-np="rol"><option value="operario" ${n.rol === 'operario' ? 'selected' : ''}>Operario</option><option value="supervisor" ${n.rol === 'supervisor' ? 'selected' : ''}>Supervisor</option></select></label></div>
+      <label class="f">Rol<select class="inp" id="np-rol" data-np="rol"><option value="operario" ${n.rol === 'operario' ? 'selected' : ''}>Operario</option><option value="mecanico" ${n.rol === 'mecanico' ? 'selected' : ''}>Mecánico (taller)</option><option value="supervisor" ${n.rol === 'supervisor' ? 'selected' : ''}>Supervisor</option></select></label></div>
       ${n.err ? `<p class="err">${esc(n.err)}</p>` : ''}<div class="row"><button class="btn sm" data-act="admPerCancelar">Cancelar</button><button class="btn sm primary" data-act="admPerGuardar" ${n.ocupado ? 'disabled' : ''}>Dar de alta</button></div>`
     : adm ? '<button class="btn sm dark" data-act="admPerNuevo" style="align-self:flex-start">Dar de alta a una persona</button>' : '';
   return `<div class="cols"><section class="card"><h2>Personal (${d.miembros.length})</h2>
-      <p class="small muted">Los operarios entran con el código de empresa <b class="mono">${esc(S.m.empresa.slug)}</b>, su legajo y su PIN.</p>${form}${per ? `<div>${per}</div>` : ''}</section>
+      <p class="small muted">Operarios y mecánicos entran con el código de empresa <b class="mono">${esc(S.m.empresa.slug)}</b>, su legajo y su PIN.</p>${form}${per ? `<div>${per}</div>` : ''}</section>
     <div class="stack"><section class="card"><h2>Obras</h2>${d.obras.length ? `<div>${d.obras.map(o => `<div class="att" style="grid-template-columns:1fr auto"><div class="t">${esc(o.nombre)}${o.activa ? '' : ' <span class="chip">Cerrada</span>'}</div><button class="btn sm ghost" data-act="admObra" data-id="${o.id}">${o.activa ? 'Cerrar' : 'Reabrir'}</button></div>`).join('')}</div>` : '<p class="muted">Sin obras cargadas.</p>'}
       <div class="row"><input class="inp" id="nueva-obra" data-ad="nuevaObra" value="${esc(a.nuevaObra)}" placeholder="Nombre de la obra" style="flex:1 1 200px"><button class="btn sm dark" data-act="admObraNueva">Agregar</button></div></section></div></div>`;
 }
@@ -333,8 +340,11 @@ export const A = {
     if (a.tab === 'mantenimiento') Mt.cargarMant();
     if (a.tab === 'indicadores') Ind.cargarIndicadores();
     if (a.tab === 'combustible') Cb.cargarCombustible();
+    if (a.tab === 'taller') { a.ot ||= { filtro: 'abiertas', lista: null, det: null, nueva: null }; a.ot.det = null; Tal.cargarTaller(); }
+    if (a.tab === 'costos') Cs.cargarCostos();
   },
-  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A,
+  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A, ...Cs.A,
+  csExcel: () => { const c = T().cs; return exportarExcel({ desde: c.desde, hasta: c.hasta }); },
   etqUno: b => { T().etiquetas = [b.dataset.id]; render(); },
   etqTodas: () => { T().etiquetas = T().d.equipos.filter(e => e.activo).map(e => e.id); render(); },
   etqCerrar: () => { T().etiquetas = null; render(); },
@@ -433,9 +443,12 @@ export const A = {
 async function exportarExcel(f) {
   const a = T(); a.excelOcupado = true; render();
   try {
-    const [js, cargas] = await Promise.all([jornadasParaExcel(f), cargasParaExcel(f)]);
+    // Los costos se calculan para toda la empresa: solo van si no hay filtro de equipo u operario.
+    const conCostos = !f.equipo && !f.operario;
+    const [js, cargas, costos] = await Promise.all([jornadasParaExcel(f), cargasParaExcel(f), conCostos ? Cs.costosPorObra(f.desde, f.hasta) : null]);
     if (!js.length && !cargas.length) { toast('No hay datos en ese período.'); return; }
-    const blob = await generarExcel(js, f, cargas);
+    if (costos && f.obra) costos.filas = costos.filas.filter(c => c.obra_id === f.obra);
+    const blob = await generarExcel(js, f, cargas, costos);
     const slug = S.m.empresa.slug;
     descargar(`checkobra-${slug}-${f.desde}-al-${f.hasta}.xlsx`, blob, blob.type);
     toast(`Excel descargado: ${js.length} jornada${js.length === 1 ? '' : 's'}.`);
@@ -448,7 +461,7 @@ async function errorFuncion(error) {
 
 export function alEscribir(el, v) {
   const a = T(); if (!a) return false;
-  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v)) return true;
+  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v) || Cs.alEscribir(el, v)) return true;
   if (el.dataset.fa) { a.f[el.dataset.fa] = v; a.jornadas = null; render(); cargarJornadas().then(render); return true; }
   if (el.dataset.ne && a.addEq) { a.addEq[el.dataset.ne] = v; if (el.dataset.ne === 'plantilla') render(); return true; }
   if (el.dataset.np && a.addPer) { a.addPer[el.dataset.np] = v; return true; }

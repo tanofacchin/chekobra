@@ -28,6 +28,12 @@
   con día configurable (zapatas y bulones los viernes), ayuda en el enganche rápido, orden exterior → cabina →
   equipo encendido. Todo configurable en el editor de plantillas.
 
+- Taller y costos (13/11): rol mecánico con legajo y PIN; órdenes de trabajo desde las fallas (prioridad, asignación,
+  estados, repuestos con costo, horas, foto del trabajo); al terminar repara las fallas, deja el trabajo en el historial
+  y libera el equipo si no le quedan fallas críticas. Tarifa por hora o por día de cada equipo y costo por obra
+  (equipo + combustible + reparaciones) en el panel y en el Excel.
+- Corrección: un segundo checklist del mismo día ya no vuelve a pedir el control semanal.
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).
