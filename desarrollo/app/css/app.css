@@ -165,6 +165,11 @@ textarea.inp{min-height:84px;resize:vertical}
 .sum span{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .warnbox{padding:14px 16px;border-radius:12px;background:var(--warn-soft);color:var(--warn);font-weight:500}
 .badbox{padding:14px 16px;border-radius:12px;background:var(--bad-soft);color:var(--bad);font-weight:500}
+.okbox{padding:14px 16px;border-radius:12px;background:var(--ok-soft);color:var(--ok);font-weight:500}
+fieldset.f{border:1px solid var(--line);border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:6px;margin:0}
+.tabla tr.sub td{font-weight:600;background:var(--bg-soft, rgba(127,127,127,.06))}
+.tabla tr.tot td{font-weight:700;border-top:2px solid var(--ink, currentColor)}
+.tarifa{width:110px}
 .sig-wrap{border:1.5px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;position:relative;touch-action:none}
 .sig-wrap canvas{display:block;width:100%;height:180px}
 .sig-wrap .base{position:absolute;left:16px;right:16px;bottom:36px;border-top:1px dashed #9aa;pointer-events:none}

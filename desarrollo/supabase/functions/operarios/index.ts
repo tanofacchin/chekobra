@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
 
   if (b.accion === "alta") {
     const nombre = (b.nombre ?? "").trim(), legajo = (b.legajo ?? "").trim();
-    const rol = b.rol === "supervisor" ? "supervisor" : "operario";
+    const rol = b.rol === "supervisor" || b.rol === "mecanico" ? b.rol : "operario";
     if (!(await esAdmin(b.empresa_id))) return json({ error: "No tenés permiso para dar de alta personal" }, 403);
     if (nombre.length < 2) return json({ error: "Escribí el nombre" }, 400);
     if (!/^[A-Za-z0-9._-]{1,30}$/.test(legajo)) return json({ error: "El legajo admite letras, números, punto y guion" }, 400);

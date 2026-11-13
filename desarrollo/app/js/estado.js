@@ -14,6 +14,7 @@ export const S = {
   adm: null,                 // estado del panel
 };
 export const esGestor = () => !!S.m && ['dueno', 'admin', 'supervisor'].includes(S.m.rol);
+export const esMecanico = () => !!S.m && S.m.rol === 'mecanico';
 export const esAdmin = () => !!S.m && ['dueno', 'admin'].includes(S.m.rol);
 
 let _render = () => {};
