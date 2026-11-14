@@ -1,5 +1,5 @@
 // Panel de supervisión y administración.
-import { esc, fFecha, fHora, fDur, fNum, unidad, fechaLarga, mapsUrl, dayKey, RES, toast, msgError, descargar } from './util.js';
+import { esc, fFecha, fHora, fDur, fNum, unidad, fechaLarga, mapsUrl, dayKey, RES, toast, msgError, descargar, normal, filtrar } from './util.js';
 import { sb, vigentes } from './datos.js';
 import { S, render, esAdmin } from './estado.js';
 import * as Ed from './editor.js';
@@ -200,15 +200,16 @@ function vFallas() {
 }
 
 function vEquipos() {
-  const a = T(), d = a.d;
+  const a = T(), d = a.d, qEq = normal(a.buscaEq).trim();
   const rows = d.equipos.map(e => {
-    const pl = d.plantillas[e.plantilla_clave];
-    return `<div class="eqrow"><span class="eqcode">${esc(e.codigo)}</span><div><b>${esc(e.nombre)}</b> ${chipEquipo(e)}${e.activo ? '' : ' <span class="chip">Dado de baja</span>'}
+    const pl = d.plantillas[e.plantilla_clave], ot = d.ordenes.find(o => o.equipo_id === e.id);
+    const dq = normal([e.codigo, e.nombre, e.patente, e.serie, pl && pl.nombre].filter(Boolean).join(' '));
+    return `<div class="eqrow" data-q="${esc(dq)}" ${qEq && !dq.includes(qEq) ? 'hidden' : ''}><span class="eqcode">${esc(e.codigo)}</span><div><b>${esc(e.nombre)}</b> ${chipEquipo(e)}${e.activo ? '' : ' <span class="chip">Dado de baja</span>'}
       <div class="small muted">${esc(pl ? pl.nombre : e.plantilla_clave)}${e.serie ? ' · Serie ' + esc(e.serie) : ''}${e.patente ? ' · ' + esc(e.patente) : ''} · <span class="num">${fNum(e.ultimo_medidor)} ${unidad(e.medidor)}</span></div>
       ${d.tele[e.id] ? lineaTele(d.tele[e.id], e) : ''}
       ${e.estado === 'bloqueado' ? `<div class="small" style="color:var(--bad);font-weight:600">Motivo: ${esc(e.motivo_bloqueo || '')}</div>` : ''}
       ${e.estado === 'fuera_servicio' && e.motivo_bloqueo ? `<div class="small muted">Motivo: ${esc(e.motivo_bloqueo)}</div>` : ''}</div>
-      <div class="row" style="justify-content:flex-end"><button class="btn sm ghost" data-act="equipoFicha" data-id="${e.id}">Ficha</button><button class="btn sm ghost" data-act="etqUno" data-id="${e.id}">QR</button>${e.estado === 'bloqueado' ? `<button class="btn sm primary" data-act="admLiberar" data-id="${e.id}">Liberar</button>`
+      <div class="row" style="justify-content:flex-end"><button class="btn sm ghost" data-act="equipoFicha" data-id="${e.id}">Ficha</button><button class="btn sm ghost" data-act="etqUno" data-id="${e.id}">QR</button>${ot ? `<button class="btn sm ghost" data-act="otAbrirPanel" data-id="${ot.id}">OT ${ot.numero}</button>` : e.estado === 'bloqueado' ? `<button class="btn sm dark" data-act="otDesdeEquipo" data-id="${e.id}">Orden de trabajo</button>` : ''}${e.estado === 'bloqueado' ? `<button class="btn sm primary" data-act="admLiberar" data-id="${e.id}">Liberar</button>`
         : `<button class="btn sm ghost" data-act="admServicio" data-id="${e.id}">${e.estado === 'fuera_servicio' ? 'Volver a servicio' : 'Fuera de servicio'}</button>`}</div>
       ${a.liberar === e.id ? `<div style="grid-column:1/-1;display:flex;flex-direction:column;gap:8px"><label class="f">¿Qué se reparó?<textarea class="inp" id="lib-nota" data-ad="nota" placeholder="Ej.: se cambió la manguera del cilindro de pluma">${esc(a.nota)}</textarea></label>
         <div class="row"><button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admLiberarOk" data-id="${e.id}">Liberar equipo</button></div></div>` : ''}</div>`;
@@ -223,6 +224,7 @@ function vEquipos() {
       <label class="f">${(d.plantillas[n.plantilla] || {}).medidor === 'km' ? 'Odómetro actual (km)' : 'Horómetro actual (h)'}<input class="inp num" id="ne-med" type="number" inputmode="decimal" data-ne="med" value="${esc(n.med)}"></label></div>
       ${n.err ? `<p class="err">${esc(n.err)}</p>` : ''}<div class="row"><button class="btn sm" data-act="admEqCancelar">Cancelar</button><button class="btn sm primary" data-act="admEqGuardar">Guardar equipo</button></div></section>` : '';
   return `${vJd()}${form}<section class="card"><div class="row" style="justify-content:space-between"><h2>Flota (${d.equipos.length})</h2><div class="row">${d.equipos.length ? '<button class="btn sm" data-act="etqTodas">Etiquetas QR</button>' : ''}${n ? '' : '<button class="btn sm dark" data-act="admEqNuevo">Agregar equipo</button>'}</div></div>
+    ${d.equipos.length > 8 ? `<input class="inp" id="adm-busca-eq" type="search" data-buscar=".eqrow[data-q]" placeholder="Buscar por código, nombre, patente o serie" value="${esc(a.buscaEq || '')}" autocomplete="off"><p class="muted small" data-sin-resultados hidden>Ningún equipo coincide con la búsqueda.</p>` : ''}
     ${d.equipos.length ? `<div>${rows}</div>` : '<div class="empty">Todavía no hay equipos. Agregá el primero.</div>'}</section>`;
 }
 
@@ -462,6 +464,7 @@ async function errorFuncion(error) {
 export function alEscribir(el, v) {
   const a = T(); if (!a) return false;
   if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v) || Cs.alEscribir(el, v)) return true;
+  if (el.id === 'adm-busca-eq') { a.buscaEq = v; filtrar(el.dataset.buscar, v); return true; }
   if (el.dataset.fa) { a.f[el.dataset.fa] = v; a.jornadas = null; render(); cargarJornadas().then(render); return true; }
   if (el.dataset.ne && a.addEq) { a.addEq[el.dataset.ne] = v; if (el.dataset.ne === 'plantilla') render(); return true; }
   if (el.dataset.np && a.addPer) { a.addPer[el.dataset.np] = v; return true; }

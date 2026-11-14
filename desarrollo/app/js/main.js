@@ -162,7 +162,7 @@ function abrirQrPendiente() {
 async function sync() {
   const r = await sincronizar(sb, ev => {
     if (ev.tipo === 'enviado' && ev.envio.tipo === 'checklist') Op.alEnviar(ev);
-    if (ev.tipo === 'rechazado') toast('Un registro fue rechazado: ' + ev.envio.error, 7000);
+    if (ev.tipo === 'rechazado') { toast('Un registro fue rechazado: ' + ev.envio.error, 7000); if (ev.envio.tipo === 'checklist') Op.alRechazar(ev); }
   }).catch(() => null);
   const l = await cola.listar().catch(() => []);
   const pend = l.filter(x => x.estado === 'pendiente');

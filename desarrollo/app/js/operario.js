@@ -1,5 +1,5 @@
 // Vista del operario: inicio de jornada (equipo, ubicación, foto, checklist, firma) y cierre.
-import { $, esc, fFecha, fHora, fDur, fNum, unidad, fechaLarga, mapsUrl, uuid, RES, MIN_CHECK_S, toast, msgError, comprimir } from './util.js';
+import { $, esc, fFecha, fHora, fDur, fNum, unidad, fechaLarga, mapsUrl, uuid, RES, MIN_CHECK_S, toast, msgError, comprimir, normal, filtrar } from './util.js';
 import { sb, cargarOperario, itemsDe } from './datos.js';
 import { cola } from './cola.js';
 import { estadoDoc, nombreDoc } from './mantenimiento.js';
@@ -31,6 +31,12 @@ export async function cargar() {
 export function alEnviar(ev) {
   const o = O(); if (!o) return;
   if (o.resultado && o.resultado.client_id === ev.envio.id) { o.resultado.enviado = true; render(); }
+}
+
+// Cuando el servidor no acepta un checklist que se había guardado en el teléfono.
+export function alRechazar(ev) {
+  const o = O(); if (!o) return;
+  if (o.resultado && o.resultado.client_id === ev.envio.id) { o.resultado.rechazo = ev.envio.error || 'El servidor no lo aceptó'; render(); }
 }
 
 /* ------------------------------------------------------------ QR del equipo */
@@ -205,12 +211,18 @@ function chipEquipo(e, uso) {
 }
 function stEquipo() {
   const f = O().flow, d = O().d;
-  const grid = d.equipos.length ? `<div class="eq-grid">${d.equipos.map(e => {
-    const uso = d.enUso.find(u => u.equipo_id === e.id);
-    const pl = plDe(e);
+  const q = normal(O().busca).trim();
+  // Primero los que se pueden usar; los bloqueados, en uso o sin plantilla van al final.
+  const lista = d.equipos.map(e => {
+    const uso = d.enUso.find(u => u.equipo_id === e.id), pl = plDe(e);
     const docEq = docsDe(x => x.bloquea && x.equipo_id === e.id).find(x => estadoDoc(x).clave === 'vencido');
-    const dis = e.estado !== 'operativo' || !!uso || !pl || !!docEq;
-    return `<button class="eq ${f.equipoId === e.id ? 'sel' : ''}" data-act="opEquipo" data-id="${e.id}" ${dis ? 'disabled' : ''} aria-pressed="${f.equipoId === e.id}">
+    return { e, uso, pl, docEq, dis: e.estado !== 'operativo' || !!uso || !pl || !!docEq };
+  }).sort((a, b) => a.dis - b.dis);
+  const buscador = d.equipos.length > 8 ? `<input class="inp" id="eq-busca" type="search" data-buscar=".eq-grid .eq" placeholder="Buscar por código o nombre" value="${esc(O().busca || '')}" autocomplete="off">
+    <p class="muted small" data-sin-resultados hidden>Ningún equipo coincide con la búsqueda.</p>` : '';
+  const grid = d.equipos.length ? `${buscador}<div class="eq-grid">${lista.map(({ e, uso, pl, docEq, dis }) => {
+    const dq = normal(e.codigo + ' ' + e.nombre + ' ' + (e.patente || ''));
+    return `<button class="eq ${f.equipoId === e.id ? 'sel' : ''}" data-act="opEquipo" data-id="${e.id}" data-q="${esc(dq)}" ${q && !dq.includes(q) ? 'hidden' : ''} ${dis ? 'disabled' : ''} aria-pressed="${f.equipoId === e.id}">
       <span class="code">${esc(e.codigo)}</span><span class="nm">${esc(e.nombre)}</span><span class="meta">${esc(pl ? pl.nombre : 'Sin plantilla')}</span>
       ${chipEquipo(e, uso)}${uso ? `<span class="meta">Lo usa ${esc(uso.operario)}</span>` : ''}${e.estado === 'bloqueado' ? '<span class="meta">Avisá al supervisor</span>' : ''}${docEq && e.estado === 'operativo' ? `<span class="chip bad">${esc(nombreDoc(docEq))} vencido</span>` : ''}</button>`;
   }).join('')}</div>` : '<div class="empty">No hay equipos cargados. Pedile al supervisor que los dé de alta.</div>';
@@ -356,6 +368,11 @@ function vResultado() {
   const txt = res === 'apto' ? 'Podés operar el equipo. Al terminar el día, cerrá la jornada desde la pantalla de inicio.'
     : res === 'observaciones' ? 'Podés operar con precaución. El supervisor recibe las fallas que marcaste.'
     : 'No operes este equipo. Queda bloqueado y el supervisor lo ve en su panel. Avisale por radio o teléfono.';
+  if (r.rechazo) return `<main class="wrap"><section class="verdict no_apto"><p class="eyebrow" style="color:inherit;opacity:.8">${esc(r.codigo)} · ${fHora(r.inicio)} h</p>
+    <h1>Registro no aceptado</h1><p>El checklist no quedó registrado. No empieces a trabajar hasta resolverlo.</p></section>
+    <div class="badbox"><b>Motivo:</b> ${esc(r.rechazo)}</div>
+    <p class="muted">Volvé al inicio y hacé el checklist de nuevo. Si el problema sigue, avisale al supervisor.</p>
+    <button class="btn dark block" data-act="opInicio">Volver al inicio</button></main>`;
   return `<main class="wrap"><section class="verdict ${res}"><p class="eyebrow" style="color:inherit;opacity:.8">${esc(r.codigo)} · ${fHora(r.inicio)} h</p>
     <h1>${RES[res][0]}</h1><p>${txt}</p></section>
     <div class="${r.enviado ? 'card flat' : 'warnbox'}">${r.enviado ? 'Registro enviado al servidor.' : 'Guardado en el teléfono. Se envía solo apenas haya señal; no hace falta que hagas nada.'}</div>
@@ -561,6 +578,7 @@ export const A = {
 
 export function alEscribir(el, v) {
   const o = O(); if (!o) return false;
+  if (el.dataset.buscar && el.id === 'eq-busca') { o.busca = v; filtrar(el.dataset.buscar, v); return true; }
   if (el.dataset.fl && o.flow) { o.flow[el.dataset.fl] = v; guardarBorrador(); return true; }
   if (el.dataset.nota && o.flow) { o.flow.resp[el.dataset.nota].nota = v; guardarBorrador(); return true; }
   if (el.dataset.ci && o.cierre) { o.cierre[el.dataset.ci] = v; if (el.dataset.ci === 'falla') render(); return true; }

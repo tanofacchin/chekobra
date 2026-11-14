@@ -250,6 +250,13 @@ export const A = {
     a.ot.nueva = { equipo_id: f.equipo_id, titulo: f.texto.slice(0, 120), prioridad: f.critica ? 'alta' : f.grave ? 'media' : 'baja', asignado_a: '', descripcion: f.nota || '', falla_ids: [f.id], err: '' };
     cargarTaller();
   },
+  // Desde la pestaña Equipos: orden para un equipo bloqueado, con sus fallas críticas ya marcadas.
+  otDesdeEquipo: b => {
+    const a = S.adm, e = a.d.equipos.find(x => x.id === b.dataset.id), fs = a.d.fallas.filter(f => f.equipo_id === e.id && f.critica);
+    a.tab = 'taller'; a.ot ||= { filtro: 'abiertas', lista: null, det: null, nueva: null }; a.ot.det = null;
+    a.ot.nueva = { equipo_id: e.id, titulo: (fs[0] ? fs[0].texto : 'Reparación de ' + e.codigo).slice(0, 120), prioridad: 'alta', asignado_a: '', descripcion: e.motivo_bloqueo || '', falla_ids: fs.map(f => f.id), err: '' };
+    cargarTaller();
+  },
   otNuevaCancelar: () => { S.adm.ot.nueva = null; render(); },
   otNuevaGuardar: async () => {
     const n = S.adm.ot.nueva; n.err = '';
