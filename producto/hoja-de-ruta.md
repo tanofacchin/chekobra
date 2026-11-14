@@ -34,6 +34,10 @@
   (equipo + combustible + reparaciones) en el panel y en el Excel.
 - Corrección: un segundo checklist del mismo día ya no vuelve a pedir el control semanal.
 
+- Mejoras de uso (14/11): buscador de equipos (operario y panel) para flotas grandes, equipos disponibles primero,
+  pantalla clara cuando el servidor rechaza un checklist, pestañas del panel a la vista en computadora, orden de
+  trabajo directa desde un equipo bloqueado.
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).

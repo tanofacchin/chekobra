@@ -57,6 +57,15 @@ export async function comprimir(blob, max, q, marca) {
   } finally { URL.revokeObjectURL(url); }
 }
 
+// Buscador de listas: oculta los elementos cuyo data-q no contiene el texto. No redibuja, así no se pierde el foco.
+export const normal = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+export function filtrar(selector, texto) {
+  const q = normal(texto).trim(); let n = 0;
+  document.querySelectorAll(selector).forEach(el => { const ve = !q || (el.dataset.q || '').includes(q); el.hidden = !ve; if (ve) n++; });
+  const v = document.querySelector('[data-sin-resultados]'); if (v) v.hidden = n > 0;
+  return n;
+}
+
 // Descarga de un archivo generado en el navegador.
 export function descargar(nombre, contenido, tipo) {
   const b = new Blob([contenido], { type: tipo });

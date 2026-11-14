@@ -182,6 +182,8 @@ fieldset.f{border:1px solid var(--line);border-radius:12px;padding:10px 14px;dis
 /* admin */
 .tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
 .tab{flex:none;min-height:44px;padding:0 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer;color:var(--ink)}
+@media (min-width:900px){.tabs{flex-wrap:wrap;overflow:visible}}
+[hidden]{display:none!important}
 .tab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:2px}
