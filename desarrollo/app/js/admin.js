@@ -12,6 +12,8 @@ import { jornadasParaExcel, cargasParaExcel, generarExcel } from './excel.js';
 import * as Cb from './combustible.js';
 import * as Tal from './taller.js';
 import * as Cs from './costos.js';
+import * as Mapa from './mapa.js';
+import * as Rd from './resumen.js';
 
 const T = () => S.adm;
 export function reiniciar() {
@@ -20,11 +22,11 @@ export function reiniciar() {
     tab: 'resumen', cargando: false, err: '', d: null, detalle: null, det: null, confirm: null,
     f: { desde: dayKey(d), hasta: dayKey(new Date()), equipo: '', operario: '', resultado: '' }, jornadas: null,
     liberar: null, nota: '', reparar: null, addEq: null, addPer: null, pin: null, nuevaObra: '',
-    recargar: () => cargar(),
+    recargar: () => cargar(), recargarDetalle: id => cargarDetalle(id),
   };
 }
-export const clave = () => { const a = T(); return a ? [a.tab, a.detalle, a.ficha && a.ficha.id, !!a.etiquetas].join(',') : ''; };
-export const despues = () => Ind.despues();
+export const clave = () => { const a = T(); return a ? [a.tab, a.detalle, a.ficha && a.ficha.id, !!a.etiquetas, !!a.rd].join(',') : ''; };
+export const despues = () => { Ind.despues(); Mapa.despues(); };
 const E = () => S.m.empresa_id;
 
 export async function cargar() {
@@ -33,7 +35,7 @@ export async function cargar() {
   try {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
     const desde30 = new Date(); desde30.setDate(desde30.getDate() - 29);
-    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot] = await Promise.all([
+    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg] = await Promise.all([
       sb.from('equipos').select('*').eq('empresa_id', E()).order('codigo'),
       sb.from('miembros').select('id, nombre, legajo, rol, activo, user_id, intentos_fallidos, bloqueado_en, recibir_avisos').eq('empresa_id', E()).order('nombre'),
       sb.from('obras').select('*').eq('empresa_id', E()).order('nombre'),
@@ -50,16 +52,19 @@ export async function cargar() {
       sb.from('documentos').select('*').eq('empresa_id', E()),
       sb.rpc('consumo_combustible', { p_empresa: E(), p_desde: dayKey(desde30), p_hasta: dayKey(new Date()) }),
       sb.from('ordenes_trabajo').select('id, numero, titulo, estado, prioridad, asignado_a, creada_en, equipo_id, equipo:equipos(codigo), fallas(id)').eq('empresa_id', E()).in('estado', Tal.ABIERTAS).order('numero'),
+      sb.rpc('fallas_repetidas', { p_empresa: E(), p_dias: 30 }),
+      sb.from('asignaciones').select('miembro_id, equipo_id, obra_id').eq('empresa_id', E()),
     ]);
-    for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot]) if (r.error) throw r.error;
+    for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg]) if (r.error) throw r.error;
     a.d = { equipos: eq.data, miembros: mi.data, obras: ob.data, plantillas: vigentes(pl.data, E()), fallas: fa.data, abiertas: ab.data, hoy: jh.data,
       jd: tc.data.find(c => c.proveedor === 'john_deere') || null, tele: Object.fromEntries(tu.data.map(l => [l.equipo_id, l])), alertasTele: ta.data,
-      consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data, combustible: cb.data, ordenes: ot.data };
+      consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data, combustible: cb.data, ordenes: ot.data, repetidas: fr.data, asig: asg.data };
     if (a.tab === 'mantenimiento' && !a.mt) Mt.cargarMant();
     if (a.tab === 'indicadores' && !(a.ind && a.ind.datos)) Ind.cargarIndicadores();
     if (a.tab === 'combustible' && !(a.cb && a.cb.datos)) Cb.cargarCombustible();
     if (a.tab === 'taller' && !(a.ot && a.ot.lista)) Tal.cargarTaller();
     if (a.tab === 'costos' && !(a.cs && a.cs.datos)) Cs.cargarCostos();
+    if (a.tab === 'mapa') Mapa.cargarMapa();
     a.err = '';
     if (a.tab === 'jornadas') await cargarJornadas();
   } catch (e) { a.err = msgError(e); }
@@ -108,14 +113,15 @@ function chipEquipo(e) {
 export function vista() {
   const a = T();
   if (!a.d) return `<main class="wrap wide">${a.err ? `<div class="badbox">${esc(a.err)}</div><button class="btn" data-act="admRecargar">Reintentar</button>` : '<p class="muted">Cargando panel…</p>'}</main>`;
+  if (a.rd) return Rd.vResumenDia();
   if (a.ficha) return Rep.vFicha();
   if (a.etiquetas) return vEtiquetas(a.d.equipos.filter(e => a.etiquetas.includes(e.id)), S.m.empresa.nombre);
   if (a.detalle) return `<main class="wrap wide"><button class="btn ghost sm" data-act="admVolver" style="align-self:flex-start">← Volver</button>${vDetalle()}</main>`;
-  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['taller', `Taller${a.d.ordenes.length ? ` (${a.d.ordenes.length})` : ''}`], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['combustible', `Combustible${Cb.alertasCombustible(a.d.combustible).length ? ` (${Cb.alertasCombustible(a.d.combustible).length})` : ''}`], ['costos', 'Costos por obra'], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras']]
+  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['mapa', 'Mapa'], ['taller', `Taller${a.d.ordenes.length ? ` (${a.d.ordenes.length})` : ''}`], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['combustible', `Combustible${Cb.alertasCombustible(a.d.combustible).length ? ` (${Cb.alertasCombustible(a.d.combustible).length})` : ''}`], ['costos', 'Costos por obra'], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras']]
     .map(([k, l]) => `<button class="tab ${a.tab === k ? 'on' : ''}" data-act="admTab" data-k="${k}">${l}</button>`).join('');
-  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, taller: Tal.vTaller, costos: Cs.vCostos, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
+  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, mapa: Mapa.vMapa, taller: Tal.vTaller, costos: Cs.vCostos, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
   return `<main class="wrap wide"><section class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="eyebrow">${esc(fechaLarga())}</p><h1>${esc(S.m.empresa.nombre)}</h1></div>
-    <button class="btn sm ghost" data-act="admRecargar">${a.cargando ? 'Actualizando…' : 'Actualizar'}</button></section>
+    <div class="row"><button class="btn sm" data-act="rdAbrir">Resumen del día</button><button class="btn sm ghost" data-act="admRecargar">${a.cargando ? 'Actualizando…' : 'Actualizar'}</button></div></section>
     ${a.err ? `<div class="badbox">${esc(a.err)}</div>` : ''}<nav class="tabs">${tabs}</nav>${body}</main>`;
 }
 
@@ -143,6 +149,7 @@ function vResumen() {
   const TIT = { horometro: 'Horómetro distinto al de la máquina', lejos: 'Checklist lejos de la máquina', sin_checklist: 'Máquina usada sin checklist' };
   d.alertasTele.forEach(x => { const e = d.equipos.find(q => q.id === x.equipo_id); att.push([x.tipo === 'sin_checklist' ? 'bad' : 'warn', `${TIT[x.tipo]} · ${e ? e.codigo : ''}`, `${x.detalle} · ${fFecha(x.fecha + 'T12:00:00')} · dato de John Deere`, x.jornada_id ? `<button class="btn sm" data-act="admVer" data-id="${x.jornada_id}">Ver</button>` : '']); });
   Tal.alertasTaller(d.ordenes).forEach(x => att.push(x));
+  d.repetidas.forEach(r => att.push(['warn', `Falla repetida · ${r.codigo}`, `${r.texto} · ${textoRepetida(r)}`, `<button class="btn sm" data-act="equipoFicha" data-id="${r.equipo_id}">Historial</button>`]));
   alertasFlota().forEach(x => att.push(x));
   Cb.alertasCombustible(d.combustible).forEach(x => att.push(x));
   d.miembros.filter(m => m.bloqueado_en).forEach(m => att.push(['bad', `Legajo bloqueado · ${m.nombre}`, `${m.intentos_fallidos} intentos fallidos de PIN · ${fFecha(m.bloqueado_en)} ${fHora(m.bloqueado_en)}`, `<button class="btn sm" data-act="admTab" data-k="personal">Desbloquear</button>`]));
@@ -186,11 +193,16 @@ function vJornadas() {
       : '<div class="empty">No hay jornadas con estos filtros.</div>'}`;
 }
 
+const textoRepetida = r => r.motivo === 'reaparecio' ? `volvió a aparecer después de repararse (${r.veces} veces en 30 días)` : `${r.veces} veces en 30 días`;
 function vFallas() {
-  const a = T(), fs = a.d.fallas;
-  if (!fs.length) return '<div class="empty">No hay fallas abiertas.</div>';
-  return `<div class="list">${fs.map(f => `<div class="eqrow"><span class="eqcode">${esc(f.equipo.codigo)}</span><div>
-      <div>${f.critica ? '<span class="crit">CRÍTICO</span>' : f.grave ? '<span class="crit alerta">ADVERTENCIA</span>' : ''}<b>${esc(f.texto)}</b></div><div class="small">${esc(f.nota)}</div>
+  const a = T(), fs = a.d.fallas, reps = a.d.repetidas;
+  const rep = f => reps.find(r => r.equipo_id === f.equipo_id && r.texto === f.texto);
+  const cab = reps.length ? `<section class="card"><h2>Fallas repetidas (${reps.length})</h2>
+    <p class="small muted">La misma falla en el mismo equipo 3 veces o más en 30 días, o que volvió después de marcarse como reparada. Suele ser una reparación que no resolvió el problema.</p>
+    <div>${reps.map(r => `<div class="att"><span class="sev ${r.motivo === 'reaparecio' ? 'bad' : 'warn'}"></span><div><div class="t">${esc(r.codigo)} · ${esc(r.texto)}</div><div class="s">${textoRepetida(r)} · última ${fFecha(r.ultima)}${r.abierta ? ' · abierta' : ' · hoy reparada'}</div></div><button class="btn sm" data-act="equipoFicha" data-id="${r.equipo_id}">Historial</button></div>`).join('')}</div></section>` : '';
+  if (!fs.length) return cab + '<div class="empty">No hay fallas abiertas.</div>';
+  return `${cab}<div class="list">${fs.map(f => `<div class="eqrow"><span class="eqcode">${esc(f.equipo.codigo)}</span><div>
+      <div>${f.critica ? '<span class="crit">CRÍTICO</span>' : f.grave ? '<span class="crit alerta">ADVERTENCIA</span>' : ''}<b>${esc(f.texto)}</b>${rep(f) ? ` <span class="chip ${rep(f).motivo === 'reaparecio' ? 'bad' : 'warn'}">${rep(f).motivo === 'reaparecio' ? 'Volvió tras reparación' : 'Repetida ×' + rep(f).veces}</span>` : ''}</div><div class="small">${esc(f.nota)}</div>
       <div class="small muted">${f.jornada && f.jornada.operario ? esc(f.jornada.operario.nombre) + ' · ' : ''}${fFecha(f.creada_en)} ${fHora(f.creada_en)}${f.origen === 'cierre' ? ' · al cierre' : ''}</div></div>
       <div class="row" style="justify-content:flex-end"><button class="btn sm" data-act="admVer" data-id="${f.jornada_id}">Ver jornada</button>${(() => { const o = f.orden_id && a.d.ordenes.find(x => x.id === f.orden_id);
         return o ? `<button class="btn sm ghost" data-act="otAbrirPanel" data-id="${o.id}">OT ${o.numero} · ${Tal.ESTADO[o.estado][0].toLowerCase()}</button>` : `<button class="btn sm dark" data-act="otDesdeFalla" data-id="${f.id}">Orden de trabajo</button>`; })()}${f.critica ? '' : `<button class="btn sm primary" data-act="admReparar" data-id="${f.id}">Reparada</button>`}</div>
@@ -263,20 +275,30 @@ function vAvisos() {
   const sinEnvio = av.some(x => x.estado === 'pendiente' && Date.now() - new Date(x.creada_en) > 10 * 60000);
   return `<section class="card flat"><h3>Avisos por correo</h3>
     ${sinEnvio ? '<p class="small warnbox">Hay avisos sin enviar. El envío de correos todavía no está configurado (ver operaciones).</p>' : ''}
-    <div>${av.map(x => `<div class="att" style="grid-template-columns:1fr auto"><div><div class="t">${esc(x.datos.codigo || '')} bloqueado</div><div class="s">${fFecha(x.creada_en)} ${fHora(x.creada_en)} · ${esc(x.datos.operario || '')}</div></div><span class="chip ${est[x.estado][0]}">${est[x.estado][1]}</span></div>`).join('')}</div></section>`;
+    <div>${av.map(x => `<div class="att" style="grid-template-columns:1fr auto"><div><div class="t">${x.tipo === 'resumen_diario' ? 'Resumen del día' : esc(x.datos.codigo || '') + ' bloqueado'}</div><div class="s">${fFecha(x.creada_en)} ${fHora(x.creada_en)}${x.tipo === 'resumen_diario' ? '' : ' · ' + esc(x.datos.operario || '')}</div></div><span class="chip ${est[x.estado][0]}">${est[x.estado][1]}</span></div>`).join('')}</div></section>`;
 }
 
 function vPersonal() {
   const a = T(), d = a.d, adm = esAdmin(), n = a.addPer;
   const roles = { dueno: 'Dueño', admin: 'Administración', supervisor: 'Supervisor', operario: 'Operario', mecanico: 'Mecánico' };
   const gestor = m => ['dueno', 'admin', 'supervisor'].includes(m.rol);
+  const asigDe = m => { const xs = d.asig.filter(x => x.miembro_id === m.id); return { eq: xs.filter(x => x.equipo_id).map(x => x.equipo_id), ob: xs.filter(x => x.obra_id).map(x => x.obra_id) }; };
+  const txtAsig = m => { const s = asigDe(m); if (!s.eq.length && !s.ob.length) return '';
+    const cod = s.eq.map(id => (d.equipos.find(e => e.id === id) || {}).codigo).filter(Boolean), nom = s.ob.map(id => (d.obras.find(o => o.id === id) || {}).nombre).filter(Boolean);
+    return `<div class="small">${cod.length ? `Solo equipos: ${cod.map(c => `<span class="eqcode">${esc(c)}</span>`).join(' ')}` : ''}${cod.length && nom.length ? ' · ' : ''}${nom.length ? `Solo obras: ${nom.map(esc).join(', ')}` : ''}</div>`; };
+  const edAsig = m => { const s = a.asig; if (!s || s.id !== m.id) return '';
+    return `<div style="grid-column:1/-1;display:flex;flex-direction:column;gap:10px"><p class="small muted">Marcá los equipos y las obras que puede usar ${esc(m.nombre)}. Sin marcar nada en una lista, puede usar todos.</p>
+      <fieldset class="f"><legend class="small"><b>Equipos</b></legend><div class="asig">${d.equipos.filter(e => e.activo).map(e => `<label class="check"><input type="checkbox" data-asig="eq" data-id="${e.id}" ${s.eq.includes(e.id) ? 'checked' : ''}><span>${esc(e.codigo)} <span class="small muted">${esc(e.nombre)}</span></span></label>`).join('')}</div></fieldset>
+      <fieldset class="f"><legend class="small"><b>Obras</b></legend><div class="asig">${d.obras.filter(o => o.activa).map(o => `<label class="check"><input type="checkbox" data-asig="ob" data-id="${o.id}" ${s.ob.includes(o.id) ? 'checked' : ''}><span>${esc(o.nombre)}</span></label>`).join('') || '<span class="muted small">Sin obras cargadas.</span>'}</div></fieldset>
+      <div class="row"><button class="btn sm" data-act="admAsigCancelar">Cancelar</button><button class="btn sm primary" data-act="admAsigGuardar">Guardar</button></div></div>`; };
   const per = d.miembros.map(m => `<div class="eqrow"><span class="eqcode">${esc(m.legajo || '—')}</span><div><b>${esc(m.nombre)}</b> <span class="chip plain">${roles[m.rol]}</span>${m.activo ? '' : ' <span class="chip">Inactivo</span>'}${m.bloqueado_en ? ' <span class="chip bad">Bloqueado por PIN</span>' : ''}
-      <div class="small muted">${d.consent[m.id] ? `Aceptó la política de privacidad el ${fFecha(d.consent[m.id])}` : 'Todavía no aceptó la política de privacidad'}${gestor(m) ? ` · ${m.recibir_avisos ? 'recibe avisos por correo' : 'no recibe avisos'}` : ''}</div></div>
+      <div class="small muted">${d.consent[m.id] ? `Aceptó la política de privacidad el ${fFecha(d.consent[m.id])}` : 'Todavía no aceptó la política de privacidad'}${gestor(m) ? ` · ${m.recibir_avisos ? 'recibe avisos por correo' : 'no recibe avisos'}` : ''}</div>${txtAsig(m)}</div>
       <div class="row" style="justify-content:flex-end">${adm && m.bloqueado_en ? `<button class="btn sm primary" data-act="admDesbloquear" data-id="${m.id}">Desbloquear</button>` : ''}
+      ${!gestor(m) && m.activo ? `<button class="btn sm ghost" data-act="admAsig" data-id="${m.id}">Equipos y obras</button>` : ''}
       ${adm && gestor(m) && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admAvisos" data-id="${m.id}">${m.recibir_avisos ? 'Sin avisos' : 'Con avisos'}</button>` : ''}${adm && m.rol !== 'dueno' && m.legajo ? `<button class="btn sm ghost" data-act="admPin" data-id="${m.id}">Cambiar PIN</button>` : ''}
       ${adm && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admActivo" data-id="${m.id}">${m.activo ? 'Desactivar' : 'Activar'}</button>` : ''}</div>
       ${a.pin && a.pin.id === m.id ? `<div style="grid-column:1/-1" class="row"><input class="inp num" id="pin-nuevo" data-pin="pin" inputmode="numeric" maxlength="6" placeholder="Nuevo PIN (6 números)" value="${esc(a.pin.pin)}" style="flex:1 1 180px">
-        <button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admPinOk">Guardar</button></div>` : ''}</div>`).join('');
+        <button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admPinOk">Guardar</button></div>` : ''}${edAsig(m)}</div>`).join('');
   const form = n ? `<div class="form-grid"><label class="f">Nombre y apellido<input class="inp" id="np-nom" data-np="nombre" value="${esc(n.nombre)}"></label>
       <label class="f">Legajo<input class="inp" id="np-leg" data-np="legajo" value="${esc(n.legajo)}" autocapitalize="none"></label>
       <label class="f">PIN de 6 números<input class="inp num" id="np-pin" data-np="pin" inputmode="numeric" maxlength="6" value="${esc(n.pin)}"></label>
@@ -344,8 +366,12 @@ export const A = {
     if (a.tab === 'combustible') Cb.cargarCombustible();
     if (a.tab === 'taller') { a.ot ||= { filtro: 'abiertas', lista: null, det: null, nueva: null }; a.ot.det = null; Tal.cargarTaller(); }
     if (a.tab === 'costos') Cs.cargarCostos();
+    if (a.tab === 'mapa') Mapa.cargarMapa();
   },
-  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A, ...Cs.A,
+  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A, ...Cs.A, ...Mapa.A, ...Rd.A,
+  admAsig: b => { const a = T(), xs = a.d.asig.filter(x => x.miembro_id === b.dataset.id); a.asig = { id: b.dataset.id, eq: xs.filter(x => x.equipo_id).map(x => x.equipo_id), ob: xs.filter(x => x.obra_id).map(x => x.obra_id) }; render(); },
+  admAsigCancelar: () => { T().asig = null; render(); },
+  admAsigGuardar: async () => { const a = T(), s = a.asig; if (await rpc('asignar', { p_miembro: s.id, p_equipos: s.eq, p_obras: s.ob }, s.eq.length || s.ob.length ? 'Asignación guardada.' : 'Sin restricciones: puede usar todos los equipos y obras.')) { a.asig = null; render(); } },
   csExcel: () => { const c = T().cs; return exportarExcel({ desde: c.desde, hasta: c.hasta }); },
   etqUno: b => { T().etiquetas = [b.dataset.id]; render(); },
   etqTodas: () => { T().etiquetas = T().d.equipos.filter(e => e.activo).map(e => e.id); render(); },
@@ -463,7 +489,8 @@ async function errorFuncion(error) {
 
 export function alEscribir(el, v) {
   const a = T(); if (!a) return false;
-  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v) || Cs.alEscribir(el, v)) return true;
+  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v) || Cs.alEscribir(el, v) || Rd.alEscribir(el, v)) return true;
+  if (el.dataset.asig && a.asig) { const k = el.dataset.asig, id = el.dataset.id; a.asig[k] = v ? [...a.asig[k], id] : a.asig[k].filter(x => x !== id); return true; }
   if (el.id === 'adm-busca-eq') { a.buscaEq = v; filtrar(el.dataset.buscar, v); return true; }
   if (el.dataset.fa) { a.f[el.dataset.fa] = v; a.jornadas = null; render(); cargarJornadas().then(render); return true; }
   if (el.dataset.ne && a.addEq) { a.addEq[el.dataset.ne] = v; if (el.dataset.ne === 'plantilla') render(); return true; }

@@ -603,4 +603,69 @@ do $$ declare c jsonb; r1 jsonb; r2 jsonb; begin
 end $$;
 reset role;
 
+
+-- ===== Supervisión: historial, fallas repetidas, mapa, asignaciones y resumen diario
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+do $$ declare n int; r record; c jsonb; begin
+  -- historial del equipo del taller: checklists, fallas, orden creada y terminada, liberación, carga
+  select count(*) into n from public.historial_equipo((select id from public.equipos where codigo = 'RE-OT'), 3650);
+  if n < 8 then raise exception 'FALLÓ: historial corto (%)', n; end if;
+  for r in select * from (values ('checklist'), ('falla'), ('orden'), ('orden_terminada'), ('evento'), ('combustible')) v(t) loop
+    if not exists (select 1 from public.historial_equipo((select id from public.equipos where codigo = 'RE-OT'), 3650) h where h.tipo = r.t) then raise exception 'FALLÓ: falta % en el historial', r.t; end if;
+  end loop;
+  if exists (select 1 from public.historial_equipo((select id from public.equipos where codigo = 'RE-OT'), 3650) h where h.tipo = 'mantenimiento') then raise exception 'FALLÓ: la reparación de la OT sale duplicada'; end if;
+  -- resumen del día 11/11: una jornada en Ruta 9, 24 h, 320 L
+  c := public.resumen_diario((select v from ctx where k = 'A'), '2026-11-11');
+  if (c->>'litros')::numeric < 320 or not exists (select 1 from jsonb_array_elements(c->'por_obra') x where x->>'obra' = 'Ruta 9' and (x->>'horas')::numeric = 24) then raise exception 'FALLÓ: resumen %', c; end if;
+  c := public.resumen_diario((select v from ctx where k = 'A'), '2026-11-10');
+  if (c->>'no_aptos')::int < 1 or jsonb_array_length(c->'fallas_nuevas') < 2 then raise exception 'FALLÓ: resumen del 10/11 %', c; end if;
+end $$;
+-- asignaciones: el operario A3 solo puede usar RE-OT y la obra Ruta 9
+select public.asignar(:'opA3_id', array[:'eqOT_id']::uuid[], array[:'obraA2_id']::uuid[]);
+select pg_temp.esperar_error(format($$select public.asignar(%L, array[%L]::uuid[], '{}')$$, :'opA3_id', (select v from ctx where k = 'eqB')), 'otra empresa');
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+select pg_temp.esperar_error(format($$select public.asignar(%L, '{}', '{}')$$, :'opA3_id'), 'No tenés permiso');
+select pg_temp.esperar_error(format($$select * from public.historial_equipo(%L)$$, :'eqOT_id'), 'No tenés permiso');
+do $$ begin
+  if exists (select 1 from public.asignaciones) then raise exception 'FALLÓ: B ve asignaciones de A'; end if;
+  if exists (select 1 from public.ubicaciones_flota((select v from ctx where k = 'A'))) then raise exception 'FALLÓ: B ve el mapa de A'; end if;
+  if exists (select 1 from public.fallas_repetidas((select v from ctx where k = 'A'), 3650)) then raise exception 'FALLÓ: B ve fallas de A'; end if;
+end $$;
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a5';
+do $$ begin if (select count(*) from public.asignaciones) <> 2 then raise exception 'FALLÓ: el operario debe ver sus 2 asignaciones'; end if; end $$;
+-- obra no asignada
+select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', %L, 'obra_id', %L, 'inicio', '2026-11-13 07:00-03',
+  'med_ini', 540, 'ubic_ref', 'Obrador', 'selfie_path', %L, 'firma_path', %L, 'medidor_foto_path', pg_temp.foto_medidor(), 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('retroexcavadora')))$$, :'eqOT_id', :'obraA_id', :'prefo' || 's.jpg', :'prefo' || 'f.png'), 'No tenés asignada la obra Ruta 5');
+-- equipo no asignado
+select pg_temp.esperar_error(format($$select public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', %L, 'inicio', '2026-11-13 07:00-03',
+  'med_ini', 99999, 'ubic_ref', 'Obrador', 'selfie_path', %L, 'firma_path', %L, 'medidor_foto_path', pg_temp.foto_medidor(), 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', '{"doc.1":{"v":"ok"},"c.x1":{"v":"ok"}}'::jsonb))$$, (select v from ctx where k = 'eqA'), :'prefo' || 's.jpg', :'prefo' || 'f.png'), 'No tenés asignado el equipo EX-01');
+-- lo asignado sí: y vuelve a fallar el cinturón (ya reparado por la OT 1) → falla que reaparece
+select public.enviar_checklist(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', :'eqOT_id', 'obra_id', :'obraA2_id', 'inicio', '2026-11-13 07:00-03',
+  'med_ini', 540, 'lat', -31.4, 'lng', -64.2, 'precision_m', 8, 'selfie_path', :'prefo' || 's.jpg', 'firma_path', :'prefo' || 'f.png', 'medidor_foto_path', :'prefo' || 'm.jpg', 'declaracion', true, 'dur_checklist_s', 300,
+  'respuestas', pg_temp.respuestas('retroexcavadora', jsonb_build_object('cabina.1', jsonb_build_object('v','falla','nota','otra vez el cinturón','foto', :'prefo' || 'c.jpg'))))) ->> 'resultado' as rrep \gset
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+do $$ declare r record; begin
+  select * into r from public.fallas_repetidas((select v from ctx where k = 'A'), 3650) where codigo = 'RE-OT';
+  if r.veces <> 2 or r.motivo <> 'reaparecio' or not r.abierta then raise exception 'FALLÓ: falla repetida %', row_to_json(r); end if;
+  select * into r from public.ubicaciones_flota((select v from ctx where k = 'A')) where codigo = 'RE-OT';
+  if r.lat <> -31.4 or r.origen <> 'checklist' or r.operario <> 'Operario A3' or r.estado <> 'bloqueado' then raise exception 'FALLÓ: mapa %', row_to_json(r); end if;
+end $$;
+select public.asignar(:'opA3_id', '{}', '{}');
+reset role;
+-- cola del correo diario: una sola vez por empresa y día
+do $$ declare n int; begin
+  n := public.encolar_resumenes('2026-11-11');
+  if n <> 1 then raise exception 'FALLÓ: se esperaba 1 resumen encolado para el 11/11 (solo A trabajó), vinieron %', n; end if;
+  if public.encolar_resumenes('2026-11-11') <> 0 then raise exception 'FALLÓ: el resumen se encoló dos veces'; end if;
+end $$;
+
 \echo TODAS LAS PRUEBAS PASARON

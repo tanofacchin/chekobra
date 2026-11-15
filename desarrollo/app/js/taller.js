@@ -203,7 +203,7 @@ export const A = {
   otRecargar: () => cargar(),
   otFiltro: b => { const t = esGestor() && !S.modoOperario ? S.adm.ot : S.tal; t.filtro = b.dataset.k; t.lista = null; render(); t === S.tal ? cargar() : cargarTaller(); },
   otAbrir: b => abrir(b.dataset.id),
-  otAbrirPanel: b => { const a = S.adm; a.tab = 'taller'; a.ot ||= { filtro: 'abiertas', lista: null, det: null, nueva: null }; cargarTaller(); abrir(b.dataset.id); },
+  otAbrirPanel: b => { const a = S.adm; a.ficha = null; a.tab = 'taller'; a.ot ||= { filtro: 'abiertas', lista: null, det: null, nueva: null }; cargarTaller(); abrir(b.dataset.id); },
   otVolver: () => { const t = D(); t.det = null; t.rep = null; t.fin = null; t.confirm = null; render(); },
   otEstado: async b => {
     const t = D(), k = b.dataset.k;

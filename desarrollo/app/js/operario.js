@@ -48,6 +48,7 @@ export function abrirDesdeQr(id) {
 function elegirPorQr(id) {
   const o = O(), e = eqById(id);
   if (!e) return toast('Ese equipo no está cargado en tu empresa.', 5000);
+  if (!misEquipos().includes(e)) return toast(`No tenés asignado el equipo ${e.codigo}. Avisá al supervisor.`, 6000);
   if (jornadaAbierta() && !(o.flow && o.flow.step === 0)) return toast('Tenés una jornada abierta: cerrala antes de iniciar otra.', 5000);
   if (e.estado === 'bloqueado') return toast(`${e.codigo} está bloqueado: ${e.motivo_bloqueo || 'falla crítica'}. Avisá al supervisor.`, 7000);
   if (e.estado === 'fuera_servicio') return toast(`${e.codigo} está fuera de servicio.`, 5000);
@@ -130,6 +131,9 @@ const vEscaner = () => `<div class="modal" role="dialog" aria-modal="true" aria-
 const docsDe = (filtro) => ((O().d && O().d.docs) || []).filter(filtro);
 const docBloqueante = equipoId => docsDe(x => x.bloquea && (x.equipo_id === equipoId || x.miembro_id === S.m.id)).find(x => estadoDoc(x).clave === 'vencido');
 const eqById = id => O().d && O().d.equipos.find(e => e.id === id);
+// Equipos y obras que esta persona puede usar: todos, salvo que la supervisión le haya asignado algunos.
+const misEquipos = () => { const d = O().d, s = d.asigEq || []; return s.length ? d.equipos.filter(e => s.includes(e.id)) : d.equipos; };
+const misObras = () => { const d = O().d, s = d.asigOb || []; return s.length ? d.obras.filter(o => s.includes(o.id)) : d.obras; };
 const plDe = eq => eq && O().d.plantillas[eq.plantilla_clave];
 const misEnvios = () => O().cola.filter(e => e.uid === S.user.id && e.empresa_id === S.m.empresa_id);
 
@@ -213,14 +217,15 @@ function stEquipo() {
   const f = O().flow, d = O().d;
   const q = normal(O().busca).trim();
   // Primero los que se pueden usar; los bloqueados, en uso o sin plantilla van al final.
-  const lista = d.equipos.map(e => {
+  const propios = misEquipos();
+  const lista = propios.map(e => {
     const uso = d.enUso.find(u => u.equipo_id === e.id), pl = plDe(e);
     const docEq = docsDe(x => x.bloquea && x.equipo_id === e.id).find(x => estadoDoc(x).clave === 'vencido');
     return { e, uso, pl, docEq, dis: e.estado !== 'operativo' || !!uso || !pl || !!docEq };
   }).sort((a, b) => a.dis - b.dis);
-  const buscador = d.equipos.length > 8 ? `<input class="inp" id="eq-busca" type="search" data-buscar=".eq-grid .eq" placeholder="Buscar por código o nombre" value="${esc(O().busca || '')}" autocomplete="off">
+  const buscador = propios.length > 8 ? `<input class="inp" id="eq-busca" type="search" data-buscar=".eq-grid .eq" placeholder="Buscar por código o nombre" value="${esc(O().busca || '')}" autocomplete="off">
     <p class="muted small" data-sin-resultados hidden>Ningún equipo coincide con la búsqueda.</p>` : '';
-  const grid = d.equipos.length ? `${buscador}<div class="eq-grid">${lista.map(({ e, uso, pl, docEq, dis }) => {
+  const grid = propios.length ? `${buscador}<div class="eq-grid">${lista.map(({ e, uso, pl, docEq, dis }) => {
     const dq = normal(e.codigo + ' ' + e.nombre + ' ' + (e.patente || ''));
     return `<button class="eq ${f.equipoId === e.id ? 'sel' : ''}" data-act="opEquipo" data-id="${e.id}" data-q="${esc(dq)}" ${q && !dq.includes(q) ? 'hidden' : ''} ${dis ? 'disabled' : ''} aria-pressed="${f.equipoId === e.id}">
       <span class="code">${esc(e.codigo)}</span><span class="nm">${esc(e.nombre)}</span><span class="meta">${esc(pl ? pl.nombre : 'Sin plantilla')}</span>
@@ -230,7 +235,7 @@ function stEquipo() {
   return `<h1>¿Con qué equipo trabajás hoy?</h1>
     ${puedeEscanear() ? '<button class="btn dark block" data-act="opEscanear">Escanear QR del equipo</button>' : ''}${grid}
     <label class="f">Obra o frente de trabajo<select class="inp" id="f-obra" data-fl="obraId"><option value="">Elegí la obra</option>
-      ${d.obras.map(ob => `<option value="${ob.id}" ${ob.id === f.obraId ? 'selected' : ''}>${esc(ob.nombre)}</option>`).join('')}</select></label>
+      ${misObras().map(ob => `<option value="${ob.id}" ${ob.id === f.obraId ? 'selected' : ''}>${esc(ob.nombre)}</option>`).join('')}</select></label>
     ${e ? `<label class="f">${e.medidor === 'km' ? 'Odómetro inicial (km)' : 'Horómetro inicial (horas)'}
       <input class="inp num" id="f-med" type="number" inputmode="decimal" step="0.1" data-fl="medIni" value="${esc(f.medIni)}">
       <small>Último registrado: <span class="num">${fNum(e.ultimo_medidor)} ${unidad(e.medidor)}</span></small></label>
