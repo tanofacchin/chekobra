@@ -358,3 +358,24 @@ body{margin:0}
 @media (max-width:600px){.ed-item{grid-template-columns:1fr}.ed-item .ed-btns{justify-content:flex-end}}
 select.inp.ed-sel{width:auto;max-width:100%}
 .sum span{font-size:.68rem;letter-spacing:.03em}
+/* mapa de la flota */
+.mapa-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(240px,1fr);gap:14px;align-items:start}
+.mapa{height:520px;border-radius:12px;border:1px solid var(--line);z-index:0;background:var(--surface)}
+.mapa-lista{max-height:520px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+@media (max-width:800px){.mapa-grid{grid-template-columns:1fr}.mapa{height:380px}.mapa-lista{max-height:none}}
+.pin{display:inline-block;letter-spacing:0;transform:translate(-50%,-100%);padding:3px 8px;border-radius:8px;font:700 12px/1.2 var(--f-mono,monospace);color:#fff;background:#1d7f46;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);white-space:nowrap}
+.pin.bad{background:#b3261e}.pin.uso{background:#1a1e22;color:#f5b72e}.pin.off{background:#6b7280}
+.pin-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:#1d7f46}
+.pin-dot.bad{background:#b3261e}.pin-dot.uso{background:#f0a500}.pin-dot.off{background:#6b7280}
+/* línea de tiempo del equipo */
+.tl{display:flex;flex-direction:column}
+.tl-dia{font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 6px}
+.tl-it{display:grid;grid-template-columns:52px 14px 1fr;gap:10px;padding:6px 0;text-align:left;background:none;border:0;color:inherit;font:inherit;width:100%}
+button.tl-it{cursor:pointer}button.tl-it:hover .t{text-decoration:underline}
+.tl-it .h{font-variant-numeric:tabular-nums;color:var(--muted);font-size:.85rem;padding-top:2px}
+.tl-it .p{width:12px;height:12px;border-radius:50%;margin-top:5px;background:var(--muted);box-shadow:0 0 0 3px var(--surface)}
+.tl-it .p.ok{background:var(--ok)}.tl-it .p.warn{background:var(--warn)}.tl-it .p.bad{background:var(--bad)}
+.tl-it .t{font-weight:600}.tl-it .s{font-size:.88rem;color:var(--muted)}
+/* resumen del día */
+.rd-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.asig{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 12px}

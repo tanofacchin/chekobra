@@ -16,3 +16,5 @@
 | 2026-11-12 | Orden del checklist según la recorrida: exterior → cabina apagada → equipo encendido | Optimizar el tiempo del operario |
 | 2026-11-13 | Las órdenes de trabajo liberan el equipo al terminarse si no quedan fallas críticas | El mecánico cierra el circuito sin esperar al supervisor; queda registrado quién y con qué orden |
 | 2026-11-13 | Costo por obra: tarifa por hora (o por día) + combustible + reparaciones; lo que no tiene obra se reparte por horas | Las reparaciones y cargas sin obra son costos reales del equipo; repartirlas por uso es lo más justo y simple |
+| 2026-11-15 | Mapa con Leaflet y OpenStreetMap, sin clave ni costo | Alcanza para ver la última posición; si crece el uso hay que pasar a un proveedor de mapas pago (OSM no permite uso intensivo) |
+| 2026-11-15 | Sin asignaciones, el operario puede usar todo; con asignaciones, solo eso | No obliga a configurar nada a las empresas chicas |

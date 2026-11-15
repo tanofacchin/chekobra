@@ -38,6 +38,10 @@
   pantalla clara cuando el servidor rechaza un checklist, pestañas del panel a la vista en computadora, orden de
   trabajo directa desde un equipo bloqueado.
 
+- Supervisión (15/11): mapa de la flota (último checklist con GPS o JDLink), resumen del día en el panel y por correo
+  a las 19 h, historial del equipo en línea de tiempo, alerta de fallas repetidas o que vuelven tras repararse, y
+  asignación de equipos y obras por operario (la valida el servidor).
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).
