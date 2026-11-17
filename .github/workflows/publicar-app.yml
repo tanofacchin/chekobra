@@ -1,20 +1,76 @@
-# Publica la carpeta app/ en GitHub Pages cada vez que cambia en main.
+# Antes de publicar: pruebas de la base (Postgres local) y, si está configurado el proyecto de pruebas,
+# el recorrido completo en el navegador. Si algo falla, la app no se publica.
 name: Publicar app
 on:
   push:
     branches: [main]
-    paths: ['desarrollo/app/**', '.github/workflows/publicar-app.yml']
+    paths: ['desarrollo/**', '.github/workflows/publicar-app.yml']
+  pull_request:
+    paths: ['desarrollo/**']
   workflow_dispatch:
 permissions:
   contents: read
-  pages: write
-  id-token: write
 concurrency:
-  group: pages
+  group: publicar-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  publicar:
+  base:
+    name: Pruebas de la base
     runs-on: ubuntu-latest
+    defaults: { run: { working-directory: desarrollo } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci || npm install
+      - run: npm test
+
+  navegador:
+    name: Recorrido en el navegador (proyecto de pruebas)
+    needs: base
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: desarrollo } }
+    env:
+      PRUEBAS_URL: ${{ secrets.PRUEBAS_SUPABASE_URL }}
+      PRUEBAS_PUBLICA: ${{ secrets.PRUEBAS_SUPABASE_PUBLICA }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.PRUEBAS_SUPABASE_SERVICIO }}
+    steps:
+      - name: ¿Hay proyecto de pruebas?
+        id: hay
+        run: |
+          if [ -n "$PRUEBAS_URL" ] && [ -n "$PRUEBAS_PUBLICA" ] && [ -n "$SUPABASE_SERVICE_KEY" ]; then echo "si=1" >> "$GITHUB_OUTPUT"
+          else echo "::notice::Sin proyecto de pruebas configurado: se saltea el recorrido en el navegador."; fi
+      - uses: actions/checkout@v4
+        if: steps.hay.outputs.si
+      - uses: actions/setup-node@v4
+        if: steps.hay.outputs.si
+        with: { node-version: 22 }
+      - name: Preparar navegador
+        if: steps.hay.outputs.si
+        run: npm install --no-save playwright@1.49.1 && npx playwright install --with-deps chromium
+      - name: Recorrido completo
+        if: steps.hay.outputs.si
+        run: |
+          printf "export const SUPABASE_URL = '%s';\nexport const SUPABASE_ANON_KEY = '%s';\n" "$PRUEBAS_URL" "$PRUEBAS_PUBLICA" > app/js/config.js
+          (cd app && python3 -m http.server 8080 >/dev/null 2>&1 &)
+          sleep 1
+          APP_URL=http://localhost:8080/ SUPABASE_URL="$PRUEBAS_URL" node e2e/recorrido.mjs
+      - uses: actions/upload-artifact@v4
+        if: failure() && steps.hay.outputs.si
+        with: { name: capturas, path: desarrollo/e2e/capturas/ }
+
+  publicar:
+    name: Publicar
+    needs: [base, navegador]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: true
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}

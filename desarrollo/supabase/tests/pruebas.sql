@@ -9,6 +9,8 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000a3', 'operario2-a@ejemplo.com'),
   ('00000000-0000-0000-0000-0000000000b1', 'dueno-b@ejemplo.com');
 
+-- Sesiones con segundo factor verificado (dueño y administración lo necesitan); ver la sección de segundo factor al final.
+set request.jwt.claims = '{"aal":"aal2"}';
 create temp table ctx (k text primary key, v uuid);
 grant all on ctx to authenticated;
 
@@ -666,6 +668,78 @@ do $$ declare n int; begin
   n := public.encolar_resumenes('2026-11-11');
   if n <> 1 then raise exception 'FALLÓ: se esperaba 1 resumen encolado para el 11/11 (solo A trabajó), vinieron %', n; end if;
   if public.encolar_resumenes('2026-11-11') <> 0 then raise exception 'FALLÓ: el resumen se encoló dos veces'; end if;
+end $$;
+
+
+-- ===== Segundo factor y auditoría
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000a6', 'supervisor-a@ejemplo.com');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+insert into public.miembros (empresa_id, user_id, nombre, rol)
+  select v, '00000000-0000-0000-0000-0000000000a6', 'Supervisora A', 'supervisor' from ctx where k = 'A';
+update public.equipos set tarifa_hora = 1500, nombre = 'Retro del taller' where codigo = 'RE-OT';
+delete from public.obras where nombre = 'Ruta 9' and not exists (select 1 from public.jornadas j where j.obra_id = obras.id);
+select public.asignar(:'opA3_id', array[:'eqOT_id']::uuid[], '{}');
+select public.liberar_equipo(:'eqOT_id', 'Se cambió el cinturón');
+do $$ declare r public.auditoria; begin
+  select * into r from public.auditoria where tabla = 'equipos' and accion = 'cambio' order by id desc limit 1;
+  if r.quien <> 'Duena A' or r.registro <> 'RE-OT' or (r.despues->>'tarifa_hora')::numeric <> 1500 or r.antes->>'nombre' <> 'Retro taller' or r.despues ? 'ultimo_medidor' then
+    raise exception 'FALLÓ: auditoría del cambio de equipo %', row_to_json(r); end if;
+  if not exists (select 1 from public.auditoria where accion = 'alta' and tabla = 'miembros' and registro = 'Supervisora A') then raise exception 'FALLÓ: falta el alta de la supervisora'; end if;
+  if not exists (select 1 from public.auditoria where accion = 'asignacion' and registro = 'Operario A3' and despues->'equipos' = '["RE-OT"]') then raise exception 'FALLÓ: falta la asignación'; end if;
+  if not exists (select 1 from public.auditoria where accion = 'liberacion' and registro = 'RE-OT') then raise exception 'FALLÓ: falta la liberación'; end if;
+  if exists (select 1 from public.auditoria where tabla = 'jornadas') then raise exception 'FALLÓ: los checklists no deben auditarse al crearse'; end if;
+end $$;
+select public.asignar(:'opA3_id', '{}', '{}');
+-- nadie puede escribir ni borrar la auditoría
+select pg_temp.esperar_error($$delete from public.auditoria$$, 'permission denied');
+select pg_temp.esperar_error($$update public.auditoria set quien = 'otro'$$, 'permission denied');
+select pg_temp.esperar_error($$select public.auditar((select v from ctx where k = 'A'), 'x', 'x', null, null, null, null)$$, 'permission denied');
+reset role;
+-- un supervisor ve el panel pero no la auditoría
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a6';
+set request.jwt.claims = '{"aal":"aal1"}';
+do $$ begin
+  if not public.es_gestor((select v from ctx where k = 'A')) then raise exception 'FALLÓ: supervisor sin segundo factor debe poder entrar con aal1'; end if;
+  if exists (select 1 from public.auditoria) then raise exception 'FALLÓ: el supervisor ve la auditoría'; end if;
+  if public.segundo_factor_pendiente() <> 'nada' then raise exception 'FALLÓ: el supervisor no está obligado'; end if;
+end $$;
+reset role;
+-- el supervisor activa el segundo factor: desde ahí lo necesita
+insert into auth.mfa_factors (user_id, status) values ('00000000-0000-0000-0000-0000000000a6', 'verified');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a6';
+do $$ begin
+  if public.es_gestor((select v from ctx where k = 'A')) then raise exception 'FALLÓ: con factor activado, aal1 no alcanza'; end if;
+  if public.segundo_factor_pendiente() <> 'verificar' then raise exception 'FALLÓ: debe pedir el código'; end if;
+end $$;
+set request.jwt.claims = '{"aal":"aal2"}';
+do $$ begin if not public.es_gestor((select v from ctx where k = 'A')) then raise exception 'FALLÓ: con el código vale'; end if; end $$;
+reset role;
+-- la dueña sin segundo factor (aal1): no ve ni hace nada, y la app le pide activarlo
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+set request.jwt.claims = '{"aal":"aal1"}';
+do $$ begin
+  if public.es_miembro((select v from ctx where k = 'A')) or public.es_admin((select v from ctx where k = 'A')) then raise exception 'FALLÓ: dueña sin segundo factor'; end if;
+  if exists (select 1 from public.jornadas) or exists (select 1 from public.auditoria) or exists (select 1 from public.equipos) then raise exception 'FALLÓ: dueña sin segundo factor ve datos'; end if;
+  if (select count(*) from public.miembros) <> 1 then raise exception 'FALLÓ: debe ver su propia membresía para saber que tiene que activarlo'; end if;
+  if public.segundo_factor_pendiente() <> 'activar' then raise exception 'FALLÓ: debe pedir activar'; end if;
+end $$;
+select pg_temp.esperar_error(format($$select public.crear_orden(jsonb_build_object('equipo_id', %L, 'titulo', 'Sin código'))$$, :'eqOT_id'), 'No tenés permiso');
+reset role;
+-- los operarios (legajo y PIN) no cambian
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a5';
+do $$ begin if not public.es_miembro((select v from ctx where k = 'A')) then raise exception 'FALLÓ: el operario con aal1 debe seguir entrando'; end if; end $$;
+reset role;
+set request.jwt.claims = '{"aal":"aal2"}';
+
+-- borrar una empresa entera no choca con su auditoría
+do $$ begin
+  delete from public.empresas where slug = 'minera-b';
+  if exists (select 1 from public.auditoria where empresa_id = (select v from ctx where k = 'B')) then raise exception 'FALLÓ: quedó auditoría de una empresa borrada'; end if;
 end $$;
 
 \echo TODAS LAS PRUEBAS PASARON

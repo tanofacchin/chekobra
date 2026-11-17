@@ -14,6 +14,8 @@ import * as Tal from './taller.js';
 import * as Cs from './costos.js';
 import * as Mapa from './mapa.js';
 import * as Rd from './resumen.js';
+import * as Seg from './seguridad.js';
+import * as Au from './auditoria.js';
 
 const T = () => S.adm;
 export function reiniciar() {
@@ -65,6 +67,7 @@ export async function cargar() {
     if (a.tab === 'taller' && !(a.ot && a.ot.lista)) Tal.cargarTaller();
     if (a.tab === 'costos' && !(a.cs && a.cs.datos)) Cs.cargarCostos();
     if (a.tab === 'mapa') Mapa.cargarMapa();
+    if (a.tab === 'personal' && !a.seg) Seg.cargarSeguridad();
     a.err = '';
     if (a.tab === 'jornadas') await cargarJornadas();
   } catch (e) { a.err = msgError(e); }
@@ -117,9 +120,9 @@ export function vista() {
   if (a.ficha) return Rep.vFicha();
   if (a.etiquetas) return vEtiquetas(a.d.equipos.filter(e => a.etiquetas.includes(e.id)), S.m.empresa.nombre);
   if (a.detalle) return `<main class="wrap wide"><button class="btn ghost sm" data-act="admVolver" style="align-self:flex-start">← Volver</button>${vDetalle()}</main>`;
-  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['mapa', 'Mapa'], ['taller', `Taller${a.d.ordenes.length ? ` (${a.d.ordenes.length})` : ''}`], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['combustible', `Combustible${Cb.alertasCombustible(a.d.combustible).length ? ` (${Cb.alertasCombustible(a.d.combustible).length})` : ''}`], ['costos', 'Costos por obra'], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras']]
+  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['mapa', 'Mapa'], ['taller', `Taller${a.d.ordenes.length ? ` (${a.d.ordenes.length})` : ''}`], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['combustible', `Combustible${Cb.alertasCombustible(a.d.combustible).length ? ` (${Cb.alertasCombustible(a.d.combustible).length})` : ''}`], ['costos', 'Costos por obra'], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras'], ...(esAdmin() ? [['auditoria', 'Auditoría']] : [])]
     .map(([k, l]) => `<button class="tab ${a.tab === k ? 'on' : ''}" data-act="admTab" data-k="${k}">${l}</button>`).join('');
-  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, mapa: Mapa.vMapa, taller: Tal.vTaller, costos: Cs.vCostos, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
+  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, mapa: Mapa.vMapa, taller: Tal.vTaller, costos: Cs.vCostos, auditoria: Au.vAuditoria, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
   return `<main class="wrap wide"><section class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="eyebrow">${esc(fechaLarga())}</p><h1>${esc(S.m.empresa.nombre)}</h1></div>
     <div class="row"><button class="btn sm" data-act="rdAbrir">Resumen del día</button><button class="btn sm ghost" data-act="admRecargar">${a.cargando ? 'Actualizando…' : 'Actualizar'}</button></div></section>
     ${a.err ? `<div class="badbox">${esc(a.err)}</div>` : ''}<nav class="tabs">${tabs}</nav>${body}</main>`;
@@ -295,7 +298,7 @@ function vPersonal() {
       <div class="small muted">${d.consent[m.id] ? `Aceptó la política de privacidad el ${fFecha(d.consent[m.id])}` : 'Todavía no aceptó la política de privacidad'}${gestor(m) ? ` · ${m.recibir_avisos ? 'recibe avisos por correo' : 'no recibe avisos'}` : ''}</div>${txtAsig(m)}</div>
       <div class="row" style="justify-content:flex-end">${adm && m.bloqueado_en ? `<button class="btn sm primary" data-act="admDesbloquear" data-id="${m.id}">Desbloquear</button>` : ''}
       ${!gestor(m) && m.activo ? `<button class="btn sm ghost" data-act="admAsig" data-id="${m.id}">Equipos y obras</button>` : ''}
-      ${adm && gestor(m) && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admAvisos" data-id="${m.id}">${m.recibir_avisos ? 'Sin avisos' : 'Con avisos'}</button>` : ''}${adm && m.rol !== 'dueno' && m.legajo ? `<button class="btn sm ghost" data-act="admPin" data-id="${m.id}">Cambiar PIN</button>` : ''}
+      ${adm && gestor(m) && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admAvisos" data-id="${m.id}">${m.recibir_avisos ? 'Sin avisos' : 'Con avisos'}</button>` : ''}${adm && m.rol !== 'dueno' && m.legajo ? `<button class="btn sm ghost" data-act="admPin" data-id="${m.id}">Cambiar PIN</button>` : ''}${adm && !m.legajo && m.user_id !== S.user.id && (m.rol !== 'dueno' || S.m.rol === 'dueno') ? `<button class="btn sm ghost" data-act="admReset2fa" data-id="${m.id}">${a.confirm === '2fa' + m.id ? 'Tocá de nuevo: deberá activarla otra vez' : 'Restablecer verificación'}</button>` : ''}
       ${adm && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admActivo" data-id="${m.id}">${m.activo ? 'Desactivar' : 'Activar'}</button>` : ''}</div>
       ${a.pin && a.pin.id === m.id ? `<div style="grid-column:1/-1" class="row"><input class="inp num" id="pin-nuevo" data-pin="pin" inputmode="numeric" maxlength="6" placeholder="Nuevo PIN (6 números)" value="${esc(a.pin.pin)}" style="flex:1 1 180px">
         <button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admPinOk">Guardar</button></div>` : ''}${edAsig(m)}</div>`).join('');
@@ -307,7 +310,7 @@ function vPersonal() {
     : adm ? '<button class="btn sm dark" data-act="admPerNuevo" style="align-self:flex-start">Dar de alta a una persona</button>' : '';
   return `<div class="cols"><section class="card"><h2>Personal (${d.miembros.length})</h2>
       <p class="small muted">Operarios y mecánicos entran con el código de empresa <b class="mono">${esc(S.m.empresa.slug)}</b>, su legajo y su PIN.</p>${form}${per ? `<div>${per}</div>` : ''}</section>
-    <div class="stack"><section class="card"><h2>Obras</h2>${d.obras.length ? `<div>${d.obras.map(o => `<div class="att" style="grid-template-columns:1fr auto"><div class="t">${esc(o.nombre)}${o.activa ? '' : ' <span class="chip">Cerrada</span>'}</div><button class="btn sm ghost" data-act="admObra" data-id="${o.id}">${o.activa ? 'Cerrar' : 'Reabrir'}</button></div>`).join('')}</div>` : '<p class="muted">Sin obras cargadas.</p>'}
+    <div class="stack">${Seg.vSeguridad()}<section class="card"><h2>Obras</h2>${d.obras.length ? `<div>${d.obras.map(o => `<div class="att" style="grid-template-columns:1fr auto"><div class="t">${esc(o.nombre)}${o.activa ? '' : ' <span class="chip">Cerrada</span>'}</div><button class="btn sm ghost" data-act="admObra" data-id="${o.id}">${o.activa ? 'Cerrar' : 'Reabrir'}</button></div>`).join('')}</div>` : '<p class="muted">Sin obras cargadas.</p>'}
       <div class="row"><input class="inp" id="nueva-obra" data-ad="nuevaObra" value="${esc(a.nuevaObra)}" placeholder="Nombre de la obra" style="flex:1 1 200px"><button class="btn sm dark" data-act="admObraNueva">Agregar</button></div></section></div></div>`;
 }
 
@@ -367,8 +370,10 @@ export const A = {
     if (a.tab === 'taller') { a.ot ||= { filtro: 'abiertas', lista: null, det: null, nueva: null }; a.ot.det = null; Tal.cargarTaller(); }
     if (a.tab === 'costos') Cs.cargarCostos();
     if (a.tab === 'mapa') Mapa.cargarMapa();
+    if (a.tab === 'personal') Seg.cargarSeguridad();
+    if (a.tab === 'auditoria') Au.cargarAuditoria();
   },
-  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A, ...Cs.A, ...Mapa.A, ...Rd.A,
+  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A, ...Cs.A, ...Mapa.A, ...Rd.A, ...Au.A,
   admAsig: b => { const a = T(), xs = a.d.asig.filter(x => x.miembro_id === b.dataset.id); a.asig = { id: b.dataset.id, eq: xs.filter(x => x.equipo_id).map(x => x.equipo_id), ob: xs.filter(x => x.obra_id).map(x => x.obra_id) }; render(); },
   admAsigCancelar: () => { T().asig = null; render(); },
   admAsigGuardar: async () => { const a = T(), s = a.asig; if (await rpc('asignar', { p_miembro: s.id, p_equipos: s.eq, p_obras: s.ob }, s.eq.length || s.ob.length ? 'Asignación guardada.' : 'Sin restricciones: puede usar todos los equipos y obras.')) { a.asig = null; render(); } },
@@ -444,6 +449,12 @@ export const A = {
     if (error || (data && data.error)) { n.err = (data && data.error) || await errorFuncion(error); return render(); }
     T().addPer = null; toast(`Alta lista. Entra con: ${S.m.empresa.slug} · legajo ${n.legajo.trim()} · su PIN.`, 7000); cargar();
   },
+  admReset2fa: async b => {
+    const a = T(), k = '2fa' + b.dataset.id; if (a.confirm !== k) { a.confirm = k; return render(); } a.confirm = null; render();
+    const { data, error } = await sb.functions.invoke('operarios', { body: { accion: 'restablecer_2fa', miembro_id: b.dataset.id } });
+    if (error || (data && data.error)) return toast((data && data.error) || await errorFuncion(error), 7000);
+    toast(data.factores ? 'Verificación restablecida. La próxima vez que entre la va a activar de nuevo.' : 'Esa persona no tenía verificación activada.', 7000);
+  },
   admPin: b => { T().pin = { id: b.dataset.id, pin: '' }; render(); },
   admPinOk: async () => {
     const p = T().pin; if (!/^\d{6}$/.test(p.pin)) return toast('El PIN tiene que tener 6 números.');
@@ -489,7 +500,7 @@ async function errorFuncion(error) {
 
 export function alEscribir(el, v) {
   const a = T(); if (!a) return false;
-  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v) || Cs.alEscribir(el, v) || Rd.alEscribir(el, v)) return true;
+  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v) || Cs.alEscribir(el, v) || Rd.alEscribir(el, v) || Au.alEscribir(el, v)) return true;
   if (el.dataset.asig && a.asig) { const k = el.dataset.asig, id = el.dataset.id; a.asig[k] = v ? [...a.asig[k], id] : a.asig[k].filter(x => x !== id); return true; }
   if (el.id === 'adm-busca-eq') { a.buscaEq = v; filtrar(el.dataset.buscar, v); return true; }
   if (el.dataset.fa) { a.f[el.dataset.fa] = v; a.jornadas = null; render(); cargarJornadas().then(render); return true; }

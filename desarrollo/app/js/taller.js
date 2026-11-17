@@ -2,6 +2,7 @@
 import { esc, fFecha, fHora, fNum, unidad, toast, msgError, comprimir } from './util.js';
 import { sb } from './datos.js';
 import { S, render, esGestor } from './estado.js';
+import { botonVoz } from './voz.js';
 
 export const ESTADO = { abierta: ['Abierta', 'warn'], en_curso: ['En curso', 'acc'], esperando_repuestos: ['Esperando repuestos', 'warn'], terminada: ['Terminada', 'ok'], cancelada: ['Cancelada', 'plain'] };
 export const PRIORIDAD = { alta: ['Alta', 'bad'], media: ['Media', 'warn'], baja: ['Baja', 'plain'] };
@@ -114,6 +115,7 @@ function vTerminar(t) {
   const f = t.fin, o = t.det.o, crit = t.det.fallas.some(x => x.critica && x.estado === 'abierta');
   return `<section class="card"><h2>Terminar la orden</h2>
     <label class="f">¿Qué trabajo se hizo?<textarea class="inp" id="ot-tr" data-otf="trabajo" placeholder="Ej.: se cambió el cinturón de seguridad y la junta del cárter">${esc(f.trabajo)}</textarea></label>
+    ${botonVoz('ot-tr')}
     <div class="form-grid"><label class="f">Horas de taller<input class="inp num" id="ot-h" type="number" inputmode="decimal" data-otf="horas" value="${esc(f.horas)}"></label>
       <label class="f">Mano de obra ($) <small>Opcional</small><input class="inp num" id="ot-mo" type="number" inputmode="decimal" data-otf="mano" value="${esc(f.mano)}"></label>
       <label class="f">${o.equipo.medidor === 'km' ? 'Odómetro (km)' : 'Horómetro (h)'}<input class="inp num" id="ot-med" type="number" inputmode="decimal" data-otf="medidor" value="${esc(f.medidor)}"></label></div>

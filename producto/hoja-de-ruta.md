@@ -42,6 +42,11 @@
   a las 19 h, historial del equipo en línea de tiempo, alerta de fallas repetidas o que vuelven tras repararse, y
   asignación de equipos y obras por operario (la valida el servidor).
 
+- Seguridad y pruebas (17/11): verificación en dos pasos (app autenticadora) obligatoria para dueño y administración y
+  exigida por el servidor, con restablecimiento por otro administrador; registro de auditoría inalterable (altas,
+  cambios, borrados, liberaciones, asignaciones, PIN) con Excel; dictado por voz de las notas; prueba completa en el
+  navegador guardada en el repositorio y GitHub corre las pruebas antes de cada publicación.
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).

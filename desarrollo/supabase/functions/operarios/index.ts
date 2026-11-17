@@ -5,6 +5,8 @@
 //
 // POST { accion: "alta", empresa_id, nombre, legajo, pin, rol? }
 // POST { accion: "pin", miembro_id, pin }
+// POST { accion: "restablecer_2fa", miembro_id }   (quien perdió el celular de la verificación en dos pasos)
+// Todo queda en la auditoría de la empresa.
 // Solo dueño o admin de la empresa.
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 import { derivarClave, correoOperario } from "../_shared/pin.js";
@@ -40,6 +42,8 @@ Deno.serve(async (req) => {
     return data === true;
   };
   const pinOk = (p: string) => /^\d{6}$/.test(p ?? "");
+  const auditar = (empresa: string, accion: string, id: string, registro: string, detalle: Record<string, unknown>) =>
+    admin.rpc("auditar_servidor", { p_empresa: empresa, p_user: quien.user.id, p_accion: accion, p_tabla: "miembros", p_id: id, p_registro: registro, p_detalle: detalle });
 
   if (b.accion === "alta") {
     const nombre = (b.nombre ?? "").trim(), legajo = (b.legajo ?? "").trim();
@@ -69,19 +73,40 @@ Deno.serve(async (req) => {
       await admin.auth.admin.deleteUser(u.user.id);
       return json({ error: "No se pudo registrar a la persona: " + em.message }, 400);
     }
+    await auditar(b.empresa_id, "alta", m.id, nombre, { rol, legajo });
     return json({ ok: true, miembro_id: m.id });
   }
 
   if (b.accion === "pin") {
     if (!pinOk(b.pin)) return json({ error: "El PIN tiene que tener 6 números" }, 400);
-    const { data: m } = await admin.from("miembros").select("empresa_id, user_id, rol").eq("id", b.miembro_id).single();
+    const { data: m } = await admin.from("miembros").select("empresa_id, user_id, rol, nombre").eq("id", b.miembro_id).single();
     if (!m || !m.user_id) return json({ error: "Persona no encontrada" }, 404);
     if (m.rol === "dueno" || !(await esAdmin(m.empresa_id))) return json({ error: "No tenés permiso" }, 403);
     const { error } = await admin.auth.admin.updateUserById(m.user_id, { password: await derivarClave(pepper, m.user_id, b.pin) });
     if (error) return json({ error: "No se pudo cambiar el PIN" }, 400);
     // Un PIN nuevo también desbloquea el legajo.
     await admin.from("miembros").update({ intentos_fallidos: 0, bloqueado_en: null }).eq("id", b.miembro_id);
+    await auditar(m.empresa_id, "pin", b.miembro_id, m.nombre, {});
     return json({ ok: true });
+  }
+
+  if (b.accion === "restablecer_2fa") {
+    const { data: m } = await admin.from("miembros").select("empresa_id, user_id, rol, nombre").eq("id", b.miembro_id).single();
+    if (!m || !m.user_id) return json({ error: "Persona no encontrada" }, 404);
+    if (m.user_id === quien.user.id) return json({ error: "No podés restablecer tu propia verificación: pedíselo a otro administrador" }, 403);
+    if (!(await esAdmin(m.empresa_id))) return json({ error: "No tenés permiso" }, 403);
+    // Al dueño solo lo puede restablecer otro dueño de la misma empresa.
+    if (m.rol === "dueno") {
+      const { data: yo } = await admin.from("miembros").select("rol").eq("empresa_id", m.empresa_id).eq("user_id", quien.user.id).single();
+      if (yo?.rol !== "dueno") return json({ error: "Solo otro dueño puede restablecer la verificación del dueño. Escribí a soporte de CheckObra." }, 403);
+    }
+    const { data: fs, error: ef } = await admin.auth.admin.mfa.listFactors({ userId: m.user_id });
+    if (ef) return json({ error: "No se pudo leer la verificación de esa persona" }, 400);
+    for (const f of fs?.factors ?? []) await admin.auth.admin.mfa.deleteFactor({ userId: m.user_id, id: f.id });
+    // Cierra sus sesiones abiertas: quien tenga el celular perdido no puede seguir adentro.
+    await admin.auth.admin.signOut(m.user_id, "global").catch(() => {});
+    await auditar(m.empresa_id, "restablecer_2fa", b.miembro_id, m.nombre, { factores: (fs?.factors ?? []).length });
+    return json({ ok: true, factores: (fs?.factors ?? []).length });
   }
 
   return json({ error: "Acción desconocida" }, 400);

@@ -71,6 +71,19 @@ function tablaSimple(ws, fila, col, cabeceras, filas, formatos = []) {
   return { primera: fila + 1, ultima: fila + filas.length };
 }
 
+/* ------------------------------------------------------------ hoja simple (auditoría y otros listados) */
+export async function hojaSimple(nombre, tit, sub, cols, filas) {
+  await cargarLibs();
+  const wb = new window.ExcelJS.Workbook(); wb.creator = 'CheckObra'; wb.created = new Date();
+  const ws = wb.addWorksheet(nombre, { views: [{ state: 'frozen', ySplit: 4 }], pageSetup: { ...IMPRESION, printTitlesRow: '4:4' } });
+  titulo(ws, tit, [sub, `Generado el ${new Date().toLocaleString('es-AR')} por CheckObra`]);
+  encabezado(ws, 4, cols);
+  filas.forEach((f, i) => { const r = ws.getRow(5 + i); r.values = f.map(v => v instanceof Date ? xl(v) : v); r.eachCell(c => { c.border = borde; c.alignment = { wrapText: true, vertical: 'top' }; }); });
+  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + filas.length, column: cols.length } };
+  const buf = await wb.xlsx.writeBuffer();
+  return new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
 /* ------------------------------------------------------------ libro */
 export async function generarExcel(js, f, cargas = [], costos = null) {
   await cargarLibs();

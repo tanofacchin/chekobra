@@ -18,3 +18,6 @@
 | 2026-11-13 | Costo por obra: tarifa por hora (o por día) + combustible + reparaciones; lo que no tiene obra se reparte por horas | Las reparaciones y cargas sin obra son costos reales del equipo; repartirlas por uso es lo más justo y simple |
 | 2026-11-15 | Mapa con Leaflet y OpenStreetMap, sin clave ni costo | Alcanza para ver la última posición; si crece el uso hay que pasar a un proveedor de mapas pago (OSM no permite uso intensivo) |
 | 2026-11-15 | Sin asignaciones, el operario puede usar todo; con asignaciones, solo eso | No obliga a configurar nada a las empresas chicas |
+| 2026-11-17 | Segundo factor por app autenticadora (TOTP), exigido en la base (mi_rol) y no solo en la pantalla | Una contraseña robada de un administrador no alcanza para ver ni cambiar datos; los operarios siguen con legajo y PIN |
+| 2026-11-17 | Auditoría por disparadores en la base, sin acceso de escritura para nadie | Registra también lo que se cambie por fuera de la app; nadie puede borrar sus rastros |
+| 2026-11-17 | Las pruebas corren en GitHub antes de publicar; el recorrido en navegador usa un proyecto de pruebas aparte | Que un error no llegue a los operarios y que las pruebas nunca toquen datos de clientes |
