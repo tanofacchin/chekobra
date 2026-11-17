@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: desarrollo } }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm ci || npm install
@@ -41,7 +41,7 @@ jobs:
         run: |
           if [ -n "$PRUEBAS_URL" ] && [ -n "$PRUEBAS_PUBLICA" ] && [ -n "$SUPABASE_SERVICE_KEY" ]; then echo "si=1" >> "$GITHUB_OUTPUT"
           else echo "::notice::Sin proyecto de pruebas configurado: se saltea el recorrido en el navegador."; fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.hay.outputs.si
       - uses: actions/setup-node@v4
         if: steps.hay.outputs.si
@@ -76,7 +76,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
