@@ -6,6 +6,8 @@ import { S, setRender, render, esGestor, esMecanico } from './estado.js';
 import * as Op from './operario.js';
 import * as Adm from './admin.js';
 import * as Tal from './taller.js';
+import { dictar } from './voz.js';
+import * as Seg from './seguridad.js';
 
 const MARK = (n = 26) => `<svg width="${n}" height="${n}" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="5" fill="var(--accent)"/><path d="M7 13.5l4 4 8-9" fill="none" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
@@ -33,6 +35,7 @@ function vista() {
     case 'onboarding': return vTop() + vOnboarding();
     case 'elegir': return vTop() + vElegir();
     case 'privacidad': return vTop() + vPrivacidad();
+    case 'mfa': return Seg.vMfa();
     case 'politica': return `<main class="wrap politica"><button class="btn ghost sm" data-act="cerrarPolitica" style="align-self:flex-start">← Volver</button>${politicaHtml()}</main>`;
     default: return vTop() + (S.modoOperario ? Op.vista() : esGestor() ? Adm.vista() : esMecanico() ? Tal.vistaMecanico() : Op.vista());
   }
@@ -119,6 +122,13 @@ async function alIniciarSesion(user) {
   try { S.membresias = await misMembresias(user.id); }
   catch (e) { S.vista = 'login'; S.login.err = msgError(e); render(); return; }
   if (!S.membresias.length) { S.vista = 'onboarding'; render(); return; }
+  // Verificación en dos pasos (obligatoria para dueño y administración; la exige también el servidor).
+  // Va antes de elegir empresa: sin el código, el servidor no deja leer los datos de la empresa.
+  if (!/\.operarios\.invalid$/.test(user.email || '')) {
+    const p = await Seg.pendiente();
+    if (p === 'activar') return Seg.iniciarActivacion();
+    if (p === 'verificar') return Seg.iniciarVerificacion();
+  }
   const previa = ls.get('co_membresia', null);
   const m = S.membresias.find(x => x.id === previa) || (S.membresias.length === 1 ? S.membresias[0] : null);
   if (!m) { S.vista = 'elegir'; render(); return; }
@@ -200,10 +210,13 @@ const A = {
     try { await aceptarPrivacidad(S.m.empresa_id, S.m.id); S.priv = null; await entrar(S.m); }
     catch (e) { p.ocupado = false; p.err = msgError(e); render(); }
   },
+  dictar: b => dictar(b, m => toast(m, 6000)),
+  ...Seg.A,
   modo: () => { S.modoOperario = !S.modoOperario; render(); cargarVista(); },
 };
 
 const FORMS = {
+  mfa() { Seg.enviar(volver => { if (volver) { S.vista = 'app'; render(); Adm.A.admTab({ dataset: { k: 'personal' } }); } else alIniciarSesion(S.user); }); },
   async login() {
     const L = S.login; L.err = ''; L.aviso = '';
     if (L.modo === 'operario') {
@@ -261,6 +274,7 @@ document.addEventListener('input', e => {
   if (el.dataset.l) S.login[el.dataset.l] = v;
   else if (el.dataset.priv) S.priv.ok = v;
   else if (el.dataset.o) S.onb[el.dataset.o] = v;
+  else if (Seg.alEscribir(el, v)) { /* código del segundo factor */ }
   else (Tal.alEscribir(el, v) || Op.alEscribir(el, v) || Adm.alEscribir(el, v));
 });
 document.addEventListener('change', e => { if (e.target.dataset.file === 'ot') Tal.alArchivo(e.target); else if (e.target.dataset.file) Op.alArchivo(e.target); });
@@ -274,7 +288,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && S.
 guardarQr();
 const ult = ls.get('co_ultimo', null); if (ult) { S.login.slug = ult.slug; S.login.legajo = ult.legajo; }
 sb.auth.onAuthStateChange((ev, ses) => {
-  if (ev === 'SIGNED_IN' && ses && (!S.user || S.user.id !== ses.user.id)) alIniciarSesion(ses.user);
+  // Fuera del aviso: llamar a la sesión de Supabase desde adentro de onAuthStateChange la deja trabada.
+  if (ev === 'SIGNED_IN' && ses && (!S.user || S.user.id !== ses.user.id)) { const u = ses.user; S.user = u; setTimeout(() => alIniciarSesion(u), 0); }
   if (ev === 'SIGNED_OUT') { S.user = null; S.m = null; S.vista = 'login'; render(); }
 });
 (async () => {

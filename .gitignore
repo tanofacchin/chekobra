@@ -15,3 +15,6 @@ supabase/.temp/
 *secret*
 *credencial*
 service-account*.json
+
+# Capturas de las pruebas del navegador
+desarrollo/e2e/capturas/

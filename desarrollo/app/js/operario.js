@@ -5,6 +5,7 @@ import { cola } from './cola.js';
 import { estadoDoc, nombreDoc } from './mantenimiento.js';
 import { S, render } from './estado.js';
 import { sync } from './main.js';
+import { botonVoz } from './voz.js';
 
 const STEPS = ['Equipo y obra', 'Ubicación', 'Foto con el equipo', 'Checklist', 'Firma y envío'];
 const O = () => S.op;
@@ -294,6 +295,7 @@ function itemHtml(it, r) {
     </div>
     ${v === 'falla' ? `<div class="falla-box">
       <textarea class="inp" id="n-${dom}" data-nota="${it.id}" placeholder="¿Qué encontraste? (obligatorio)" maxlength="300">${esc(r.nota || '')}</textarea>
+      ${botonVoz('n-' + dom)}
       ${conFoto ? '' : `${r.foto ? `<img class="thumb" src="${fotoUrls[it.id]}" alt="Foto de la falla">` : ''}
       <label class="btn sm" for="ff-${dom}">${r.foto ? 'Cambiar foto' : 'Agregar foto de la falla'}</label>
       <input class="vh" type="file" id="ff-${dom}" accept="image/*" capture="environment" data-file="item" data-id="${it.id}">`}</div>` : ''}
@@ -398,6 +400,7 @@ function vCierre() {
       <label class="check"><input type="checkbox" id="c-3" data-ci="k3" ${c.k3 ? 'checked' : ''}><span>Motor apagado, llave retirada y cabina cerrada</span></label></section>
     <label class="check"><input type="checkbox" id="c-falla" data-ci="falla" data-vivo ${c.falla ? 'checked' : ''}><span><b>Apareció una falla durante el trabajo</b></span></label>
     <label class="f">Novedades del día <small>${c.falla ? 'Describí la falla (obligatorio)' : 'Opcional'}</small><textarea class="inp" id="c-nov" data-ci="novedades" maxlength="500">${esc(c.novedades)}</textarea></label>
+    ${botonVoz('c-nov')}
     ${c.err ? `<p class="err" role="alert">${esc(c.err)}</p>` : ''}
     <div class="row"><button class="btn" data-act="opCancelarCierre">Cancelar</button><button class="btn dark" data-act="opCerrar">Cerrar jornada</button></div></main>`;
 }
