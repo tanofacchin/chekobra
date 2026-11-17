@@ -37,6 +37,7 @@ jobs:
     steps:
       - name: ¿Hay proyecto de pruebas?
         id: hay
+        working-directory: .
         run: |
           if [ -n "$PRUEBAS_URL" ] && [ -n "$PRUEBAS_PUBLICA" ] && [ -n "$SUPABASE_SERVICE_KEY" ]; then echo "si=1" >> "$GITHUB_OUTPUT"
           else echo "::notice::Sin proyecto de pruebas configurado: se saltea el recorrido en el navegador."; fi
