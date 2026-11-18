@@ -1,4 +1,4 @@
-# Hoja de ruta
+# Hoja de ruta · Operapto
 
 ## Hecho
 
@@ -46,6 +46,8 @@
   exigida por el servidor, con restablecimiento por otro administrador; registro de auditoría inalterable (altas,
   cambios, borrados, liberaciones, asignaciones, PIN) con Excel; dictado por voz de las notas; prueba completa en el
   navegador guardada en el repositorio y GitHub corre las pruebas antes de cada publicación.
+
+- Cambio de nombre a Operapto (18/11) en la app, los correos y los documentos.
 
 ## Próximo (piloto Concivi)
 

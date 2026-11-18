@@ -14,7 +14,7 @@ Contacto en Concivi: _completar_ · Responsable de higiene y seguridad: _complet
 
 ## Propuesta de valor (borrador)
 
-> Ninguna máquina arranca sin un control real. CheckObra registra quién revisó, dónde, cuándo y cómo estaba el equipo,
+> Ninguna máquina arranca sin un control real. Operapto registra quién revisó, dónde, cuándo y cómo estaba el equipo,
 > bloquea las máquinas con fallas críticas y lo cruza con los datos de la propia máquina.
 
 ## Clientes potenciales

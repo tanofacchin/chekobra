@@ -85,7 +85,7 @@ export function vIndicadores() {
   const obraNom = f.obra ? (obras.find(o => o.id === f.obra) || {}).nombre : 'Todas las obras';
   const maxF = Math.max(0, ...x.fallas_frecuentes.map(z => z.veces));
   return `${filtros}<div class="informe">
-    <section class="solo-print"><p class="eyebrow">Informe de cumplimiento · CheckObra</p><h1>${esc(S.m.empresa.nombre)}</h1>
+    <section class="solo-print"><p class="eyebrow">Informe de cumplimiento · Operapto</p><h1>${esc(S.m.empresa.nombre)}</h1>
       <p>${fFecha(f.desde + 'T12:00:00')} al ${fFecha(f.hasta + 'T12:00:00')} · ${esc(obraNom)} · emitido el ${fFecha(new Date())}</p></section>
     <div class="kpis">
       <div class="kpi"><b>${tot}</b><span>Checklists</span></div>

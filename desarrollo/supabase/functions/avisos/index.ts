@@ -1,7 +1,7 @@
 // Envía por correo los avisos pendientes (equipo bloqueado y resumen del día) a supervisores y administradores.
 // La llama la base de datos cada 2 minutos (pg_cron) con el header x-cron-secret.
 //
-// Secretos: CRON_SECRET, RESEND_API_KEY, AVISOS_REMITENTE (ej.: "CheckObra <avisos@tudominio.com>"), APP_URL.
+// Secretos: CRON_SECRET, RESEND_API_KEY, AVISOS_REMITENTE (ej.: "Operapto <avisos@tudominio.com>"), APP_URL.
 // Sin RESEND_API_KEY los avisos quedan pendientes y se ven igual en el panel.
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 
@@ -23,7 +23,7 @@ function correoBloqueo(d: Record<string, string>) {
         <tr><td style="color:#666;padding:4px 12px 4px 0">Cuándo</td><td>${esc(fecha(d.cuando))} h</td></tr>
       </table>
       <p style="margin-top:18px"><a href="${esc(env("APP_URL", "#"))}" style="background:#f0a500;color:#1a1e22;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Abrir el panel</a></p>
-      <p style="color:#888;font-size:12px">${esc(d.empresa)} · Aviso automático de CheckObra. Podés dejar de recibirlos desde Personal y obras.</p>
+      <p style="color:#888;font-size:12px">${esc(d.empresa)} · Aviso automático de Operapto. Podés dejar de recibirlos desde Personal y obras.</p>
     </div></div>`;
   const texto = `Equipo bloqueado: ${d.codigo} · ${d.equipo}\nFallas: ${d.motivo}\nOperario: ${d.operario}\nObra: ${d.obra || "—"}\nCuándo: ${fecha(d.cuando)} h\n\nAbrir el panel: ${env("APP_URL")}`;
   return { asunto, html, texto };
@@ -58,7 +58,7 @@ function correoResumen(d: any) {
       ${sec("Equipos bloqueados", bloq, "#b3261e")}${sec("Fallas del día", fallas)}${sec("Fallas repetidas", rep, "#9a5b00")}${sec("Jornadas sin cerrar", abiertas, "#9a5b00")}${sec("Por obra", obras)}${sec("Taller: trabajos terminados", taller)}
       ${d.sin_checklist.length ? `<p style="font-size:13px;color:#555;margin-top:16px"><b>Operativos sin checklist (${d.sin_checklist.length}):</b> ${d.sin_checklist.map(esc).join(", ")}</p>` : ""}
       <p style="margin-top:18px"><a href="${esc(env("APP_URL", "#"))}" style="background:#f0a500;color:#1a1e22;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Abrir el panel</a></p>
-      <p style="color:#888;font-size:12px">Resumen automático de CheckObra, todos los días a las 19 h. Podés dejar de recibirlo desde Personal y obras.</p>
+      <p style="color:#888;font-size:12px">Resumen automático de Operapto, todos los días a las 19 h. Podés dejar de recibirlo desde Personal y obras.</p>
     </div></div>`;
   const limpio = (s: string) => s.replace(/<[^>]+>/g, "");
   const texto = [`Resumen del ${dia} · ${d.empresa}`, `${d.checklists} checklists · ${d.equipos_trabajaron} equipos · ${n(d.horas)} h · ${d.bloqueados.length} bloqueados`,

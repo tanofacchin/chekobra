@@ -1,4 +1,4 @@
-<title>CheckObra</title>
+<title>Operapto</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -506,7 +506,7 @@ function vTop() {
     : S.conn === 'local' ? 'Modo local: esta vista no tiene la base compartida. Los datos quedan solo en este dispositivo.'
     : S.pend ? `${S.pend} registro${S.pend > 1 ? 's' : ''} esperando señal para enviarse.` : '';
   return `<header class="top"><div class="top-in">
-    <div class="brand">${MARK}<span>CheckObra</span></div>
+    <div class="brand">${MARK}<span>Operapto</span></div>
     <div class="who"><b>${esc(S.user.nombre)}</b><span>${S.user.rol === 'op' ? 'Operario' : 'Administración'}</span></div>
     <span class="conn ${c}" title="${esc(t)}" aria-label="${esc(t)}"></span>
     <button class="btn-s" data-act="logout">Salir</button>
@@ -530,7 +530,7 @@ function vLogin() {
     : k === 'ok' ? `<button class="key fn" data-act="pin" data-k="clr" aria-label="Limpiar">Limpiar</button>`
     : `<button class="key" data-act="pin" data-k="${k}">${k}</button>`).join('');
   return `<main class="login">
-    <div class="login-brand">${MARK.replace('width="26" height="26"', 'width="54" height="54"')}<h1>CheckObra</h1><p class="muted">Control pre-operacional de equipos · ${esc(cfg().empresa || 'Mi Empresa')}</p></div>
+    <div class="login-brand">${MARK.replace('width="26" height="26"', 'width="54" height="54"')}<h1>Operapto</h1><p class="muted">Control pre-operacional de equipos · ${esc(cfg().empresa || 'Mi Empresa')}</p></div>
     <p class="eyebrow">Ingresá tu PIN</p>
     <div class="dots ${S.pinErr ? 'shake' : ''}" aria-live="polite">${dots}</div>
     ${S.pinErr ? '<p class="err">PIN incorrecto o usuario inactivo</p>' : ''}
@@ -753,7 +753,7 @@ async function onFile(input) {
     const f = S.flow, e = eqById(f.equipoId), now = Date.now();
     if (input.dataset.file === 'selfie') {
       const g = f.gps;
-      const marca = [`CheckObra · ${e.codigo} ${e.nombre}`, `${S.user.nombre} · ${fFecha(now)} ${fHora(now)} h`,
+      const marca = [`Operapto · ${e.codigo} ${e.nombre}`, `${S.user.nombre} · ${fFecha(now)} ${fHora(now)} h`,
         g ? `GPS ${g.lat.toFixed(5)}, ${g.lng.toFixed(5)} ±${Math.round(g.acc)} m` : `Sin GPS · ${f.ubicRef}`, f.obra];
       f.selfie = await compress(url, 720, 0.62, marca); f.selfieMs = now; f.err = '';
       render();
@@ -1040,7 +1040,7 @@ function csvTexto() {
   return [head, ...rows].map(r => r.map(q).join(';')).join('\r\n');
 }
 async function exportar() {
-  const csv = csvTexto(), name = `checkobra-jornadas-${dayKey(Date.now())}.csv`;
+  const csv = csvTexto(), name = `operapto-jornadas-${dayKey(Date.now())}.csv`;
   let dl = null; try { dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null; } catch (e) {}
   if (dl) { try { await dl.save({ filename: name, data: '﻿' + csv }); toast('Archivo listo para abrir en Excel.'); return; } catch (e) { if (e && e.code === 'declined') return; } }
   S.adm.csv = csv; render();

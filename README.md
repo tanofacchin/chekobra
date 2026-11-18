@@ -1,4 +1,4 @@
-# CheckObra — espacio de trabajo
+# Operapto — espacio de trabajo
 
 **CONFIDENCIAL.** Todo el contenido de este repositorio es propiedad de su titular. Prohibida su copia, distribución o uso
 sin autorización escrita. Ver [LICENSE](LICENSE).

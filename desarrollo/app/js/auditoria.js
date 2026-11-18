@@ -67,7 +67,7 @@ export const A = {
       const blob = await hojaSimple('Auditoría', `Registro de auditoría · ${S.m.empresa.nombre}`, `Del ${f.desde.split('-').reverse().join('/')} al ${f.hasta.split('-').reverse().join('/')}`,
         [{ t: 'Fecha y hora', w: 17, f: 'dd/mm/yyyy hh:mm' }, { t: 'Quién', w: 24 }, { t: 'Rol', w: 12 }, { t: 'Acción', w: 26 }, { t: 'Sobre', w: 30 }, { t: 'Detalle', w: 80 }],
         f.filas.map(r => [new Date(r.cuando), r.quien || '', ROL[r.rol] || r.rol || '', textoAccion(r), r.registro || '', detalle(r)]));
-      descargar(`checkobra-${S.m.empresa.slug}-auditoria-${f.desde}-al-${f.hasta}.xlsx`, blob, blob.type);
+      descargar(`operapto-${S.m.empresa.slug}-auditoria-${f.desde}-al-${f.hasta}.xlsx`, blob, blob.type);
     } catch (e) { toast('No se pudo armar el Excel: ' + msgError(e), 6000); }
   },
 };

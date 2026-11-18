@@ -7,7 +7,7 @@ Inventario de todo lo que, si se pierde o se filtra, compromete el producto. **A
 | Servicio | Para qué | Titular | 2FA | Quién más accede |
 |---|---|---|---|---|
 | GitHub `tanofacchin` | Código, publicación de la app | Titular | ☐ | Claude Code (app de GitHub, solo `chekobra`) |
-| Supabase (organización con proyecto `checkobra`, São Paulo) | Base de datos, usuarios, fotos, funciones | Titular | ☐ | — |
+| Supabase (organización con proyecto `checkobra` —nombre interno—, São Paulo) | Base de datos, usuarios, fotos, funciones | Titular | ☐ | — |
 | Correo principal | Recuperación de todas las cuentas | Titular | ☐ | — |
 | John Deere developer (pendiente) | API JDLink | A nombre del producto | ☐ | — |
 | Dominio (pendiente) | Dirección propia de la app | A nombre del producto | ☐ | — |

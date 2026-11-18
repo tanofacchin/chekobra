@@ -1,4 +1,4 @@
-// Prueba de punta a punta en el navegador contra un proyecto de Supabase (idealmente "checkobra-pruebas").
+// Prueba de punta a punta en el navegador contra un proyecto de Supabase (idealmente "operapto-pruebas").
 // Crea una empresa nueva con nombre al azar, recorre el circuito principal y al final la borra.
 //
 //   APP_URL=http://localhost:8080/ SUPABASE_URL=https://xxx.supabase.co SUPABASE_SERVICE_KEY=... node e2e/recorrido.mjs
@@ -58,6 +58,10 @@ try {
   // imagen de prueba para las fotos
   await p.goto(APP); await ver('Operario');
   writeFileSync(foto, Buffer.from(await p.evaluate(() => { const c = document.createElement('canvas'); c.width = 800; c.height = 600; const x = c.getContext('2d'); x.fillStyle = '#7a8a5a'; x.fillRect(0, 0, 800, 600); x.fillStyle = '#f0b400'; x.fillRect(200, 200, 400, 200); return c.toDataURL('image/png').split(',')[1]; }), 'base64'));
+  // la pantalla de ingreso entra entera en un celular (un estilo pisado ya corrió el campo del PIN fuera de lugar)
+  await p.setViewportSize({ width: 390, height: 844 });
+  for (const id of ['#l-slug', '#l-leg', '#l-pin']) { const r = await (await p.$(id)).boundingBox(); if (!r || r.x < 0 || r.x + r.width > 390) throw new Error(`campo ${id} fuera de lugar`); }
+  paso('pantalla de ingreso en el celular');
   duenaId = (await api('/auth/v1/admin/users', { method: 'POST', body: JSON.stringify({ email: correo, password: clave, email_confirm: true }) })).id;
 
   const salir = async () => { await p.click('[data-act="salir"]'); await ver('Supervisión'); };

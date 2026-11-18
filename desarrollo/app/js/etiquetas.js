@@ -17,6 +17,6 @@ export function vEtiquetas(equipos, empresa) {
       <div class="row"><button class="btn" data-act="etqCerrar">Volver</button><button class="btn primary" data-act="etqImprimir">Imprimir</button></div></div>
     <div class="etiquetas">${equipos.map(e => `<div class="etiqueta">
       <div class="etq-qr">${qrSvg(urlEquipo(e.id))}</div>
-      <div class="etq-txt"><span class="etq-marca">CheckObra</span><b class="etq-cod">${esc(e.codigo)}</b><span class="etq-nom">${esc(e.nombre)}</span>
+      <div class="etq-txt"><span class="etq-marca">Operapto</span><b class="etq-cod">${esc(e.codigo)}</b><span class="etq-nom">${esc(e.nombre)}</span>
         <span class="etq-ins">Escaneá antes de operar</span><span class="etq-emp">${esc(empresa)}</span></div></div>`).join('')}</div></main>`;
 }

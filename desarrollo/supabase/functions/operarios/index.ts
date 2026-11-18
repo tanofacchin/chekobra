@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
     // Al dueño solo lo puede restablecer otro dueño de la misma empresa.
     if (m.rol === "dueno") {
       const { data: yo } = await admin.from("miembros").select("rol").eq("empresa_id", m.empresa_id).eq("user_id", quien.user.id).single();
-      if (yo?.rol !== "dueno") return json({ error: "Solo otro dueño puede restablecer la verificación del dueño. Escribí a soporte de CheckObra." }, 403);
+      if (yo?.rol !== "dueno") return json({ error: "Solo otro dueño puede restablecer la verificación del dueño. Escribí a soporte de Operapto." }, 403);
     }
     const { data: fs, error: ef } = await admin.auth.admin.mfa.listFactors({ userId: m.user_id });
     if (ef) return json({ error: "No se pudo leer la verificación de esa persona" }, 400);

@@ -11,8 +11,8 @@ La mejor protección práctica es combinar las tres con velocidad: clientes real
 | Qué | Cómo se protege | Dónde | Estado |
 |---|---|---|---|
 | Código fuente, plantillas, base de datos | Derecho de autor (Ley 11.723). **Registro de software** como obra inédita | DNDA (Dirección Nacional del Derecho de Autor), trámite en línea | ☐ |
-| Nombre "CheckObra" y logo | **Registro de marca** en las clases 9 (software) y 42 (servicios de software) | INPI. Antes, buscar si ya existe una marca igual o parecida | ☐ |
-| Dominio (`checkobra.com.ar`, `.com`, `.app`) | Registro a nombre del titular | NIC Argentina y registradores internacionales | ☐ |
+| Nombre "Operapto" y logo | **Registro de marca** en las clases 9 (software) y 42 (servicios de software) | INPI. Antes, buscar si ya existe una marca igual o parecida | ☐ |
+| Dominio (`operapto.com.ar`, `.com`, `.app`) | Registro a nombre del titular | NIC Argentina y registradores internacionales | ☐ |
 | Estrategia, precios, código | Secreto comercial (Ley 24.766) + acuerdos de confidencialidad | Contratos | ☐ |
 
 El registro en la DNDA conviene repetirlo con cada versión importante: deja una fecha cierta de autoría.
@@ -22,7 +22,7 @@ El registro en la DNDA conviene repetirlo con cada versión importante: deja una
 - **Acuerdo de confidencialidad (NDA)** con cualquiera que vea el código, la estrategia o los datos: desarrolladores, socios, inversores.
 - **Cesión de derechos** con todo el que programe o diseñe: lo que hacen pasa a ser del titular (sin esto, el autor es quien lo escribió).
 - **Términos y condiciones del servicio** para los clientes (SaaS): uso permitido, prohibición de copiar o revender, responsabilidad, pagos, baja.
-- **Acuerdo de tratamiento de datos** con cada empresa cliente: la empresa es responsable de los datos de sus operarios; CheckObra los procesa por cuenta de ella.
+- **Acuerdo de tratamiento de datos** con cada empresa cliente: la empresa es responsable de los datos de sus operarios; Operapto los procesa por cuenta de ella.
 - **Acuerdo piloto con Concivi**: alcance, plazo, precio o gratuidad, confidencialidad y permiso para usarlos como referencia.
 
 ## 3. Datos personales (Ley 25.326)

@@ -33,7 +33,7 @@ export function vPlantillas() {
       ${esAdmin() ? '<button class="btn sm dark" data-act="edNueva">Nueva plantilla</button>' : ''}</div>
     <div>${filas.map(f => `<div class="eqrow"><span class="eqcode">${f.propias.length ? 'Propia v' + f.vig.version : 'Base'}</span>
       <div><b>${esc(f.vig.nombre)}</b> <span class="chip plain">${esc((RUBROS.find(r => r[0] === f.vig.rubro) || [, f.vig.rubro])[1])}</span>
-        <div class="small muted">${f.n} puntos · ${f.c} críticos · se mide en ${f.vig.medidor === 'km' ? 'km' : 'horas'}${f.propias.length && f.base ? ' · basada en la plantilla de CheckObra' : ''}</div></div>
+        <div class="small muted">${f.n} puntos · ${f.c} críticos · se mide en ${f.vig.medidor === 'km' ? 'km' : 'horas'}${f.propias.length && f.base ? ' · basada en la plantilla de Operapto' : ''}</div></div>
       <div class="row" style="justify-content:flex-end">${esAdmin() ? `<button class="btn sm ${f.propias.length ? '' : 'primary'}" data-act="edAbrir" data-clave="${esc(f.clave)}">${f.propias.length ? 'Editar' : 'Personalizar'}</button>
         ${f.propias.length && f.base ? `<button class="btn sm ghost" data-act="edVolverBase" data-clave="${esc(f.clave)}">${a.confirm === 'base-' + f.clave ? 'Tocá de nuevo para confirmar' : 'Volver a la de base'}</button>` : ''}` : ''}</div></div>`).join('')}</div></section>`;
 }

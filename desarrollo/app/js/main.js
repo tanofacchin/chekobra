@@ -29,7 +29,7 @@ document.addEventListener('focusout', () => setTimeout(() => { if (pendiente) { 
 
 function vista() {
   switch (S.vista) {
-    case 'cargando': return `<main class="login"><div class="login-brand">${MARK(54)}<h1>CheckObra</h1><p class="muted">Cargando…</p></div></main>`;
+    case 'cargando': return `<main class="login"><div class="login-brand">${MARK(54)}<h1>Operapto</h1><p class="muted">Cargando…</p></div></main>`;
     case 'login': return vLogin();
     case 'registro': return vRegistro();
     case 'onboarding': return vTop() + vOnboarding();
@@ -48,7 +48,7 @@ function vTop() {
   const ban = !S.online ? `Sin señal. Podés seguir cargando: se envía solo cuando vuelva la conexión.${S.pendientes ? ` (${S.pendientes} pendiente${S.pendientes > 1 ? 's' : ''})` : ''}`
     : S.pendientes ? `${S.pendientes} registro${S.pendientes > 1 ? 's' : ''} enviándose…` : '';
   return `<header class="top"><div class="top-in">
-    <div class="brand">${MARK()}<span>CheckObra</span></div>
+    <div class="brand">${MARK()}<span>Operapto</span></div>
     <div class="who"><b>${esc(nom)}</b><span>${esc(rol)}${S.m ? ' · ' + esc(S.m.empresa.nombre) : ''}</span></div>
     <span class="conn ${estado[0]}" title="${estado[1]}" aria-label="${estado[1]}"></span>
     ${S.m && (esGestor() || esMecanico()) ? `<button class="btn-s" data-act="modo">${S.modoOperario ? (esGestor() ? 'Panel' : 'Taller') : 'Checklist'}</button>` : ''}
@@ -60,7 +60,7 @@ function vTop() {
 /* ---------------------------------------------------------------- ingreso */
 function vLogin() {
   const L = S.login, op = L.modo === 'operario';
-  return `<main class="login"><div class="login-brand">${MARK(54)}<h1>CheckObra</h1><p class="muted">Control pre-operacional de equipos</p></div>
+  return `<main class="login"><div class="login-brand">${MARK(54)}<h1>Operapto</h1><p class="muted">Control pre-operacional de equipos</p></div>
     <div class="seg-tabs" role="tablist">
       <button role="tab" aria-selected="${op}" class="${op ? 'on' : ''}" data-act="modoLogin" data-m="operario">Operario</button>
       <button role="tab" aria-selected="${!op}" class="${!op ? 'on' : ''}" data-act="modoLogin" data-m="correo">Supervisión</button></div>
@@ -75,7 +75,7 @@ function vLogin() {
       ${L.err ? `<p class="err" role="alert">${esc(L.err)}</p>` : ''}${L.aviso ? `<div class="warnbox">${esc(L.aviso)}</div>` : ''}
       <button class="btn primary block" type="submit" ${L.ocupado ? 'disabled' : ''}>${L.ocupado ? 'Ingresando…' : 'Ingresar'}</button>
     </form>
-    <p class="hint">${op ? 'El código de empresa, el legajo y el PIN te los da tu supervisor.<br><button class="linkbtn" data-act="verPolitica">Política de privacidad</button>' : '¿Tu empresa todavía no usa CheckObra? <button class="linkbtn" data-act="irRegistro">Crear cuenta</button>'}</p>
+    <p class="hint">${op ? 'El código de empresa, el legajo y el PIN te los da tu supervisor.<br><button class="linkbtn" data-act="verPolitica">Política de privacidad</button>' : '¿Tu empresa todavía no usa Operapto? <button class="linkbtn" data-act="irRegistro">Crear cuenta</button>'}</p>
   </main>`;
 }
 function vRegistro() {
@@ -103,8 +103,8 @@ function vOnboarding() {
 }
 function vPrivacidad() {
   const p = S.priv || {};
-  return `<main class="wrap"><section><p class="eyebrow">Antes de empezar</p><h1>Tus datos en CheckObra</h1>
-    <p class="muted">${esc(S.m.empresa.nombre)} usa CheckObra para registrar el control de los equipos. Esto es lo que se guarda:</p></section>
+  return `<main class="wrap"><section><p class="eyebrow">Antes de empezar</p><h1>Tus datos en Operapto</h1>
+    <p class="muted">${esc(S.m.empresa.nombre)} usa Operapto para registrar el control de los equipos. Esto es lo que se guarda:</p></section>
     <section class="card"><dl class="kv priv">${RESUMEN.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${esc(d)}</dd>`).join('')}</dl>
       <button class="linkbtn" data-act="verPolitica" style="align-self:flex-start">Leer la política de privacidad completa</button></section>
     <label class="check"><input type="checkbox" id="priv-ok" data-priv="ok" ${p.ok ? 'checked' : ''}><span>Leí y acepto que se traten mis datos para estos fines.</span></label>

@@ -25,7 +25,7 @@ y que el dueño de la flota lo vea en el momento.
 
 ## Competencia (investigación inicial)
 
-| Producto | Fortaleza | Debilidad frente a CheckObra |
+| Producto | Fortaleza | Debilidad frente a Operapto |
 |---|---|---|
 | HCSS (Equipment360 / Safety) | Muy completo en construcción pesada, EE.UU. | Caro, en inglés, pensado para empresas grandes |
 | Tenna | Telemetría + inspecciones | Mercado de EE.UU. |

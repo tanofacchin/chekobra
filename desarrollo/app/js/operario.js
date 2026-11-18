@@ -109,7 +109,7 @@ async function abrirEscaner() {
       try {
         const texto = await leer(); if (!texto) return;
         const u = new URL(texto, location.href), id = u.searchParams.get('equipo');
-        if (!id) return toast('Ese código no es de un equipo de CheckObra.');
+        if (!id) return toast('Ese código no es de un equipo de Operapto.');
         cerrarEscaner(); elegirPorQr(id);
       } catch { /* sigue intentando */ } finally { ocupado = false; }
     }, 250);
@@ -616,7 +616,7 @@ export async function alArchivo(input) {
   try {
     if (input.dataset.file === 'selfie') {
       const g = f.gps, ob = o.d.obras.find(x => x.id === f.obraId);
-      f.selfie = await comprimir(file, 1080, 0.7, [`CheckObra · ${e.codigo} ${e.nombre}`, `${S.m.nombre} · ${fFecha(now)} ${fHora(now)} h`,
+      f.selfie = await comprimir(file, 1080, 0.7, [`Operapto · ${e.codigo} ${e.nombre}`, `${S.m.nombre} · ${fFecha(now)} ${fHora(now)} h`,
         g ? `GPS ${g.lat.toFixed(5)}, ${g.lng.toFixed(5)} ±${Math.round(g.acc)} m` : `Sin GPS · ${f.ubicRef}`, ob ? ob.nombre : '']);
       if (selfieUrl) URL.revokeObjectURL(selfieUrl); selfieUrl = null; f.err = '';
       render();

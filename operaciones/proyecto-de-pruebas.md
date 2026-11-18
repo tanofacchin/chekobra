@@ -1,10 +1,10 @@
-# Proyecto de pruebas (checkobra-pruebas)
+# Proyecto de pruebas (operapto-pruebas)
 
 Para que las pruebas del navegador no toquen datos de clientes y corran solas antes de cada publicación.
 
 ## Una sola vez
 
-1. En supabase.com: **New project** → nombre `checkobra-pruebas`, región **South America (São Paulo)**, plan gratuito.
+1. En supabase.com: **New project** → nombre `operapto-pruebas`, región **South America (São Paulo)**, plan gratuito.
    Anotá el **Project ref** (está en la URL: supabase.com/dashboard/project/<ref>).
 2. Decile a Claude el ref: corre `desarrollo/scripts/preparar-proyecto.sh <ref>`, que aplica las migraciones,
    despliega las funciones y crea el secreto PIN_PEPPER.
@@ -23,5 +23,5 @@ Primero `scripts/preparar-proyecto.sh <ref-de-pruebas>` (aplica solo lo que falt
 ## Recuperar el acceso de un administrador que perdió el celular
 
 - Otro dueño o administrador de la empresa: Personal y obras → la persona → **Restablecer verificación**.
-- Si es el único dueño: desde la base (soporte de CheckObra), borrar sus factores en `auth.mfa_factors`
+- Si es el único dueño: desde la base (soporte de Operapto), borrar sus factores en `auth.mfa_factors`
   después de confirmar la identidad por otro medio. Queda registrado en la auditoría de Supabase.

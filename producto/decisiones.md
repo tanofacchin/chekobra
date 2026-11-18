@@ -21,3 +21,4 @@
 | 2026-11-17 | Segundo factor por app autenticadora (TOTP), exigido en la base (mi_rol) y no solo en la pantalla | Una contraseña robada de un administrador no alcanza para ver ni cambiar datos; los operarios siguen con legajo y PIN |
 | 2026-11-17 | Auditoría por disparadores en la base, sin acceso de escritura para nadie | Registra también lo que se cambie por fuera de la app; nadie puede borrar sus rastros |
 | 2026-11-17 | Las pruebas corren en GitHub antes de publicar; el recorrido en navegador usa un proyecto de pruebas aparte | Que un error no llegue a los operarios y que las pruebas nunca toquen datos de clientes |
+| 2026-11-18 | El producto se llama **Operapto** ("operar" + "apto") | Existe otro "CheckObra" en Brasil. Quedan con el nombre viejo, por ahora, el repositorio y la dirección de GitHub Pages (se mudan con el dominio propio) y los nombres internos que no se ven (proyecto de Supabase, base local del celular, clave de sesión) |

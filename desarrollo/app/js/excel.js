@@ -74,9 +74,9 @@ function tablaSimple(ws, fila, col, cabeceras, filas, formatos = []) {
 /* ------------------------------------------------------------ hoja simple (auditoría y otros listados) */
 export async function hojaSimple(nombre, tit, sub, cols, filas) {
   await cargarLibs();
-  const wb = new window.ExcelJS.Workbook(); wb.creator = 'CheckObra'; wb.created = new Date();
+  const wb = new window.ExcelJS.Workbook(); wb.creator = 'Operapto'; wb.created = new Date();
   const ws = wb.addWorksheet(nombre, { views: [{ state: 'frozen', ySplit: 4 }], pageSetup: { ...IMPRESION, printTitlesRow: '4:4' } });
-  titulo(ws, tit, [sub, `Generado el ${new Date().toLocaleString('es-AR')} por CheckObra`]);
+  titulo(ws, tit, [sub, `Generado el ${new Date().toLocaleString('es-AR')} por Operapto`]);
   encabezado(ws, 4, cols);
   filas.forEach((f, i) => { const r = ws.getRow(5 + i); r.values = f.map(v => v instanceof Date ? xl(v) : v); r.eachCell(c => { c.border = borde; c.alignment = { wrapText: true, vertical: 'top' }; }); });
   ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + filas.length, column: cols.length } };
@@ -88,10 +88,10 @@ export async function hojaSimple(nombre, tit, sub, cols, filas) {
 export async function generarExcel(js, f, cargas = [], costos = null) {
   await cargarLibs();
   const ExcelJS = window.ExcelJS, wb = new ExcelJS.Workbook();
-  wb.creator = 'CheckObra'; wb.created = new Date();
+  wb.creator = 'Operapto'; wb.created = new Date();
   const empresa = S.m.empresa.nombre, periodo = `${ddmmaaaa(f.desde)} al ${ddmmaaaa(f.hasta)}`;
   const filtros = [f.obraNombre && `Obra: ${f.obraNombre}`, f.equipoNombre && `Equipo: ${f.equipoNombre}`, f.operarioNombre && `Operario: ${f.operarioNombre}`, f.resultado && `Resultado: ${RES[f.resultado][0]}`].filter(Boolean).join(' · ') || 'Sin filtros';
-  const generado = `Generado el ${new Date().toLocaleString('es-AR')} por CheckObra`;
+  const generado = `Generado el ${new Date().toLocaleString('es-AR')} por Operapto`;
   const graficos = {};   // nombre de hoja → [definición de gráfico]
 
   // ---------- agregados

@@ -3,7 +3,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { ls } from './util.js';
 
 export const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, storageKey: 'checkobra-sesion' },
+  auth: { persistSession: true, autoRefreshToken: true, storageKey: 'checkobra-sesion' },   // nombre interno anterior a Operapto: cambiarlo cerraría todas las sesiones
 });
 
 // Debe coincidir con public.correo_operario() y supabase/functions/operarios.
