@@ -387,3 +387,4 @@ button.tl-it{cursor:pointer}button.tl-it:hover .t{text-decoration:underline}
 @media (prefers-reduced-motion:reduce){.voz.escuchando{animation:none}}
 .qr-mfa{display:flex;justify-content:center;padding:12px;background:#fff;border-radius:12px;border:1px solid var(--line);align-self:center}
 .codigo-mfa{font-size:1.6rem;letter-spacing:.3em;text-align:center}
+.sev.ok{background:var(--ok)}

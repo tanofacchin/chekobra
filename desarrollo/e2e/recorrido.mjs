@@ -65,10 +65,15 @@ try {
   duenaId = (await api('/auth/v1/admin/users', { method: 'POST', body: JSON.stringify({ email: correo, password: clave, email_confirm: true }) })).id;
 
   const salir = async () => { await p.click('[data-act="salir"]'); await ver('Supervisión'); };
-  const duena = async () => {
+  // forma: 'huella' (la que ofrece primero) o 'app' (cambia a la app autenticadora)
+  const duena = async (forma) => {
     await p.setViewportSize({ width: 1280, height: 900 }); await p.click('[data-act="modoLogin"][data-m="correo"]');
     await p.fill('#l-mail', correo); await p.fill('#l-pass', clave); await p.click('button[type="submit"]');
-    if (secreto) { await p.waitForSelector('form[data-form="mfa"] button[type="submit"]:not([disabled])'); await p.fill('#mfa-cod', await codigo(secreto)); await p.click('form[data-form="mfa"] button[type="submit"]'); }
+    if (forma === 'huella') { await p.waitForSelector('[data-act="mfaHuella"]:not([disabled])'); await p.click('[data-act="mfaHuella"]'); }
+    if (forma === 'app') {
+      await p.waitForSelector('[data-act="mfaForma"][data-k="app"]'); await p.click('[data-act="mfaForma"][data-k="app"]');
+      await p.waitForSelector('#mfa-cod'); await p.fill('#mfa-cod', await codigo(secreto)); await p.click('form[data-form="mfa"] button[type="submit"]');
+    }
   };
   const legajo = async (leg, pin) => {
     await p.setViewportSize({ width: 390, height: 844 }); await p.click('[data-act="modoLogin"][data-m="operario"]');
@@ -77,17 +82,29 @@ try {
     if (await p.$('#priv-ok')) { await p.check('#priv-ok'); await p.click('[data-act="aceptarPrivacidad"]'); }
   };
 
-  // ---------- la dueña crea la empresa y activa la verificación en dos pasos
+  // ---------- la dueña crea la empresa (la verificación en dos pasos es opcional)
   await duena();
   await p.waitForSelector('#o-nom'); await p.fill('#o-nom', 'Prueba automática'); await p.fill('#o-slug', slug); await p.fill('#o-mi', 'Dueña Prueba'); await p.click('button[type="submit"]');
-  await ver('Activá la verificación en dos pasos'); await p.waitForSelector('#mfa-secreto');
+  await p.waitForSelector('#priv-ok'); await p.check('#priv-ok'); await p.click('[data-act="aceptarPrivacidad"]'); await ver('Primeros pasos');
+  await ver('Tu cuenta no tiene verificación en dos pasos');
+  paso('alta de empresa; se recomienda la verificación sin obligarla');
+
+  // ---------- activa las tres formas: app autenticadora, huella (autenticador virtual de Chrome) y correo
+  await tab('personal'); await ver('Tu seguridad'); await ver('Sin verificación en dos pasos');
+  await p.click('[data-act="mfaAgregar"]'); await p.waitForSelector('#mfa-secreto');
   secreto = (await p.textContent('#mfa-secreto')).trim();
   await p.fill('#mfa-cod', '000000'); await p.click('form[data-form="mfa"] button[type="submit"]'); await ver('Código incorrecto');
-  await p.fill('#mfa-cod', await codigo(secreto)); await p.click('form[data-form="mfa"] button[type="submit"]');
-  await p.waitForSelector('#priv-ok'); await p.check('#priv-ok'); await p.click('[data-act="aceptarPrivacidad"]'); await ver('Primeros pasos');
-  paso('alta de empresa con verificación en dos pasos obligatoria');
-
-  await tab('personal'); await ver('Tu seguridad'); await ver('Celular principal');
+  await p.fill('#mfa-cod', await codigo(secreto)); await p.click('form[data-form="mfa"] button[type="submit"]'); await ver('App autenticadora agregada');
+  const cdp = await ctx.newCDPSession(p); await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+  await p.waitForSelector('[data-act="mfaAgregarHuella"]'); await p.click('[data-act="mfaAgregarHuella"]'); await ver('Huella o cara agregada', 30000);
+  await p.click('[data-act="mfaAgregarCorreo"]'); await ver('Activar código por correo');
+  await p.waitForSelector('#mfa-cod, .err', { timeout: 25000 });
+  const correoListo = !!(await p.$('#mfa-cod'));
+  console.log(correoListo ? '  código por correo: enviado (el envío de correos está configurado)' : '  código por correo: ' + (await p.textContent('.err')).trim());
+  await p.click('[data-act="mfaCancelar"]'); await ver('Tu seguridad');
+  await sleep(1000); await p.screenshot({ path: DIR + 'seguridad.png', fullPage: true });
+  paso('app autenticadora y huella activadas');
   await p.fill('#nueva-obra', 'Ruta 5'); await p.click('[data-act="admObraNueva"]'); await ver('Ruta 5');
   for (const [nom, leg, pin, rol] of [['Juan Operario', '101', '123456', 'operario'], ['Mario Mecánico', '201', '654321', 'mecanico']]) {
     await p.click('[data-act="admPerNuevo"]'); await p.fill('#np-nom', nom); await p.fill('#np-leg', leg); await p.fill('#np-pin', pin); await p.selectOption('#np-rol', rol);
@@ -116,7 +133,7 @@ try {
   await p.click('[data-act="opInicio"]'); await salir();
 
   // ---------- la dueña vuelve a entrar (pide el código) y arma la orden
-  await duena(); await ver('EX-01 bloqueado'); paso('segundo ingreso con código de verificación');
+  await duena('huella'); await ver('EX-01 bloqueado'); paso('segundo ingreso verificando con la huella');
   await tab('fallas'); await p.click('[data-act="otDesdeFalla"]'); await ver('Nueva orden de trabajo');
   await p.selectOption('#sel-nueva', { label: 'Mario Mecánico' }); await p.click('[data-act="otNuevaGuardar"]'); await ver('OT 1 creada');
   paso('orden de trabajo asignada al mecánico'); await salir();
@@ -131,7 +148,7 @@ try {
   paso('el mecánico termina la orden y libera el equipo'); await salir();
 
   // ---------- auditoría
-  await duena(); await tab('auditoria'); await ver('Alta de persona'); await ver('Liberó el equipo'); await ver('Mario Mecánico');
+  await duena('app'); await ver('Requiere atención'); paso('tercer ingreso con el código de la app'); await tab('auditoria'); await ver('Alta de persona'); await ver('Liberó el equipo'); await ver('Mario Mecánico');
   await p.screenshot({ path: DIR + 'auditoria.png', fullPage: true });
   paso('auditoría con altas y liberación');
 

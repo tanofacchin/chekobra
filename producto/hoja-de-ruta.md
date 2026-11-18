@@ -49,6 +49,9 @@
 
 - Cambio de nombre a Operapto (18/11) en la app, los correos y los documentos.
 
+- Verificación en dos pasos opcional (18/11) con tres formas: huella o cara (llave de acceso propia, WebAuthn),
+  app autenticadora y código por correo (listo; se usa cuando se configure el envío de correos).
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).

@@ -6,7 +6,7 @@ Para que las pruebas del navegador no toquen datos de clientes y corran solas an
 
 1. En supabase.com: **New project** → nombre `operapto-pruebas`, región **South America (São Paulo)**, plan gratuito.
    Anotá el **Project ref** (está en la URL: supabase.com/dashboard/project/<ref>).
-2. Decile a Claude el ref: corre `desarrollo/scripts/preparar-proyecto.sh <ref>`, que aplica las migraciones,
+2. Decile a Claude el ref: corre `PRUEBAS=1 desarrollo/scripts/preparar-proyecto.sh <ref>`, que aplica las migraciones,
    despliega las funciones y crea el secreto PIN_PEPPER.
 3. En GitHub → el repositorio → **Settings → Secrets and variables → Actions → New repository secret**, cargá:
    - `PRUEBAS_SUPABASE_URL`: `https://<ref>.supabase.co`
@@ -23,5 +23,5 @@ Primero `scripts/preparar-proyecto.sh <ref-de-pruebas>` (aplica solo lo que falt
 ## Recuperar el acceso de un administrador que perdió el celular
 
 - Otro dueño o administrador de la empresa: Personal y obras → la persona → **Restablecer verificación**.
-- Si es el único dueño: desde la base (soporte de Operapto), borrar sus factores en `auth.mfa_factors`
-  después de confirmar la identidad por otro medio. Queda registrado en la auditoría de Supabase.
+- Si es el único dueño: desde la base (soporte de Operapto), después de confirmar la identidad por otro medio,
+  borrar sus factores en `auth.mfa_factors`, sus filas de `public.huellas` y poner `correo = false` en `public.ajustes_2fa`.

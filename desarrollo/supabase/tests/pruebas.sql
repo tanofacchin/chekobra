@@ -717,18 +717,79 @@ end $$;
 set request.jwt.claims = '{"aal":"aal2"}';
 do $$ begin if not public.es_gestor((select v from ctx where k = 'A')) then raise exception 'FALLÓ: con el código vale'; end if; end $$;
 reset role;
--- la dueña sin segundo factor (aal1): no ve ni hace nada, y la app le pide activarlo
+-- la verificación es opcional: la dueña sin ninguna forma activada entra con aal1
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
-set request.jwt.claims = '{"aal":"aal1"}';
+set request.jwt.claims = '{"aal":"aal1","session_id":"11111111-1111-1111-1111-111111111111"}';
 do $$ begin
-  if public.es_miembro((select v from ctx where k = 'A')) or public.es_admin((select v from ctx where k = 'A')) then raise exception 'FALLÓ: dueña sin segundo factor'; end if;
-  if exists (select 1 from public.jornadas) or exists (select 1 from public.auditoria) or exists (select 1 from public.equipos) then raise exception 'FALLÓ: dueña sin segundo factor ve datos'; end if;
-  if (select count(*) from public.miembros) <> 1 then raise exception 'FALLÓ: debe ver su propia membresía para saber que tiene que activarlo'; end if;
-  if public.segundo_factor_pendiente() <> 'activar' then raise exception 'FALLÓ: debe pedir activar'; end if;
+  if not public.es_admin((select v from ctx where k = 'A')) then raise exception 'FALLÓ: sin verificación activada, la dueña debe poder entrar'; end if;
+  if public.segundo_factor_pendiente() <> 'nada' then raise exception 'FALLÓ: no debe pedir nada'; end if;
+  if (public.mis_metodos_2fa()->>'correo')::boolean then raise exception 'FALLÓ: correo no activado'; end if;
 end $$;
-select pg_temp.esperar_error(format($$select public.crear_orden(jsonb_build_object('equipo_id', %L, 'titulo', 'Sin código'))$$, :'eqOT_id'), 'No tenés permiso');
 reset role;
+-- código por correo: el servidor guarda solo el hash (acá lo cargamos como lo haría la función 'verificacion')
+insert into public.codigos_correo (user_id, hash, expira)
+values ('00000000-0000-0000-0000-0000000000a1', encode(sha256(convert_to('00000000-0000-0000-0000-0000000000a1:482913', 'UTF8')), 'hex'), now() + interval '10 minutes');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+do $$ begin
+  if public.verificar_codigo_correo('111111', true) then raise exception 'FALLÓ: código equivocado aceptado'; end if;
+  if (public.mis_metodos_2fa()->>'correo')::boolean then raise exception 'FALLÓ: un código equivocado no activa nada'; end if;
+  if not public.verificar_codigo_correo('482913', true) then raise exception 'FALLÓ: el código correcto debe valer'; end if;
+  if not (public.mis_metodos_2fa()->>'correo')::boolean or not public.sesion_verificada() then raise exception 'FALLÓ: correo activado y sesión verificada'; end if;
+  if not public.es_admin((select v from ctx where k = 'A')) then raise exception 'FALLÓ: sesión verificada por correo'; end if;
+end $$;
+select pg_temp.esperar_error($$select public.verificar_codigo_correo('482913')$$, 'venció o no se pidió');
+-- con el correo activado, otra sesión sin verificar no entra
+set request.jwt.claims = '{"aal":"aal1","session_id":"22222222-2222-2222-2222-222222222222"}';
+do $$ begin
+  if public.es_miembro((select v from ctx where k = 'A')) or exists (select 1 from public.equipos) then raise exception 'FALLÓ: sesión nueva sin código'; end if;
+  if public.segundo_factor_pendiente() <> 'verificar' then raise exception 'FALLÓ: debe pedir el código'; end if;
+end $$;
+select pg_temp.esperar_error($$select public.desactivar_correo_2fa()$$, 'Primero verificá');
+-- la app autenticadora (aal2) también verifica esa sesión
+set request.jwt.claims = '{"aal":"aal2","session_id":"22222222-2222-2222-2222-222222222222"}';
+do $$ begin if not public.es_admin((select v from ctx where k = 'A')) then raise exception 'FALLÓ: aal2 vale'; end if; end $$;
+-- cinco intentos y se corta
+reset role;
+insert into public.codigos_correo (user_id, hash, expira) values ('00000000-0000-0000-0000-0000000000a1', 'x', now() + interval '10 minutes');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+do $$ begin for i in 1..5 loop perform public.verificar_codigo_correo('000000'); end loop; end $$;
+select pg_temp.esperar_error($$select public.verificar_codigo_correo('000000')$$, 'Demasiados intentos');
+-- nadie lee los códigos ni las sesiones verificadas
+select pg_temp.esperar_error($$select * from public.codigos_correo$$, 'permission denied');
+select pg_temp.esperar_error($$select * from public.sesiones_verificadas$$, 'permission denied');
+set request.jwt.claims = '{"aal":"aal1","session_id":"11111111-1111-1111-1111-111111111111"}';
+select public.desactivar_correo_2fa();
+select public.olvidar_sesion();
+do $$ begin
+  if (public.mis_metodos_2fa()->>'correo')::boolean then raise exception 'FALLÓ: correo desactivado'; end if;
+  if not public.es_admin((select v from ctx where k = 'A')) then raise exception 'FALLÓ: sin formas activadas vuelve a entrar sin código'; end if;
+end $$;
+reset role;
+-- huella o cara: una llave registrada exige verificación; quitarla también la exige
+insert into public.huellas (user_id, credencial, clave_publica, nombre, rp_id) values ('00000000-0000-0000-0000-0000000000a1', 'cred-1', 'pk', 'Celular', 'localhost');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+set request.jwt.claims = '{"aal":"aal1","session_id":"33333333-3333-3333-3333-333333333333"}';
+do $$ begin
+  if public.es_miembro((select v from ctx where k = 'A')) then raise exception 'FALLÓ: con huella registrada, sin verificar no entra'; end if;
+  if (public.mis_metodos_2fa()->>'huella')::int <> 1 then raise exception 'FALLÓ: cuenta la huella'; end if;
+  if (select nombre from public.huellas) <> 'Celular' then raise exception 'FALLÓ: ve el nombre de su huella'; end if;
+end $$;
+select pg_temp.esperar_error($$select clave_publica from public.huellas$$, 'permission denied');
+select pg_temp.esperar_error(format($$select public.quitar_huella(%L)$$, (select id from public.huellas)), 'Primero verificá');
+reset role;
+-- el servidor marca la sesión como verificada después de comprobar la firma de la huella
+insert into public.sesiones_verificadas (session_id, user_id) values ('33333333-3333-3333-3333-333333333333', '00000000-0000-0000-0000-0000000000a1');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+do $$ begin if not public.es_admin((select v from ctx where k = 'A')) then raise exception 'FALLÓ: sesión verificada con huella'; end if; end $$;
+select public.quitar_huella((select id from public.huellas));
+do $$ begin if (public.mis_metodos_2fa()->>'huella')::int <> 0 then raise exception 'FALLÓ: huella quitada'; end if; end $$;
+reset role;
+set request.jwt.claims = '{"aal":"aal2"}';
 -- los operarios (legajo y PIN) no cambian
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a5';

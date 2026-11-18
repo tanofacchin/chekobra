@@ -103,10 +103,17 @@ Deno.serve(async (req) => {
     const { data: fs, error: ef } = await admin.auth.admin.mfa.listFactors({ userId: m.user_id });
     if (ef) return json({ error: "No se pudo leer la verificación de esa persona" }, 400);
     for (const f of fs?.factors ?? []) await admin.auth.admin.mfa.deleteFactor({ userId: m.user_id, id: f.id });
+    // También el código por correo y las sesiones que ya estaban verificadas.
+    const { data: aj } = await admin.from("ajustes_2fa").select("correo").eq("user_id", m.user_id).maybeSingle();
+    await admin.from("ajustes_2fa").upsert({ user_id: m.user_id, correo: false, actualizado_en: new Date().toISOString() });
+    await admin.from("sesiones_verificadas").delete().eq("user_id", m.user_id);
+    const { count: nh } = await admin.from("huellas").select("id", { count: "exact", head: true }).eq("user_id", m.user_id);
+    await admin.from("huellas").delete().eq("user_id", m.user_id);
     // Cierra sus sesiones abiertas: quien tenga el celular perdido no puede seguir adentro.
     await admin.auth.admin.signOut(m.user_id, "global").catch(() => {});
-    await auditar(m.empresa_id, "restablecer_2fa", b.miembro_id, m.nombre, { factores: (fs?.factors ?? []).length });
-    return json({ ok: true, factores: (fs?.factors ?? []).length });
+    const total = (fs?.factors ?? []).length + (aj?.correo ? 1 : 0) + (nh ?? 0);
+    await auditar(m.empresa_id, "restablecer_2fa", b.miembro_id, m.nombre, { formas: total });
+    return json({ ok: true, factores: total });
   }
 
   return json({ error: "Acción desconocida" }, 400);

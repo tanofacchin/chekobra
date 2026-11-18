@@ -68,6 +68,7 @@ export async function cargar() {
     if (a.tab === 'costos' && !(a.cs && a.cs.datos)) Cs.cargarCostos();
     if (a.tab === 'mapa') Mapa.cargarMapa();
     if (a.tab === 'personal' && !a.seg) Seg.cargarSeguridad();
+    Seg.sugerencia().then(v => { if (a.d) { a.d.sug2fa = v; render(); } }).catch(() => {});
     a.err = '';
     if (a.tab === 'jornadas') await cargarJornadas();
   } catch (e) { a.err = msgError(e); }
@@ -153,6 +154,7 @@ function vResumen() {
   d.alertasTele.forEach(x => { const e = d.equipos.find(q => q.id === x.equipo_id); att.push([x.tipo === 'sin_checklist' ? 'bad' : 'warn', `${TIT[x.tipo]} · ${e ? e.codigo : ''}`, `${x.detalle} · ${fFecha(x.fecha + 'T12:00:00')} · dato de John Deere`, x.jornada_id ? `<button class="btn sm" data-act="admVer" data-id="${x.jornada_id}">Ver</button>` : '']); });
   Tal.alertasTaller(d.ordenes).forEach(x => att.push(x));
   d.repetidas.forEach(r => att.push(['warn', `Falla repetida · ${r.codigo}`, `${r.texto} · ${textoRepetida(r)}`, `<button class="btn sm" data-act="equipoFicha" data-id="${r.equipo_id}">Historial</button>`]));
+  if (d.sug2fa) att.push(['warn', 'Tu cuenta no tiene verificación en dos pasos', 'Recomendada para quien administra la empresa: con la huella, una app del celular o un código por correo.', `<button class="btn sm" data-act="admTab" data-k="personal">Activar</button>`]);
   alertasFlota().forEach(x => att.push(x));
   Cb.alertasCombustible(d.combustible).forEach(x => att.push(x));
   d.miembros.filter(m => m.bloqueado_en).forEach(m => att.push(['bad', `Legajo bloqueado · ${m.nombre}`, `${m.intentos_fallidos} intentos fallidos de PIN · ${fFecha(m.bloqueado_en)} ${fHora(m.bloqueado_en)}`, `<button class="btn sm" data-act="admTab" data-k="personal">Desbloquear</button>`]));
@@ -298,7 +300,7 @@ function vPersonal() {
       <div class="small muted">${d.consent[m.id] ? `Aceptó la política de privacidad el ${fFecha(d.consent[m.id])}` : 'Todavía no aceptó la política de privacidad'}${gestor(m) ? ` · ${m.recibir_avisos ? 'recibe avisos por correo' : 'no recibe avisos'}` : ''}</div>${txtAsig(m)}</div>
       <div class="row" style="justify-content:flex-end">${adm && m.bloqueado_en ? `<button class="btn sm primary" data-act="admDesbloquear" data-id="${m.id}">Desbloquear</button>` : ''}
       ${!gestor(m) && m.activo ? `<button class="btn sm ghost" data-act="admAsig" data-id="${m.id}">Equipos y obras</button>` : ''}
-      ${adm && gestor(m) && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admAvisos" data-id="${m.id}">${m.recibir_avisos ? 'Sin avisos' : 'Con avisos'}</button>` : ''}${adm && m.rol !== 'dueno' && m.legajo ? `<button class="btn sm ghost" data-act="admPin" data-id="${m.id}">Cambiar PIN</button>` : ''}${adm && !m.legajo && m.user_id !== S.user.id && (m.rol !== 'dueno' || S.m.rol === 'dueno') ? `<button class="btn sm ghost" data-act="admReset2fa" data-id="${m.id}">${a.confirm === '2fa' + m.id ? 'Tocá de nuevo: deberá activarla otra vez' : 'Restablecer verificación'}</button>` : ''}
+      ${adm && gestor(m) && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admAvisos" data-id="${m.id}">${m.recibir_avisos ? 'Sin avisos' : 'Con avisos'}</button>` : ''}${adm && m.rol !== 'dueno' && m.legajo ? `<button class="btn sm ghost" data-act="admPin" data-id="${m.id}">Cambiar PIN</button>` : ''}${adm && !m.legajo && m.user_id !== S.user.id && (m.rol !== 'dueno' || S.m.rol === 'dueno') ? `<button class="btn sm ghost" data-act="admReset2fa" data-id="${m.id}">${a.confirm === '2fa' + m.id ? 'Tocá de nuevo para quitarle la verificación' : 'Restablecer verificación'}</button>` : ''}
       ${adm && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admActivo" data-id="${m.id}">${m.activo ? 'Desactivar' : 'Activar'}</button>` : ''}</div>
       ${a.pin && a.pin.id === m.id ? `<div style="grid-column:1/-1" class="row"><input class="inp num" id="pin-nuevo" data-pin="pin" inputmode="numeric" maxlength="6" placeholder="Nuevo PIN (6 números)" value="${esc(a.pin.pin)}" style="flex:1 1 180px">
         <button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admPinOk">Guardar</button></div>` : ''}${edAsig(m)}</div>`).join('');
@@ -453,7 +455,7 @@ export const A = {
     const a = T(), k = '2fa' + b.dataset.id; if (a.confirm !== k) { a.confirm = k; return render(); } a.confirm = null; render();
     const { data, error } = await sb.functions.invoke('operarios', { body: { accion: 'restablecer_2fa', miembro_id: b.dataset.id } });
     if (error || (data && data.error)) return toast((data && data.error) || await errorFuncion(error), 7000);
-    toast(data.factores ? 'Verificación restablecida. La próxima vez que entre la va a activar de nuevo.' : 'Esa persona no tenía verificación activada.', 7000);
+    toast(data.factores ? 'Verificación restablecida: ya puede entrar solo con su contraseña y volver a activarla.' : 'Esa persona no tenía verificación activada.', 7000);
   },
   admPin: b => { T().pin = { id: b.dataset.id, pin: '' }; render(); },
   admPinOk: async () => {
