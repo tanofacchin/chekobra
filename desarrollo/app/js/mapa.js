@@ -30,9 +30,9 @@ export function vMapa() {
     .map(([k, l, n]) => `<button class="tab ${m.filtro === k ? 'on' : ''}" data-act="mapaFiltro" data-k="${k}">${l} (${n})</button>`).join('');
   const lista = us.filter(u => !m.filtro || estadoDe(u)[0] === m.filtro).map(u => { const [c, t] = estadoDe(u);
     return `<button class="li" data-act="mapaIr" data-id="${u.equipo_id}"><span class="t"><i class="pin-dot ${c}"></i>${esc(u.codigo)} · ${esc(u.nombre)}</span><span class="chip ${c === 'bad' ? 'bad' : c === 'uso' ? 'acc' : c === 'ok' ? 'ok' : 'plain'}">${t}</span>
-      <span class="s">${esc(u.obra || (u.origen === 'telemetria' ? 'Posición de JDLink' : 'Sin obra'))}${u.operario ? ' · ' + esc(u.operario) : ''} · ${hace(u.cuando)}</span></button>`; }).join('');
+      <span class="s">${esc(u.obra || (u.origen === 'telemetria' ? 'Posición de telemetría' : 'Sin obra'))}${u.operario ? ' · ' + esc(u.operario) : ''} · ${hace(u.cuando)}</span></button>`; }).join('');
   return `<section class="card"><div class="row" style="justify-content:space-between"><div><h2>Mapa de la flota</h2>
-      <p class="small muted">Última ubicación conocida de cada equipo: donde se hizo el último checklist con GPS, o la posición de JDLink si es más nueva. No es seguimiento en vivo.</p></div></div>
+      <p class="small muted">Última ubicación conocida de cada equipo: donde se hizo el último checklist con GPS, o la posición de telemetría (John Deere o Caterpillar) si es más nueva. No es seguimiento en vivo.</p></div></div>
     <nav class="tabs">${filtros}</nav>
     ${us.length ? `<div class="mapa-grid"><div id="mapa-flota" class="mapa" role="application" aria-label="Mapa de la flota"></div><div class="mapa-lista">${lista || '<p class="muted">Ningún equipo con este filtro.</p>'}</div></div>`
       : '<div class="empty">Todavía no hay ubicaciones. Aparecen cuando los operarios hacen el checklist con el GPS activado.</div>'}
@@ -54,7 +54,7 @@ export function despues() {
     const [c, t] = estadoDe(u);
     const mk = L.marker([u.lat, u.lng], { title: `${u.codigo} · ${t}`, icon: L.divIcon({ className: '', html: `<span class="mpin ${c}">${esc(u.codigo)}</span>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(mapa);
     mk.bindPopup(`<b>${esc(u.codigo)} · ${esc(u.nombre)}</b><br>${t}${u.obra ? '<br>' + esc(u.obra) : ''}${u.operario ? '<br>' + esc(u.operario) : ''}
-      <br><span style="color:#666">${u.origen === 'telemetria' ? 'JDLink' : 'Checklist'} · ${fFecha(u.cuando)} ${fHora(u.cuando)} h</span><br><a href="${mapsUrl(u.lat, u.lng)}" target="_blank" rel="noopener">Abrir en Google Maps ↗</a>`);
+      <br><span style="color:#666">${u.origen === 'telemetria' ? 'Telemetría' : 'Checklist'} · ${fFecha(u.cuando)} ${fHora(u.cuando)} h</span><br><a href="${mapsUrl(u.lat, u.lng)}" target="_blank" rel="noopener">Abrir en Google Maps ↗</a>`);
     u._mk = mk; pts.push([u.lat, u.lng]);
   });
   if (m.ir) { const u = us.find(x => x.equipo_id === m.ir); m.ir = null; if (u) { mapa.setView([u.lat, u.lng], 16); u._mk.openPopup(); return; } }

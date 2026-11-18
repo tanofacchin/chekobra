@@ -52,6 +52,9 @@
 - Verificación en dos pasos opcional (18/11) con tres formas: huella o cara (llave de acceso propia, WebAuthn),
   app autenticadora y código por correo (listo; se usa cuando se configure el envío de correos).
 
+- Caterpillar VisionLink (18/11) por ISO 15143-3: la empresa carga sus credenciales (se guardan cifradas), se actualiza
+  cada hora y se cruza igual que John Deere (horómetro, ubicación, uso sin checklist). Falta probar con credenciales reales.
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).
@@ -62,6 +65,6 @@
 
 - Avisos por WhatsApp (por correo ya está).
 - Avisos por correo de services y vencimientos próximos.
-- Otras marcas por ISO 15143-3 (Caterpillar, Komatsu, Volvo) y APIs de agro (CNH, AGCO).
+- Otras marcas por ISO 15143-3 (Komatsu, Volvo) y APIs de agro (CNH, AGCO).
 - Dominio propio, correo propio y hosting definitivo.
 - Planes y cobro de suscripciones.

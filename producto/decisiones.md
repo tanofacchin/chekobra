@@ -25,3 +25,4 @@
 | 2026-11-18 | Verificación en dos pasos opcional (antes obligatoria para administración); se recomienda en el resumen | Decisión del usuario: no frenar la adopción. Quien la activa la necesita siempre (lo exige la base) |
 | 2026-11-18 | Huella o cara y código por correo implementados por Operapto (no por Supabase) | Supabase todavía no habilita WebAuthn en el proyecto y no tiene código por correo como factor. La sesión verificada se anota por su session_id |
 | 2026-11-18 | Las huellas quedan atadas al dominio de la app | Al mudar a app.operapto.com.ar habrá que volver a agregarlas (la app lo explica); la app autenticadora y el correo siguen sirviendo |
+| 2026-11-18 | Caterpillar con credenciales propias de cada empresa, cifradas con una clave fuera de la base | Caterpillar no ofrece "autorizar con tu cuenta" para la API ISO 15143-3; si alguien copia la base, no obtiene las credenciales |

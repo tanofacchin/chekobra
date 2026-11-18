@@ -29,7 +29,7 @@ commit;" >/dev/null
   echo "aplicada: $b"
 done
 
-for fn in ingresar operarios verificacion avisos johndeere; do
+for fn in ingresar operarios verificacion avisos johndeere caterpillar; do
   [ -d "supabase/functions/$fn" ] || continue
   jwt=false; case "$fn" in operarios|verificacion) jwt=true;; esac   # el resto valida por su cuenta (cron, OAuth, PIN)
   args=(-F "metadata={\"entrypoint_path\":\"$fn/index.ts\",\"name\":\"$fn\",\"verify_jwt\":$jwt};type=application/json")
@@ -43,6 +43,10 @@ if ! curl -fsS "$API/secrets" "${AUTH[@]}" | jq -e '.[] | select(.name == "PIN_P
   echo "secreto PIN_PEPPER creado"
 fi
 # En el proyecto de pruebas, la huella o cara tiene que aceptar la app servida en localhost (PRUEBAS=1).
+if ! curl -fsS "$API/secrets" "${AUTH[@]}" | jq -e '.[] | select(.name == "TELEMETRIA_CLAVE")' >/dev/null; then
+  jq -n --arg p "$(openssl rand -hex 32)" '[{name:"TELEMETRIA_CLAVE",value:$p}]' | curl -fsS -X POST "$API/secrets" "${AUTH[@]}" -H 'Content-Type: application/json' -d @- >/dev/null
+  echo "secreto TELEMETRIA_CLAVE creado (cifra credenciales de Caterpillar)"
+fi
 if [ "${PRUEBAS:-0}" = 1 ]; then
   jq -n '[{name:"PERMITIR_LOCALHOST",value:"1"}]' | curl -fsS -X POST "$API/secrets" "${AUTH[@]}" -H 'Content-Type: application/json' -d @- >/dev/null
   echo "huella o cara habilitada para localhost (solo pruebas)"
