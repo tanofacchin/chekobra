@@ -16,6 +16,7 @@ import * as Mapa from './mapa.js';
 import * as Rd from './resumen.js';
 import * as Seg from './seguridad.js';
 import * as Au from './auditoria.js';
+import * as Cat from './caterpillar.js';
 
 const T = () => S.adm;
 export function reiniciar() {
@@ -59,7 +60,7 @@ export async function cargar() {
     ]);
     for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg]) if (r.error) throw r.error;
     a.d = { equipos: eq.data, miembros: mi.data, obras: ob.data, plantillas: vigentes(pl.data, E()), fallas: fa.data, abiertas: ab.data, hoy: jh.data,
-      jd: tc.data.find(c => c.proveedor === 'john_deere') || null, tele: Object.fromEntries(tu.data.map(l => [l.equipo_id, l])), alertasTele: ta.data,
+      jd: tc.data.find(c => c.proveedor === 'john_deere') || null, cat: tc.data.find(c => c.proveedor === 'caterpillar') || null, tele: Object.fromEntries(tu.data.map(l => [l.equipo_id, l])), alertasTele: ta.data,
       consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data, combustible: cb.data, ordenes: ot.data, repetidas: fr.data, asig: asg.data };
     if (a.tab === 'mantenimiento' && !a.mt) Mt.cargarMant();
     if (a.tab === 'indicadores' && !(a.ind && a.ind.datos)) Ind.cargarIndicadores();
@@ -151,7 +152,7 @@ function vResumen() {
   d.hoy.filter(j => j.rapido).forEach(j => { const e = activos.find(x => x.id === j.equipo_id); att.push(['warn', `Checklist muy rápido · ${e ? e.codigo : ''}`, `${j.operario.nombre} lo completó en ${fDur(j.dur_checklist_s)}`, `<button class="btn sm" data-act="admVer" data-id="${j.id}">Ver</button>`]); });
   d.abiertas.filter(j => Date.now() - new Date(j.inicio) > 14 * 36e5).forEach(j => { const e = activos.find(x => x.id === j.equipo_id); att.push(['warn', `Jornada sin cerrar · ${e ? e.codigo : ''}`, `${j.operario.nombre} · desde ${fFecha(j.inicio)} ${fHora(j.inicio)}`, `<button class="btn sm" data-act="admVer" data-id="${j.id}">Ver</button>`]); });
   const TIT = { horometro: 'Horómetro distinto al de la máquina', lejos: 'Checklist lejos de la máquina', sin_checklist: 'Máquina usada sin checklist' };
-  d.alertasTele.forEach(x => { const e = d.equipos.find(q => q.id === x.equipo_id); att.push([x.tipo === 'sin_checklist' ? 'bad' : 'warn', `${TIT[x.tipo]} · ${e ? e.codigo : ''}`, `${x.detalle} · ${fFecha(x.fecha + 'T12:00:00')} · dato de John Deere`, x.jornada_id ? `<button class="btn sm" data-act="admVer" data-id="${x.jornada_id}">Ver</button>` : '']); });
+  d.alertasTele.forEach(x => { const e = d.equipos.find(q => q.id === x.equipo_id); att.push([x.tipo === 'sin_checklist' ? 'bad' : 'warn', `${TIT[x.tipo]} · ${e ? e.codigo : ''}`, `${x.detalle} · ${fFecha(x.fecha + 'T12:00:00')} · dato de telemetría`, x.jornada_id ? `<button class="btn sm" data-act="admVer" data-id="${x.jornada_id}">Ver</button>` : '']); });
   Tal.alertasTaller(d.ordenes).forEach(x => att.push(x));
   d.repetidas.forEach(r => att.push(['warn', `Falla repetida · ${r.codigo}`, `${r.texto} · ${textoRepetida(r)}`, `<button class="btn sm" data-act="equipoFicha" data-id="${r.equipo_id}">Historial</button>`]));
   if (d.sug2fa) att.push(['warn', 'Tu cuenta no tiene verificación en dos pasos', 'Recomendada para quien administra la empresa: con la huella, una app del celular o un código por correo.', `<button class="btn sm" data-act="admTab" data-k="personal">Activar</button>`]);
@@ -236,11 +237,11 @@ function vEquipos() {
       <label class="f">Código interno<input class="inp" id="ne-cod" data-ne="codigo" value="${esc(n.codigo)}" placeholder="EX-01" maxlength="16"></label>
       <label class="f">Tipo de checklist<select class="inp" id="ne-tipo" data-ne="plantilla" data-vivo>${pls.map(p => `<option value="${p.clave}" ${n.plantilla === p.clave ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select></label>
       <label class="f">Nombre (marca y modelo)<input class="inp" id="ne-nom" data-ne="nombre" value="${esc(n.nombre)}" placeholder="Excavadora John Deere 210G"></label>
-      <label class="f">N.º de serie / PIN <small>Para vincular con JDLink</small><input class="inp" id="ne-serie" data-ne="serie" value="${esc(n.serie)}"></label>
+      <label class="f">N.º de serie / PIN <small>Para vincular con John Deere o Caterpillar</small><input class="inp" id="ne-serie" data-ne="serie" value="${esc(n.serie)}"></label>
       <label class="f">Patente <small>Si tiene</small><input class="inp" id="ne-pat" data-ne="patente" value="${esc(n.patente)}"></label>
       <label class="f">${(d.plantillas[n.plantilla] || {}).medidor === 'km' ? 'Odómetro actual (km)' : 'Horómetro actual (h)'}<input class="inp num" id="ne-med" type="number" inputmode="decimal" data-ne="med" value="${esc(n.med)}"></label></div>
       ${n.err ? `<p class="err">${esc(n.err)}</p>` : ''}<div class="row"><button class="btn sm" data-act="admEqCancelar">Cancelar</button><button class="btn sm primary" data-act="admEqGuardar">Guardar equipo</button></div></section>` : '';
-  return `${vJd()}${form}<section class="card"><div class="row" style="justify-content:space-between"><h2>Flota (${d.equipos.length})</h2><div class="row">${d.equipos.length ? '<button class="btn sm" data-act="etqTodas">Etiquetas QR</button>' : ''}${n ? '' : '<button class="btn sm dark" data-act="admEqNuevo">Agregar equipo</button>'}</div></div>
+  return `${vJd()}${Cat.vCat()}${form}<section class="card"><div class="row" style="justify-content:space-between"><h2>Flota (${d.equipos.length})</h2><div class="row">${d.equipos.length ? '<button class="btn sm" data-act="etqTodas">Etiquetas QR</button>' : ''}${n ? '' : '<button class="btn sm dark" data-act="admEqNuevo">Agregar equipo</button>'}</div></div>
     ${d.equipos.length > 8 ? `<input class="inp" id="adm-busca-eq" type="search" data-buscar=".eqrow[data-q]" placeholder="Buscar por código, nombre, patente o serie" value="${esc(a.buscaEq || '')}" autocomplete="off"><p class="muted small" data-sin-resultados hidden>Ningún equipo coincide con la búsqueda.</p>` : ''}
     ${d.equipos.length ? `<div>${rows}</div>` : '<div class="empty">Todavía no hay equipos. Agregá el primero.</div>'}</section>`;
 }
@@ -255,7 +256,7 @@ function lineaTele(l, e) {
   if (l.odometro_km != null && e.medidor === 'km') p.push(`<span class="num">${fNum(l.odometro_km)} km</span>`);
   if (l.combustible_pct != null) p.push(`combustible ${fNum(l.combustible_pct)}%`);
   if (l.lat != null) p.push(`<a href="${mapsUrl(l.lat, l.lng)}" target="_blank" rel="noopener">ubicación ↗</a>`);
-  return `<div class="small tele">JDLink ${hace(l.medido_en)}: ${p.join(' · ')}</div>`;
+  return `<div class="small tele">${l.proveedor === 'caterpillar' ? 'Cat VisionLink' : 'JDLink'} ${hace(l.medido_en)}: ${p.join(' · ')}</div>`;
 }
 function vJd() {
   const a = T(), c = a.d.jd, adm = esAdmin();
@@ -375,7 +376,7 @@ export const A = {
     if (a.tab === 'personal') Seg.cargarSeguridad();
     if (a.tab === 'auditoria') Au.cargarAuditoria();
   },
-  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A, ...Cs.A, ...Mapa.A, ...Rd.A, ...Au.A,
+  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A, ...Cs.A, ...Mapa.A, ...Rd.A, ...Au.A, ...Cat.A,
   admAsig: b => { const a = T(), xs = a.d.asig.filter(x => x.miembro_id === b.dataset.id); a.asig = { id: b.dataset.id, eq: xs.filter(x => x.equipo_id).map(x => x.equipo_id), ob: xs.filter(x => x.obra_id).map(x => x.obra_id) }; render(); },
   admAsigCancelar: () => { T().asig = null; render(); },
   admAsigGuardar: async () => { const a = T(), s = a.asig; if (await rpc('asignar', { p_miembro: s.id, p_equipos: s.eq, p_obras: s.ob }, s.eq.length || s.ob.length ? 'Asignación guardada.' : 'Sin restricciones: puede usar todos los equipos y obras.')) { a.asig = null; render(); } },
@@ -502,7 +503,7 @@ async function errorFuncion(error) {
 
 export function alEscribir(el, v) {
   const a = T(); if (!a) return false;
-  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v) || Cs.alEscribir(el, v) || Rd.alEscribir(el, v) || Au.alEscribir(el, v)) return true;
+  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v) || Cs.alEscribir(el, v) || Rd.alEscribir(el, v) || Au.alEscribir(el, v) || Cat.alEscribir(el, v)) return true;
   if (el.dataset.asig && a.asig) { const k = el.dataset.asig, id = el.dataset.id; a.asig[k] = v ? [...a.asig[k], id] : a.asig[k].filter(x => x !== id); return true; }
   if (el.id === 'adm-busca-eq') { a.buscaEq = v; filtrar(el.dataset.buscar, v); return true; }
   if (el.dataset.fa) { a.f[el.dataset.fa] = v; a.jornadas = null; render(); cargarJornadas().then(render); return true; }

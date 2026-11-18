@@ -69,7 +69,7 @@ function vServices(d, mt) {
       ${sugerencias.length ? `<div class="row small">Sugeridos: ${sugerencias.map(([n, c, an]) => `<button class="btn sm ghost" data-act="mtSugerir" data-n="${n}" data-c="${c}" data-a="${an}">${n}</button>`).join('')}</div>` : ''}
       ${f.err ? `<p class="err">${esc(f.err)}</p>` : ''}<div class="row"><button class="btn sm" data-act="mtCancelar" data-f="formPlan">Cancelar</button><button class="btn sm primary" data-act="mtPlanGuardar">Guardar plan</button></div></div>` : '';
   return `<section class="card"><div class="row" style="justify-content:space-between"><div><h2>Services programados</h2>
-      <p class="small muted">Se calcula con el horómetro u odómetro de los checklists y, si hay, con el dato de John Deere.</p></div>
+      <p class="small muted">Se calcula con el horómetro u odómetro de los checklists y, si hay, con el dato de telemetría (John Deere o Caterpillar).</p></div>
       ${f ? '' : '<button class="btn sm dark" data-act="mtPlanNuevo">Agregar plan</button>'}</div>
     ${form}${filas ? `<div>${filas}</div>` : '<div class="empty">Todavía no hay planes. Agregá uno por equipo (por ejemplo, service cada 250 horas).</div>'}
     ${vTrabajo(d, mt, 'service')}</section>`;

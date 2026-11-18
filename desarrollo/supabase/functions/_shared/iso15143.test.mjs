@@ -47,3 +47,26 @@ test('normaliza números de serie para vincular', () => {
   assert.equal(claveSerie(' 1ff210gx abc123 '), '1FF210GXABC123');
   assert.equal(claveSerie(null), null);
 });
+
+// Caterpillar (VisionLink, AEMP 2.0): mismo estándar, con espacio de nombres y odómetro en millas.
+test('flota de Caterpillar con namespace, millas y enlace a la página siguiente', () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+  <Fleet xmlns="http://standards.iso.org/iso/15143/-3" version="1" snapshotTime="2026-11-18T12:00:00Z">
+    <Links><rel>self</rel><href>https://services.cat.com/telematics/iso15143/fleet/1</href></Links>
+    <Links><rel>Next</rel><href>https://services.cat.com/telematics/iso15143/fleet/2</href></Links>
+    <Equipment>
+      <EquipmentHeader><OEMName>CAT</OEMName><Model>320</Model><EquipmentID>X1</EquipmentID><SerialNumber>CAT0320ZKMG10234</SerialNumber></EquipmentHeader>
+      <Location datetime="2026-11-18T11:40:00Z"><Latitude>-31.41</Latitude><Longitude>-64.18</Longitude></Location>
+      <CumulativeOperatingHours datetime="2026-11-18T11:45:00Z"><Hour>5123.4</Hour></CumulativeOperatingHours>
+      <Distance datetime="2026-11-18T11:45:00Z"><OdometerUnits>miles</OdometerUnits><Odometer>100</Odometer></Distance>
+      <FuelRemaining datetime="2026-11-18T11:45:00Z"><Percent>62</Percent></FuelRemaining>
+    </Equipment>
+  </Fleet>`;
+  const f = parsearFlota(xml, XMLParser);
+  assert.equal(f.maquinas.length, 1);
+  const m = f.maquinas[0];
+  assert.equal(m.oem, 'CAT'); assert.equal(m.serie, 'CAT0320ZKMG10234'); assert.equal(m.pin, null);
+  assert.equal(m.horas, 5123.4); assert.equal(m.odometro_km, 160.9); assert.equal(m.combustible_pct, 62);
+  assert.equal(m.medido_en, '2026-11-18T11:45:00.000Z');
+  assert.equal(f.siguiente, 'https://services.cat.com/telematics/iso15143/fleet/2');
+});

@@ -112,6 +112,11 @@ try {
   }
   await tab('equipos'); await p.click('[data-act="admEqNuevo"]'); await p.fill('#ne-cod', 'EX-01'); await p.selectOption('#ne-tipo', 'excavadora'); await p.fill('#ne-nom', 'Excavadora de prueba'); await p.fill('#ne-med', '4800'); await p.click('[data-act="admEqGuardar"]'); await ver('Excavadora de prueba');
   paso('obra, operario, mecánico y equipo');
+  // Caterpillar: con credenciales inventadas, Caterpillar las rechaza y no se guarda nada
+  await ver('Caterpillar VisionLink'); await p.click('[data-act="catConectar"]');
+  await p.fill('#cat-id', 'fleet_mgmt_prueba_e2e'); await p.fill('#cat-sec', 'secreto-inventado-123'); await p.click('[data-act="catGuardar"]');
+  await ver('Caterpillar rechazó las credenciales', 40000); await p.click('[data-act="catCancelar"]');
+  paso('Caterpillar: credenciales inválidas rechazadas por Caterpillar');
   await salir();
 
   // ---------- el operario hace el checklist con una falla crítica

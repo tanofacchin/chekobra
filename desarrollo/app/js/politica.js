@@ -36,7 +36,7 @@ instrucciones, en los términos de la Ley 25.326 de Protección de los Datos Per
   <li><b>Datos del trabajo:</b> equipo, obra, respuestas del checklist, horómetro u odómetro, horarios de inicio y cierre,
       novedades y combustible cargado.</li>
   <li><b>Datos técnicos:</b> fecha y hora, tipo de navegador o dispositivo, y registros de acceso.</li>
-  <li><b>Datos de las máquinas</b> (si la empresa conecta telemetría, por ejemplo John Deere JDLink): horas de motor,
+  <li><b>Datos de las máquinas</b> (si la empresa conecta telemetría, por ejemplo John Deere JDLink o Caterpillar VisionLink): horas de motor,
       ubicación y combustible de los equipos. No son datos del operario, pero se cruzan con los checklists.</li>
 </ul>
 <p>No se recolectan datos sensibles en los términos del artículo 2 de la Ley 25.326.</p>
