@@ -2,7 +2,7 @@
 // BORRADOR: revisarlo con un abogado antes del piloto. Lo marcado entre [corchetes] hay que completarlo.
 // Al cambiar el texto, subir la versión acá y en public.version_privacidad() (migración nueva): todos vuelven a aceptar.
 export const VERSION_PRIVACIDAD = 'v1-2026-11';
-export const TITULAR = '[NOMBRE O RAZÓN SOCIAL DEL TITULAR DE CHECKOBRA]';
+export const TITULAR = '[NOMBRE O RAZÓN SOCIAL DEL TITULAR DE OPERAPTO]';
 export const CONTACTO = '[CORREO DE CONTACTO PARA PRIVACIDAD]';
 
 // Lo que ve el operario antes de aceptar: corto y claro.
@@ -17,14 +17,14 @@ export const RESUMEN = [
 
 export function politicaHtml() {
   return `
-<h1>Política de privacidad de CheckObra</h1>
+<h1>Política de privacidad de Operapto</h1>
 <p class="muted">Versión ${VERSION_PRIVACIDAD}. Borrador sujeto a revisión legal.</p>
 
 <h2>1. Quiénes somos</h2>
-<p>CheckObra es un servicio de ${TITULAR} ("CheckObra") que permite a empresas de construcción, minería y agro registrar
+<p>Operapto es un servicio de ${TITULAR} ("Operapto") que permite a empresas de construcción, minería y agro registrar
 el control pre-operacional de sus máquinas y vehículos.</p>
 <p>La <b>empresa empleadora o contratante</b> del operario es la <b>responsable</b> de los datos que se cargan en su cuenta.
-CheckObra actúa como <b>encargado del tratamiento</b>: guarda y procesa los datos por cuenta de esa empresa y según sus
+Operapto actúa como <b>encargado del tratamiento</b>: guarda y procesa los datos por cuenta de esa empresa y según sus
 instrucciones, en los términos de la Ley 25.326 de Protección de los Datos Personales.</p>
 
 <h2>2. Qué datos se tratan</h2>
@@ -62,7 +62,7 @@ Queda registro de la fecha, la hora y la versión aceptada.</p>
 <ul>
   <li>Los supervisores y administradores de la empresa del operario. Cada empresa ve solo sus propios datos.</li>
   <li>El operario ve sus propias jornadas.</li>
-  <li>Personal técnico de CheckObra, solo cuando sea necesario para dar soporte o mantener el servicio, bajo
+  <li>Personal técnico de Operapto, solo cuando sea necesario para dar soporte o mantener el servicio, bajo
       confidencialidad.</li>
 </ul>
 

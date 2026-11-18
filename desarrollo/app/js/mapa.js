@@ -52,7 +52,7 @@ export function despues() {
   const pts = [];
   us.forEach(u => {
     const [c, t] = estadoDe(u);
-    const mk = L.marker([u.lat, u.lng], { title: `${u.codigo} · ${t}`, icon: L.divIcon({ className: '', html: `<span class="pin ${c}">${esc(u.codigo)}</span>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(mapa);
+    const mk = L.marker([u.lat, u.lng], { title: `${u.codigo} · ${t}`, icon: L.divIcon({ className: '', html: `<span class="mpin ${c}">${esc(u.codigo)}</span>`, iconSize: null, iconAnchor: [0, 0] }) }).addTo(mapa);
     mk.bindPopup(`<b>${esc(u.codigo)} · ${esc(u.nombre)}</b><br>${t}${u.obra ? '<br>' + esc(u.obra) : ''}${u.operario ? '<br>' + esc(u.operario) : ''}
       <br><span style="color:#666">${u.origen === 'telemetria' ? 'JDLink' : 'Checklist'} · ${fFecha(u.cuando)} ${fHora(u.cuando)} h</span><br><a href="${mapsUrl(u.lat, u.lng)}" target="_blank" rel="noopener">Abrir en Google Maps ↗</a>`);
     u._mk = mk; pts.push([u.lat, u.lng]);

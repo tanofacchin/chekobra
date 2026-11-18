@@ -1,4 +1,4 @@
-# CheckObra — desarrollo
+# Operapto — desarrollo
 
 Todos los comandos de esta guía se corren desde la carpeta `desarrollo/`.
 
@@ -13,7 +13,7 @@ Producto multiempresa: cada cliente (empresa) tiene sus equipos, personal, obras
 | Parte | Estado |
 |---|---|
 | Prototipo funcional (operario + administración) | `prototipo/index.html` — también publicado en claude.ai |
-| Base de datos multiempresa (Supabase / Postgres) | `supabase/migrations` — aplicada en el proyecto `checkobra` de Supabase |
+| Base de datos multiempresa (Supabase / Postgres) | `supabase/migrations` — aplicada en el proyecto `checkobra` de Supabase (nombre interno; el producto se llama Operapto) |
 | Plantillas base (13: construcción, vial, transporte y agro) | `plantillas/base.mjs` |
 | App instalable (PWA) conectada a Supabase | `app/` — publicada en GitHub Pages; ingreso de operarios con empresa + legajo + PIN |
 | Integración JDLink / ISO 15143-3 | `supabase/functions/johndeere` — lista; falta habilitar las credenciales de John Deere |

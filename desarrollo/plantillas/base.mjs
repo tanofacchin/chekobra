@@ -1,4 +1,4 @@
-// Plantillas base de CheckObra (visibles para todas las empresas).
+// Plantillas base de Operapto (visibles para todas las empresas).
 // Fuente única: este archivo. `node plantillas/generar-sql.mjs` genera la migración.
 // Cada sección tiene una clave; el id de cada ítem es "<clave>.<n>" y no se debe reusar
 // con otro significado (las jornadas guardan respuestas por id).

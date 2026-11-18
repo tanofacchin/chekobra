@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
   try {
     if (b.accion === "conectar") {
       if (!(await rol("es_admin"))) return json({ error: "Solo el dueño o un administrador puede conectar John Deere" }, 403);
-      if (!env("JD_CLIENT_ID") || !env("JD_CLIENT_SECRET")) return json({ error: "La conexión con John Deere todavía no está habilitada en CheckObra." }, 503);
+      if (!env("JD_CLIENT_ID") || !env("JD_CLIENT_SECRET")) return json({ error: "La conexión con John Deere todavía no está habilitada en Operapto." }, 503);
       const { data: mid } = await comoUsuario.rpc("mi_miembro_id", { e: b.empresa_id });
       const state = crypto.randomUUID();
       const volver = (b.volver_a && /^https?:\/\//.test(b.volver_a)) ? b.volver_a : env("APP_URL", "/");

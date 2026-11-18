@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deja un proyecto de Supabase igual al de producción: migraciones, funciones y secretos.
-# Pensado para el proyecto de pruebas ("checkobra-pruebas"); sirve también para uno nuevo de producción.
+# Pensado para el proyecto de pruebas ("operapto-pruebas"); sirve también para uno nuevo de producción.
 #
 #   SUPABASE_ACCESS_TOKEN=sbp_... scripts/preparar-proyecto.sh <ref-del-proyecto>
 #

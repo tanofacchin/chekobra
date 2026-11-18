@@ -489,7 +489,7 @@ async function exportarExcel(f) {
     if (costos && f.obra) costos.filas = costos.filas.filter(c => c.obra_id === f.obra);
     const blob = await generarExcel(js, f, cargas, costos);
     const slug = S.m.empresa.slug;
-    descargar(`checkobra-${slug}-${f.desde}-al-${f.hasta}.xlsx`, blob, blob.type);
+    descargar(`operapto-${slug}-${f.desde}-al-${f.hasta}.xlsx`, blob, blob.type);
     toast(`Excel descargado: ${js.length} jornada${js.length === 1 ? '' : 's'}.`);
   } catch (e) { toast('No se pudo armar el Excel: ' + msgError(e), 6000); }
   finally { a.excelOcupado = false; render(); }

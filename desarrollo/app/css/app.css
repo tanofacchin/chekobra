@@ -363,8 +363,8 @@ select.inp.ed-sel{width:auto;max-width:100%}
 .mapa{height:520px;border-radius:12px;border:1px solid var(--line);z-index:0;background:var(--surface)}
 .mapa-lista{max-height:520px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
 @media (max-width:800px){.mapa-grid{grid-template-columns:1fr}.mapa{height:380px}.mapa-lista{max-height:none}}
-.pin{display:inline-block;letter-spacing:0;transform:translate(-50%,-100%);padding:3px 8px;border-radius:8px;font:700 12px/1.2 var(--f-mono,monospace);color:#fff;background:#1d7f46;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);white-space:nowrap}
-.pin.bad{background:#b3261e}.pin.uso{background:#1a1e22;color:#f5b72e}.pin.off{background:#6b7280}
+.mpin{display:inline-block;letter-spacing:0;transform:translate(-50%,-100%);padding:3px 8px;border-radius:8px;font:700 12px/1.2 var(--f-mono,monospace);color:#fff;background:#1d7f46;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);white-space:nowrap}
+.mpin.bad{background:#b3261e}.mpin.uso{background:#1a1e22;color:#f5b72e}.mpin.off{background:#6b7280}
 .pin-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:#1d7f46}
 .pin-dot.bad{background:#b3261e}.pin-dot.uso{background:#f0a500}.pin-dot.off{background:#6b7280}
 /* línea de tiempo del equipo */

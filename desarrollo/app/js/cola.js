@@ -3,7 +3,7 @@
 // Cada envío lleva un client_id: reenviarlo nunca duplica registros en el servidor.
 import { esErrorDeRed } from './util.js';
 
-const DB = 'checkobra', ST = 'envios';
+const DB = 'checkobra', ST = 'envios';   // nombre interno anterior a Operapto: cambiarlo perdería lo guardado sin señal
 let dbp;
 function abrir() {
   return dbp ||= new Promise((ok, no) => {

@@ -24,7 +24,7 @@ export async function iniciarActivacion(volver) {
   try {
     for (const f of (await factores()).filter(f => f.status !== 'verified')) await sb.auth.mfa.unenroll({ factorId: f.id });
     const n = (await factores()).length;
-    const { data, error } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: n ? `Celular ${n + 1} · ${new Date().toLocaleDateString('es-AR')}` : 'Celular principal', issuer: 'CheckObra' });
+    const { data, error } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: n ? `Celular ${n + 1} · ${new Date().toLocaleDateString('es-AR')}` : 'Celular principal', issuer: 'Operapto' });
     if (error) throw error;
     // Según la versión, el QR viene como SVG suelto o ya como data URL.
     const qr = data.totp.qr_code, svg = qr.startsWith('data:') && !qr.includes(';base64,') ? qr.slice(qr.indexOf(',') + 1) : qr;
@@ -51,11 +51,11 @@ export function vMfa() {
       ${m.err ? `<p class="err" role="alert">${esc(m.err)}</p>` : ''}
       <button class="btn primary block" type="submit" ${m.ocupado || !m.factorId ? 'disabled' : ''}>${m.ocupado && m.factorId ? 'Verificando…' : !m.factorId ? 'Preparando…' : act ? 'Activar' : 'Entrar'}</button></form>`;
   if (!act) return `<main class="login"><section class="card"><p class="eyebrow">Verificación en dos pasos</p><h1>Código de seguridad</h1>
-      <p class="muted">Abrí tu app autenticadora (Google Authenticator, Microsoft Authenticator u otra) y escribí el código de CheckObra.</p>${form}
-      <p class="small muted">¿Perdiste el celular? Pedile a otro administrador de tu empresa o a soporte de CheckObra que te lo restablezca.</p>
+      <p class="muted">Abrí tu app autenticadora (Google Authenticator, Microsoft Authenticator u otra) y escribí el código de Operapto.</p>${form}
+      <p class="small muted">¿Perdiste el celular? Pedile a otro administrador de tu empresa o a soporte de Operapto que te lo restablezca.</p>
       <button class="btn ghost sm" data-act="salir">Salir</button></section></main>`;
   return `<main class="login"><section class="card"><p class="eyebrow">Seguridad de la cuenta</p><h1>Activá la verificación en dos pasos</h1>
-      <p class="muted">${m.volver ? 'Vas a agregar otro celular para entrar.' : 'Para proteger los datos de la empresa, quienes administran CheckObra entran con la contraseña y un código que cambia cada 30 segundos.'}</p>
+      <p class="muted">${m.volver ? 'Vas a agregar otro celular para entrar.' : 'Para proteger los datos de la empresa, quienes administran Operapto entran con la contraseña y un código que cambia cada 30 segundos.'}</p>
       <ol class="pasos"><li>Instalá en tu celular una app autenticadora: <b>Google Authenticator</b> o <b>Microsoft Authenticator</b> (gratis).</li>
         <li>En la app, tocá <b>+</b> y escaneá este código. Si estás en el mismo celular, copiá la clave.</li>
         <li>Escribí el código de 6 números que te muestra.</li></ol>
