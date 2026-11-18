@@ -2,7 +2,7 @@
 # Deja un proyecto de Supabase igual al de producción: migraciones, funciones y secretos.
 # Pensado para el proyecto de pruebas ("operapto-pruebas"); sirve también para uno nuevo de producción.
 #
-#   SUPABASE_ACCESS_TOKEN=sbp_... scripts/preparar-proyecto.sh <ref-del-proyecto>
+#   SUPABASE_ACCESS_TOKEN=sbp_... [PRUEBAS=1] scripts/preparar-proyecto.sh <ref-del-proyecto>
 #
 # - Aplica solo las migraciones que faltan (las anota en supabase_migrations.schema_migrations).
 # - Las migraciones con tareas programadas (pg_cron) se saltean salvo que se pase CON_CRON=1:
@@ -29,9 +29,9 @@ commit;" >/dev/null
   echo "aplicada: $b"
 done
 
-for fn in ingresar operarios avisos johndeere; do
+for fn in ingresar operarios verificacion avisos johndeere; do
   [ -d "supabase/functions/$fn" ] || continue
-  jwt=false; [ "$fn" = operarios ] && jwt=true   # el resto valida por su cuenta (cron, OAuth, PIN)
+  jwt=false; case "$fn" in operarios|verificacion) jwt=true;; esac   # el resto valida por su cuenta (cron, OAuth, PIN)
   args=(-F "metadata={\"entrypoint_path\":\"$fn/index.ts\",\"name\":\"$fn\",\"verify_jwt\":$jwt};type=application/json")
   args+=(-F "file=@supabase/functions/$fn/index.ts;filename=$fn/index.ts;type=application/typescript")
   for s in supabase/functions/_shared/*.js; do case "$s" in *.test.*) ;; *) args+=(-F "file=@$s;filename=_shared/$(basename "$s");type=application/javascript");; esac; done
@@ -41,5 +41,10 @@ done
 if ! curl -fsS "$API/secrets" "${AUTH[@]}" | jq -e '.[] | select(.name == "PIN_PEPPER")' >/dev/null; then
   jq -n --arg p "$(openssl rand -hex 32)" '[{name:"PIN_PEPPER",value:$p}]' | curl -fsS -X POST "$API/secrets" "${AUTH[@]}" -H 'Content-Type: application/json' -d @- >/dev/null
   echo "secreto PIN_PEPPER creado"
+fi
+# En el proyecto de pruebas, la huella o cara tiene que aceptar la app servida en localhost (PRUEBAS=1).
+if [ "${PRUEBAS:-0}" = 1 ]; then
+  jq -n '[{name:"PERMITIR_LOCALHOST",value:"1"}]' | curl -fsS -X POST "$API/secrets" "${AUTH[@]}" -H 'Content-Type: application/json' -d @- >/dev/null
+  echo "huella o cara habilitada para localhost (solo pruebas)"
 fi
 echo "Proyecto $REF listo."

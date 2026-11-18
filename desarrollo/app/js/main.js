@@ -126,7 +126,6 @@ async function alIniciarSesion(user) {
   // Va antes de elegir empresa: sin el código, el servidor no deja leer los datos de la empresa.
   if (!/\.operarios\.invalid$/.test(user.email || '')) {
     const p = await Seg.pendiente();
-    if (p === 'activar') return Seg.iniciarActivacion();
     if (p === 'verificar') return Seg.iniciarVerificacion();
   }
   const previa = ls.get('co_membresia', null);
@@ -182,6 +181,11 @@ async function sync() {
   if (cambio) render();
 }
 export { sync };
+// Después de verificar (al entrar) o de activar una forma nueva (desde Tu seguridad).
+function despuesMfa(activando) {
+  if (activando) { S.vista = 'app'; render(); Adm.A.admTab({ dataset: { k: 'personal' } }); } else alIniciarSesion(S.user);
+}
+S.mfaContinuar = despuesMfa;
 // Carga los datos de la vista activa: panel, taller del mecánico o checklist.
 function cargarVista() {
   if (S.modoOperario) return Op.cargar();
@@ -197,6 +201,7 @@ const A = {
   irLogin: () => { S.vista = 'login'; S.login.modo = 'correo'; S.login.err = ''; render(); },
   salir: async () => {
     if (S.pendientes) { toast('Hay registros sin enviar. Esperá a tener señal antes de salir.', 5000); return; }
+    await sb.rpc('olvidar_sesion').then(() => {}, () => {});   // la sesión verificada por correo deja de valer
     await salir(); ls.del('co_membresia'); S.m = null; S.membresias = []; S.vista = 'login'; S.login.pin = ''; S.login.pass = ''; render();
   },
   cambiarEmpresa: () => { S.vista = 'elegir'; render(); },
@@ -216,7 +221,7 @@ const A = {
 };
 
 const FORMS = {
-  mfa() { Seg.enviar(volver => { if (volver) { S.vista = 'app'; render(); Adm.A.admTab({ dataset: { k: 'personal' } }); } else alIniciarSesion(S.user); }); },
+  mfa() { Seg.enviar(despuesMfa); },
   async login() {
     const L = S.login; L.err = ''; L.aviso = '';
     if (L.modo === 'operario') {
