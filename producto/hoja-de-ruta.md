@@ -55,6 +55,9 @@
 - Caterpillar VisionLink (18/11) por ISO 15143-3: la empresa carga sus credenciales (se guardan cifradas), se actualiza
   cada hora y se cruza igual que John Deere (horómetro, ubicación, uso sin checklist). Falta probar con credenciales reales.
 
+- Plantillas estándar intocables (20/11): "Copiar y editar" crea una plantilla de la empresa y la estándar sigue
+  disponible; cada equipo elige su checklist (estándar o propia); las propias se editan por versiones y se archivan.
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).

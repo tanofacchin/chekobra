@@ -1,6 +1,7 @@
 // Editor de plantillas de checklist (dueño y administradores).
-// Cada empresa puede personalizar una plantilla base o crear una propia. Guardar crea una versión nueva:
-// las jornadas viejas siguen mostrando la versión con la que se hicieron.
+// Las plantillas estándar de Operapto no se tocan: "Copiar y editar" crea una plantilla nueva de la empresa y la
+// estándar sigue disponible. Las de la empresa se editan guardando una versión nueva (las jornadas viejas siguen
+// mostrando la versión con la que se hicieron). Cada equipo elige qué plantilla usa.
 import { esc, toast, msgError } from './util.js';
 import { sb } from './datos.js';
 import { S, render, esAdmin } from './estado.js';
@@ -14,32 +15,44 @@ const nuevoId = () => 'c' + Date.now().toString(36) + (sec++).toString(36);
 const slug = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
 
 /* ------------------------------------------------------------ lista */
+const ultima = vs => vs.slice().sort((x, y) => y.version - x.version)[0];
+const contar = pl => ({ n: pl.secciones.reduce((k, s) => k + s.items.length, 0), c: pl.secciones.reduce((k, s) => k + s.items.filter(i => i.critico).length, 0) });
 export function vPlantillas() {
   const a = T();
   if (a.ed) return vEditor();
   const lista = a.pls;
   if (!lista) return '<p class="muted">Cargando plantillas…</p>';
-  const porClave = {};
-  for (const p of lista) (porClave[p.clave] ||= []).push(p);
-  const filas = Object.entries(porClave).map(([clave, vs]) => {
-    const propias = vs.filter(p => p.empresa_id).sort((x, y) => y.version - x.version);
-    const base = vs.filter(p => !p.empresa_id).sort((x, y) => y.version - x.version)[0];   // la versión base más nueva
-    const vig = propias[0] || base;
-    const n = vig.secciones.reduce((k, s) => k + s.items.length, 0), c = vig.secciones.reduce((k, s) => k + s.items.filter(i => i.critico).length, 0);
-    return { clave, vig, propias, base, n, c };
-  }).sort((x, y) => x.vig.nombre.localeCompare(y.vig.nombre));
-  return `<section class="card"><div class="row" style="justify-content:space-between"><div><h2>Plantillas de checklist</h2>
-      <p class="small muted">Cada tipo de equipo usa una plantilla. Podés ajustar las de base o crear las tuyas; los cambios valen para los checklists nuevos.</p></div>
-      ${esAdmin() ? '<button class="btn sm dark" data-act="edNueva">Nueva plantilla</button>' : ''}</div>
-    <div>${filas.map(f => `<div class="eqrow"><span class="eqcode">${f.propias.length ? 'Propia v' + f.vig.version : 'Base'}</span>
+  const eqs = (a.d && a.d.equipos || []).filter(e => e.activo);
+  const usan = clave => eqs.filter(e => e.plantilla_clave === clave);
+  const grupos = (filtro) => { const m = {}; for (const p of lista.filter(filtro)) (m[p.clave] ||= []).push(p); return Object.entries(m).map(([clave, vs]) => ({ clave, vig: ultima(vs) })).sort((x, y) => x.vig.nombre.localeCompare(y.vig.nombre)); };
+  const estandar = grupos(p => !p.empresa_id), propias = grupos(p => p.empresa_id);
+  const nombreDe = clave => { const x = lista.find(p => p.clave === clave); return x ? x.nombre : clave; };
+  const fila = (f, propia) => {
+    const { n, c } = contar(f.vig), u = usan(f.clave);
+    return `<div class="eqrow"><span class="eqcode">${propia ? 'v' + f.vig.version : 'Estándar'}</span>
       <div><b>${esc(f.vig.nombre)}</b> <span class="chip plain">${esc((RUBROS.find(r => r[0] === f.vig.rubro) || [, f.vig.rubro])[1])}</span>
-        <div class="small muted">${f.n} puntos · ${f.c} críticos · se mide en ${f.vig.medidor === 'km' ? 'km' : 'horas'}${f.propias.length && f.base ? ' · basada en la plantilla de Operapto' : ''}</div></div>
-      <div class="row" style="justify-content:flex-end">${esAdmin() ? `<button class="btn sm ${f.propias.length ? '' : 'primary'}" data-act="edAbrir" data-clave="${esc(f.clave)}">${f.propias.length ? 'Editar' : 'Personalizar'}</button>
-        ${f.propias.length && f.base ? `<button class="btn sm ghost" data-act="edVolverBase" data-clave="${esc(f.clave)}">${a.confirm === 'base-' + f.clave ? 'Tocá de nuevo para confirmar' : 'Volver a la de base'}</button>` : ''}` : ''}</div></div>`).join('')}</div></section>`;
+        <div class="small muted">${n} puntos · ${c} críticos · se mide en ${f.vig.medidor === 'km' ? 'km' : 'horas'}${propia && f.vig.basada_en ? ` · copia de "${esc(nombreDe(f.vig.basada_en))}"` : ''}</div>
+        <div class="small">${u.length ? `La usa${u.length > 1 ? 'n' : ''}: ${u.map(e => `<span class="eqcode">${esc(e.codigo)}</span>`).join(' ')}` : '<span class="muted">Ningún equipo la usa</span>'}</div></div>
+      <div class="row" style="justify-content:flex-end">${!esAdmin() ? '' : propia
+        ? `<button class="btn sm primary" data-act="edAbrir" data-clave="${esc(f.clave)}">Editar</button>
+           <button class="btn sm ghost" data-act="edArchivar" data-clave="${esc(f.clave)}" ${u.length ? 'disabled title="Primero cambiá el checklist de los equipos que la usan"' : ''}>${a.confirm === 'arch-' + f.clave ? 'Tocá de nuevo para archivar' : 'Archivar'}</button>`
+        : `<button class="btn sm" data-act="edCopiar" data-clave="${esc(f.clave)}">Copiar y editar</button>`}</div></div>`;
+  };
+  const ap = a.edAplicar, apBase = ap && usan(ap.base);
+  const aviso = ap && apBase.length ? `<section class="card"><div class="okbox"><b>"${esc(ap.nombre)}" está lista.</b> Hoy ${apBase.length === 1 ? 'el equipo' : `los ${apBase.length} equipos`} ${apBase.map(e => esc(e.codigo)).join(', ')} ${apBase.length === 1 ? 'usa' : 'usan'} la estándar "${esc(nombreDe(ap.base))}".</div>
+      <div class="row"><button class="btn sm primary" data-act="edAplicar">Usar la nueva en ${apBase.length === 1 ? 'ese equipo' : 'esos equipos'}</button><button class="btn sm ghost" data-act="edAplicarNo">Dejarlos con la estándar</button></div>
+      <p class="small muted">También podés elegir el checklist de cada equipo desde la pestaña Equipos.</p></section>` : '';
+  return `${aviso}<section class="card"><div class="row" style="justify-content:space-between"><div><h2>Plantillas de tu empresa (${propias.length})</h2>
+      <p class="small muted">Las armás desde cero o copiando una estándar. Al guardar cambios se crea una versión nueva: los checklists viejos siguen mostrando la versión con la que se hicieron.</p></div>
+      ${esAdmin() ? '<button class="btn sm dark" data-act="edNueva">Nueva plantilla</button>' : ''}</div>
+    ${propias.length ? `<div>${propias.map(f => fila(f, true)).join('')}</div>` : '<p class="muted">Todavía no tenés plantillas propias. Copiá una estándar para adaptarla a tus equipos.</p>'}</section>
+    <section class="card"><h2>Plantillas estándar de Operapto (${estandar.length})</h2>
+      <p class="small muted">Siempre disponibles y no se modifican. "Copiar y editar" crea una plantilla tuya a partir de la estándar; la estándar sigue igual para los equipos que la usan.</p>
+      <div>${estandar.map(f => fila(f, false)).join('')}</div></section>`;
 }
 
 export async function cargarPlantillas() {
-  const { data, error } = await sb.from('plantillas').select('id, empresa_id, clave, nombre, rubro, medidor, version, secciones').eq('activa', true);
+  const { data, error } = await sb.from('plantillas').select('id, empresa_id, clave, nombre, rubro, medidor, version, secciones, basada_en').eq('activa', true);
   if (error) { toast(msgError(error)); return; }
   T().pls = data; render();
 }
@@ -67,22 +80,25 @@ function vEditor() {
         <select class="inp ed-sel" data-edq="${si}.${ii}" aria-label="Frecuencia"><option value="">Todos los días</option>${DIAS.map((d, k) => k ? `<option value="${k}" ${it.frecuencia && it.frecuencia.dia === k ? 'selected' : ''}>Semanal: ${d}</option>` : '').join('')}</select>
         <input class="inp ed-ayuda" data-eda="${si}.${ii}" value="${esc(it.ayuda || '')}" maxlength="400" placeholder="Ayuda para el operario (opcional)" aria-label="Ayuda"></div></div>`).join('')}
     <button class="btn sm" data-act="edItem" data-op="agregar" data-k="${si}.0" style="margin:10px 16px;align-self:flex-start">+ Agregar punto</button></section>`).join('');
-  return `<section class="card"><div class="row" style="justify-content:space-between"><div><p class="eyebrow">${ed.nueva ? 'Nueva plantilla' : 'Editando'}</p><h2>${esc(ed.nombre || 'Sin nombre')}</h2></div>
+  return `<section class="card"><div class="row" style="justify-content:space-between"><div><p class="eyebrow">${ed.basada_en ? 'Copia de una plantilla estándar' : ed.nueva ? 'Nueva plantilla' : 'Editando'}</p><h2>${esc(ed.nombre || 'Sin nombre')}</h2></div>
       <span class="chip plain">${total} puntos · ${ed.secciones.reduce((k, s) => k + s.items.filter(i => i.critico).length, 0)} críticos</span></div>
     <div class="form-grid"><label class="f">Nombre<input class="inp" id="ed-nom" data-ed="nombre" value="${esc(ed.nombre)}" maxlength="80"></label>
       <label class="f">Se mide en<select class="inp" id="ed-med" data-ed="medidor" ${ed.nueva ? '' : 'disabled'}><option value="horas" ${ed.medidor === 'horas' ? 'selected' : ''}>Horas (horómetro)</option><option value="km" ${ed.medidor === 'km' ? 'selected' : ''}>Kilómetros (odómetro)</option></select></label>
       <label class="f">Rubro<select class="inp" id="ed-rub" data-ed="rubro">${RUBROS.map(([v, l]) => `<option value="${v}" ${ed.rubro === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+    ${ed.basada_en ? '<p class="small muted">Es una copia: la plantilla estándar no cambia. Ponele un nombre que la distinga.</p>' : ''}
     <p class="small muted">Los puntos <b>críticos</b> bloquean el equipo si fallan y no admiten "No aplica".</p></section>
     ${secs}
     <button class="btn" data-act="edSec" data-op="agregar" data-si="0">+ Agregar sección</button>
     ${ed.err ? `<p class="err" role="alert">${esc(ed.err)}</p>` : ''}
-    <div class="row"><button class="btn" data-act="edCancelar">Cancelar</button><button class="btn primary" data-act="edGuardar" ${ed.ocupado ? 'disabled' : ''}>${ed.ocupado ? 'Guardando…' : 'Guardar versión nueva'}</button></div>`;
+    <div class="row"><button class="btn" data-act="edCancelar">Cancelar</button><button class="btn primary" data-act="edGuardar" ${ed.ocupado ? 'disabled' : ''}>${ed.ocupado ? 'Guardando…' : ed.nueva ? 'Guardar plantilla nueva' : 'Guardar versión nueva'}</button></div>`;
 }
 
-function abrir(clave) {
+// copiar = true: arranca una plantilla nueva de la empresa con el contenido de la estándar.
+function abrir(clave, copiar) {
   const vs = T().pls.filter(p => p.clave === clave);
-  const vig = vs.filter(p => p.empresa_id).sort((x, y) => y.version - x.version)[0] || vs.filter(p => !p.empresa_id).sort((x, y) => y.version - x.version)[0];
-  T().ed = { clave, nueva: false, nombre: vig.nombre, rubro: vig.rubro, medidor: vig.medidor, secciones: structuredClone(vig.secciones).map(s => ({ ...s, items: s.items.map(i => ({ id: i.id, texto: i.texto, critico: !!i.critico,
+  const vig = ultima(vs.filter(p => p.empresa_id).length ? vs.filter(p => p.empresa_id) : vs);
+  T().ed = { clave: copiar ? null : clave, nueva: !!copiar, basada_en: copiar ? clave : vig.basada_en || null,
+    nombre: copiar ? `${vig.nombre} (${S.m.empresa.nombre})`.slice(0, 80) : vig.nombre, rubro: vig.rubro, medidor: vig.medidor, secciones: structuredClone(vig.secciones).map(s => ({ ...s, items: s.items.map(i => ({ id: i.id, texto: i.texto, critico: !!i.critico,
     alerta: !!i.alerta, foto: i.foto || null, frecuencia: i.frecuencia || null, ayuda: i.ayuda || '' })) })), err: '' };
   render(); scrollTo(0, 0);
 }
@@ -102,6 +118,7 @@ async function guardar() {
   ed.ocupado = true; render();
   let clave = ed.clave;
   if (ed.nueva) {
+    if (a.pls.some(p => p.empresa_id && p.nombre.trim().toLowerCase() === ed.nombre.trim().toLowerCase())) { ed.err = 'Ya tenés una plantilla con ese nombre.'; return render(); }
     clave = 'p-' + (slug(ed.nombre) || 'plantilla');
     if (a.pls.some(p => p.clave === clave)) clave += '-' + Date.now().toString(36).slice(-4);
   }
@@ -111,25 +128,35 @@ async function guardar() {
   const secciones = ed.secciones.map(s => ({ ...(s.clave ? { clave: s.clave } : {}), titulo: s.titulo.trim(), items: s.items.map(i => ({ id: i.id, texto: i.texto.trim(), critico: !!i.critico,
     ...(i.alerta && !i.critico ? { alerta: true } : {}), ...(i.foto ? { foto: 'obligatoria' } : {}),
     ...(i.frecuencia ? { frecuencia: { tipo: 'semanal', dia: i.frecuencia.dia } } : {}), ...(i.ayuda && i.ayuda.trim() ? { ayuda: i.ayuda.trim() } : {}) })) }));
-  const { error } = await sb.from('plantillas').insert({ empresa_id: E(), clave, nombre: ed.nombre.trim(), rubro: ed.rubro, medidor: ed.medidor, version, secciones });
+  const { error } = await sb.from('plantillas').insert({ empresa_id: E(), clave, nombre: ed.nombre.trim(), rubro: ed.rubro, medidor: ed.medidor, version, secciones, basada_en: ed.basada_en || null });
   ed.ocupado = false;
   if (error) { ed.err = msgError(error); return render(); }
-  a.ed = null; toast(`Plantilla guardada (versión ${version}). Se usa en los checklists nuevos.`, 5000);
-  await cargarPlantillas();
+  a.ed = null;
+  if (ed.nueva) { toast('Plantilla nueva guardada. Elegila en los equipos que quieras.', 6000); if (ed.basada_en) a.edAplicar = { clave, base: ed.basada_en, nombre: ed.nombre.trim() }; }
+  else toast(`Plantilla guardada (versión ${version}). Se usa en los checklists nuevos de los equipos que la tienen.`, 6000);
+  await cargarPlantillas(); a.recargar();
 }
 
 export const A = {
   edNueva: () => { T().ed = { clave: null, nueva: true, nombre: '', rubro: S.m.empresa.rubro || 'construccion', medidor: 'horas', secciones: [{ titulo: 'Documentación', items: [{ id: nuevoId(), texto: '', critico: false }] }], err: '' }; render(); },
   edAbrir: b => abrir(b.dataset.clave),
+  edCopiar: b => abrir(b.dataset.clave, true),
+  edAplicar: async () => {
+    const a = T(), ap = a.edAplicar;
+    const { error } = await sb.from('equipos').update({ plantilla_clave: ap.clave }).eq('empresa_id', E()).eq('plantilla_clave', ap.base).eq('activo', true);
+    if (error) return toast(msgError(error), 6000);
+    a.edAplicar = null; render(); toast(`Los equipos ahora usan "${ap.nombre}".`); await a.recargar(); render();
+  },
+  edAplicarNo: () => { T().edAplicar = null; render(); },
   edCancelar: () => { T().ed = null; render(); },
   edGuardar: guardar,
-  edVolverBase: async b => {
-    const a = T(), k = 'base-' + b.dataset.clave;
+  edArchivar: async b => {
+    const a = T(), k = 'arch-' + b.dataset.clave;
     if (a.confirm !== k) { a.confirm = k; return render(); }
     a.confirm = null;
     const { error } = await sb.from('plantillas').update({ activa: false }).eq('empresa_id', E()).eq('clave', b.dataset.clave);
-    if (error) return toast(msgError(error));
-    toast('Se vuelve a usar la plantilla de base.'); cargarPlantillas();
+    if (error) return toast(msgError(error), 6000);
+    toast('Plantilla archivada. Los checklists hechos con ella se siguen viendo igual.'); cargarPlantillas();
   },
   edSec: b => {
     const ed = T().ed, si = +b.dataset.si, op = b.dataset.op, L = ed.secciones;

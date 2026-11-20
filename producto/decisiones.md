@@ -26,3 +26,4 @@
 | 2026-11-18 | Huella o cara y código por correo implementados por Operapto (no por Supabase) | Supabase todavía no habilita WebAuthn en el proyecto y no tiene código por correo como factor. La sesión verificada se anota por su session_id |
 | 2026-11-18 | Las huellas quedan atadas al dominio de la app | Al mudar a app.operapto.com.ar habrá que volver a agregarlas (la app lo explica); la app autenticadora y el correo siguen sirviendo |
 | 2026-11-18 | Caterpillar con credenciales propias de cada empresa, cifradas con una clave fuera de la base | Caterpillar no ofrece "autorizar con tu cuenta" para la API ISO 15143-3; si alguien copia la base, no obtiene las credenciales |
+| 2026-11-20 | Las plantillas estándar no se reemplazan: se copian | Pedido del usuario. Siempre queda la estándar para volver o para otros equipos; la base lo impide (no solo la pantalla) |
