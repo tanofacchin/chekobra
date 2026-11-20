@@ -112,6 +112,19 @@ try {
   }
   await tab('equipos'); await p.click('[data-act="admEqNuevo"]'); await p.fill('#ne-cod', 'EX-01'); await p.selectOption('#ne-tipo', 'excavadora'); await p.fill('#ne-nom', 'Excavadora de prueba'); await p.fill('#ne-med', '4800'); await p.click('[data-act="admEqGuardar"]'); await ver('Excavadora de prueba');
   paso('obra, operario, mecánico y equipo');
+  // Plantillas: copiar la estándar de excavadora, cambiarla y usarla en EX-01; la estándar sigue igual
+  await tab('plantillas'); await ver('Plantillas estándar de Operapto');
+  const fila = p.locator('.eqrow', { hasText: 'Excavadora' }).filter({ hasText: 'Estándar' }).first();
+  await fila.locator('[data-act="edCopiar"]').click(); await ver('Copia de una plantilla estándar');
+  await p.fill('#ed-nom', 'Excavadora de la empresa');
+  await p.click('[data-act="edItem"][data-op="agregar"] >> nth=0'); await sleep(300);
+  const nuevos = await p.$$('input[data-edi^="0."]'); await nuevos[nuevos.length - 1].fill('Baliza giratoria funciona');
+  await p.click('[data-act="edGuardar"]'); await ver('Plantilla nueva guardada');
+  await ver('"Excavadora de la empresa" está lista'); await p.click('[data-act="edAplicar"]'); await ver('Los equipos ahora usan');
+  await ver('Plantillas de tu empresa (1)'); await ver('copia de');
+  await p.screenshot({ path: DIR + 'plantillas.png', fullPage: true });
+  await tab('equipos'); await ver('Excavadora de la empresa');
+  paso('copia editable de una plantilla estándar, aplicada al equipo; la estándar sigue disponible');
   // Caterpillar: con credenciales inventadas, Caterpillar las rechaza y no se guarda nada
   await ver('Caterpillar VisionLink'); await p.click('[data-act="catConectar"]');
   await p.fill('#cat-id', 'fleet_mgmt_prueba_e2e'); await p.fill('#cat-sec', 'secreto-inventado-123'); await p.click('[data-act="catGuardar"]');
@@ -126,6 +139,7 @@ try {
   await p.click('#nextBtn'); await p.click('[data-act="opGps"]'); await ver('Ubicación registrada'); await p.click('#nextBtn');
   await p.setInputFiles('#f-selfie', foto); await p.waitForSelector('.photo img'); await p.click('#nextBtn');
   await sleep(1500);
+  await ver('Baliza giratoria funciona'); // el operario ya usa la plantilla copiada
   for (const i of await p.$$eval('[data-act="opResp"][data-v="ok"]', bs => bs.map(x => x.dataset.id)))
     await p.click(`[data-act="opResp"][data-id="${i}"][data-v="${i === 'cabina.1' ? 'falla' : 'ok'}"]`);
   await p.fill('[data-nota="cabina.1"]', 'Cinturón cortado');

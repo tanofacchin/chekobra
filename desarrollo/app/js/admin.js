@@ -227,15 +227,17 @@ function vEquipos() {
       ${d.tele[e.id] ? lineaTele(d.tele[e.id], e) : ''}
       ${e.estado === 'bloqueado' ? `<div class="small" style="color:var(--bad);font-weight:600">Motivo: ${esc(e.motivo_bloqueo || '')}</div>` : ''}
       ${e.estado === 'fuera_servicio' && e.motivo_bloqueo ? `<div class="small muted">Motivo: ${esc(e.motivo_bloqueo)}</div>` : ''}</div>
-      <div class="row" style="justify-content:flex-end"><button class="btn sm ghost" data-act="equipoFicha" data-id="${e.id}">Ficha</button><button class="btn sm ghost" data-act="etqUno" data-id="${e.id}">QR</button>${ot ? `<button class="btn sm ghost" data-act="otAbrirPanel" data-id="${ot.id}">OT ${ot.numero}</button>` : e.estado === 'bloqueado' ? `<button class="btn sm dark" data-act="otDesdeEquipo" data-id="${e.id}">Orden de trabajo</button>` : ''}${e.estado === 'bloqueado' ? `<button class="btn sm primary" data-act="admLiberar" data-id="${e.id}">Liberar</button>`
+      <div class="row" style="justify-content:flex-end"><button class="btn sm ghost" data-act="admEqPl" data-id="${e.id}">Checklist</button><button class="btn sm ghost" data-act="equipoFicha" data-id="${e.id}">Ficha</button><button class="btn sm ghost" data-act="etqUno" data-id="${e.id}">QR</button>${ot ? `<button class="btn sm ghost" data-act="otAbrirPanel" data-id="${ot.id}">OT ${ot.numero}</button>` : e.estado === 'bloqueado' ? `<button class="btn sm dark" data-act="otDesdeEquipo" data-id="${e.id}">Orden de trabajo</button>` : ''}${e.estado === 'bloqueado' ? `<button class="btn sm primary" data-act="admLiberar" data-id="${e.id}">Liberar</button>`
         : `<button class="btn sm ghost" data-act="admServicio" data-id="${e.id}">${e.estado === 'fuera_servicio' ? 'Volver a servicio' : 'Fuera de servicio'}</button>`}</div>
+      ${a.eqPl && a.eqPl.id === e.id ? `<div style="grid-column:1/-1" class="row"><label class="f" style="flex:1 1 260px">Checklist de ${esc(e.codigo)}<select class="inp" id="eqpl-sel" data-eqpl="clave">${opcionesPlantilla(Object.values(d.plantillas).filter(p => p.medidor === e.medidor), a.eqPl.clave)}</select></label>
+        <button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admEqPlOk">Guardar</button></div>` : ''}
       ${a.liberar === e.id ? `<div style="grid-column:1/-1;display:flex;flex-direction:column;gap:8px"><label class="f">¿Qué se reparó?<textarea class="inp" id="lib-nota" data-ad="nota" placeholder="Ej.: se cambió la manguera del cilindro de pluma">${esc(a.nota)}</textarea></label>
         <div class="row"><button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admLiberarOk" data-id="${e.id}">Liberar equipo</button></div></div>` : ''}</div>`;
   }).join('');
   const n = a.addEq, pls = Object.values(d.plantillas).sort((x, y) => x.nombre.localeCompare(y.nombre));
   const form = n ? `<section class="card"><h2>Nuevo equipo</h2><div class="form-grid">
       <label class="f">Código interno<input class="inp" id="ne-cod" data-ne="codigo" value="${esc(n.codigo)}" placeholder="EX-01" maxlength="16"></label>
-      <label class="f">Tipo de checklist<select class="inp" id="ne-tipo" data-ne="plantilla" data-vivo>${pls.map(p => `<option value="${p.clave}" ${n.plantilla === p.clave ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select></label>
+      <label class="f">Checklist<select class="inp" id="ne-tipo" data-ne="plantilla" data-vivo>${opcionesPlantilla(pls, n.plantilla)}</select></label>
       <label class="f">Nombre (marca y modelo)<input class="inp" id="ne-nom" data-ne="nombre" value="${esc(n.nombre)}" placeholder="Excavadora John Deere 210G"></label>
       <label class="f">N.º de serie / PIN <small>Para vincular con John Deere o Caterpillar</small><input class="inp" id="ne-serie" data-ne="serie" value="${esc(n.serie)}"></label>
       <label class="f">Patente <small>Si tiene</small><input class="inp" id="ne-pat" data-ne="patente" value="${esc(n.patente)}"></label>
@@ -246,6 +248,12 @@ function vEquipos() {
     ${d.equipos.length ? `<div>${rows}</div>` : '<div class="empty">Todavía no hay equipos. Agregá el primero.</div>'}</section>`;
 }
 
+// Las plantillas de la empresa primero; después las estándar de Operapto.
+function opcionesPlantilla(pls, actual) {
+  const o = p => `<option value="${esc(p.clave)}" ${actual === p.clave ? 'selected' : ''}>${esc(p.nombre)}</option>`;
+  const ord = (x, y) => x.nombre.localeCompare(y.nombre), propias = pls.filter(p => p.empresa_id).sort(ord), est = pls.filter(p => !p.empresa_id).sort(ord);
+  return (propias.length ? `<optgroup label="Plantillas de tu empresa">${propias.map(o).join('')}</optgroup>` : '') + `<optgroup label="Estándar de Operapto">${est.map(o).join('')}</optgroup>`;
+}
 function hace(t) {
   const m = Math.round((Date.now() - new Date(t)) / 60000);
   return m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `el ${fFecha(t)}`;
@@ -402,7 +410,15 @@ export const A = {
     const a = T(), f = a.ind;
     return exportarExcel({ desde: f.desde, hasta: f.hasta, obra: f.obra, obraNombre: f.obra && (a.d.obras.find(o => o.id === f.obra) || {}).nombre });
   },
-  admCancelar: () => { const a = T(); a.liberar = null; a.reparar = null; a.pin = null; a.nota = ''; render(); },
+  admEqPl: b => { const e = T().d.equipos.find(x => x.id === b.dataset.id); T().eqPl = { id: e.id, clave: e.plantilla_clave }; render(); },
+  admEqPlOk: async () => {
+    const a = T(), x = a.eqPl, e = a.d.equipos.find(q => q.id === x.id);
+    if (x.clave === e.plantilla_clave) { a.eqPl = null; return render(); }
+    const { error } = await sb.from('equipos').update({ plantilla_clave: x.clave }).eq('id', x.id);
+    if (error) return toast(msgError(error), 6000);
+    a.eqPl = null; toast(`${e.codigo} usa ahora "${(a.d.plantillas[x.clave] || {}).nombre || x.clave}" en los checklists nuevos.`, 6000); cargar();
+  },
+  admCancelar: () => { const a = T(); a.eqPl = null; a.liberar = null; a.reparar = null; a.pin = null; a.nota = ''; render(); },
   admLiberar: b => { const a = T(); a.liberar = b.dataset.id; a.nota = ''; render(); },
   admLiberarOk: async b => { const a = T(); if (a.nota.trim().length < 3) return toast('Contá qué se reparó antes de liberar.'); if (await rpc('liberar_equipo', { p_equipo: b.dataset.id, p_reparacion: a.nota }, 'Equipo liberado.')) { a.liberar = null; a.nota = ''; render(); } },
   admReparar: b => { const a = T(); a.reparar = b.dataset.id; a.nota = ''; render(); },
@@ -508,6 +524,7 @@ export function alEscribir(el, v) {
   if (el.id === 'adm-busca-eq') { a.buscaEq = v; filtrar(el.dataset.buscar, v); return true; }
   if (el.dataset.fa) { a.f[el.dataset.fa] = v; a.jornadas = null; render(); cargarJornadas().then(render); return true; }
   if (el.dataset.ne && a.addEq) { a.addEq[el.dataset.ne] = v; if (el.dataset.ne === 'plantilla') render(); return true; }
+  if (el.dataset.eqpl && a.eqPl) { a.eqPl.clave = v; return true; }
   if (el.dataset.np && a.addPer) { a.addPer[el.dataset.np] = v; return true; }
   if (el.dataset.pin && a.pin) { a.pin.pin = v; return true; }
   if (el.dataset.ad) { a[el.dataset.ad] = v; return true; }

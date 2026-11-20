@@ -265,10 +265,14 @@ do $$ begin
 end $$;
 -- ===== Plantillas propias
 insert into public.plantillas (empresa_id, clave, nombre, rubro, medidor, version, secciones)
-  select v, 'excavadora', 'Excavadora Propia', 'construccion', 'horas', 1,
+  select v, 'p-excavadora-propia', 'Excavadora Propia', 'construccion', 'horas', 1,
          '[{"titulo":"Seguridad","items":[{"id":"doc.1","texto":"Operador habilitado","critico":true},{"id":"c.x1","texto":"Arnés","critico":false}]}]'
     from ctx where k = 'A';
-do $$ begin if (public.plantilla_vigente((select v from ctx where k = 'A'), 'excavadora')).nombre <> 'Excavadora Propia' then raise exception 'FALLÓ: no usa la plantilla propia'; end if; end $$;
+update public.equipos set plantilla_clave = 'p-excavadora-propia' where id = (select v from ctx where k = 'eqA');
+do $$ begin
+  if (public.plantilla_vigente((select v from ctx where k = 'A'), 'p-excavadora-propia')).nombre <> 'Excavadora Propia' then raise exception 'FALLÓ: no usa la plantilla propia'; end if;
+  if (public.plantilla_vigente((select v from ctx where k = 'A'), 'excavadora')).empresa_id is not null then raise exception 'FALLÓ: la estándar tiene que seguir igual'; end if;
+end $$;
 select pg_temp.esperar_error($$insert into public.plantillas (empresa_id, clave, nombre, rubro, version, secciones)
   select v, 'mala', 'Mala', 'construccion', 1, '[{"titulo":"X","items":[{"id":"a","texto":"Uno","critico":false},{"id":"a","texto":"Dos","critico":false}]}]' from ctx where k = 'A'$$, 'repetidos');
 select pg_temp.esperar_error($$insert into public.plantillas (empresa_id, clave, nombre, rubro, version, secciones)
@@ -802,5 +806,31 @@ do $$ begin
   delete from public.empresas where slug = 'minera-b';
   if exists (select 1 from public.auditoria where empresa_id = (select v from ctx where k = 'B')) then raise exception 'FALLÓ: quedó auditoría de una empresa borrada'; end if;
 end $$;
+
+-- ===== Plantillas estándar intocables; las copias son plantillas nuevas
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+select pg_temp.esperar_error($$insert into public.plantillas (empresa_id, clave, nombre, rubro, version, secciones)
+  select v, 'cargadora', 'Pisando la estándar', 'construccion', 9, '[{"titulo":"X","items":[{"id":"a","texto":"Uno","critico":false}]}]' from ctx where k = 'A'$$, 'no se modifican');
+insert into public.plantillas (empresa_id, clave, nombre, rubro, medidor, version, secciones, basada_en)
+  select v, 'p-cargadora-a', 'Cargadora (Constructora A)', 'construccion', 'horas', 1, '[{"titulo":"X","items":[{"id":"a","texto":"Uno","critico":false}]}]', 'cargadora' from ctx where k = 'A';
+insert into public.equipos (empresa_id, codigo, nombre, plantilla_clave, ultimo_medidor)
+  select v, 'CF-A', 'Cargadora A', 'cargadora', 10 from ctx where k = 'A' returning id \gset cfa_
+update public.equipos set plantilla_clave = 'p-cargadora-a' where id = :'cfa_id';
+do $$ begin
+  if (public.plantilla_vigente((select v from ctx where k = 'A'), 'cargadora')).empresa_id is not null then raise exception 'FALLÓ: la estándar sigue siendo la estándar'; end if;
+  if (public.plantilla_vigente((select v from ctx where k = 'A'), 'p-cargadora-a')).nombre <> 'Cargadora (Constructora A)' then raise exception 'FALLÓ: la copia es otra plantilla'; end if;
+end $$;
+select pg_temp.esperar_error(format($$update public.equipos set plantilla_clave = 'camioneta' where id = %L$$, :'cfa_id'), 'se mide en km');
+select pg_temp.esperar_error(format($$update public.equipos set plantilla_clave = 'no-existe' where id = %L$$, :'cfa_id'), 'no existe');
+select pg_temp.esperar_error($$update public.plantillas set activa = false where clave = 'p-cargadora-a'$$, 'La usan equipos');
+update public.equipos set plantilla_clave = 'cargadora' where id = :'cfa_id';
+update public.plantillas set activa = false where clave = 'p-cargadora-a';
+-- B no ve la copia de A
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+do $$ begin if exists (select 1 from public.plantillas where clave = 'p-cargadora-a') then raise exception 'FALLÓ: B ve plantillas de A'; end if; end $$;
+reset role;
 
 \echo TODAS LAS PRUEBAS PASARON
