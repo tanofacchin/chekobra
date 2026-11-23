@@ -1,5 +1,5 @@
 // Vista del operario: inicio de jornada (equipo, ubicación, foto, checklist, firma) y cierre.
-import { $, esc, fFecha, fHora, fDur, fNum, unidad, fechaLarga, mapsUrl, uuid, RES, MIN_CHECK_S, toast, msgError, comprimir, normal, filtrar } from './util.js';
+import { $, esc, fFecha, fHora, fDur, fNum, unidad, fechaLarga, mapsUrl, uuid, RES, MIN_CHECK_S, toast, msgError, comprimir, normal, filtrar, ls } from './util.js';
 import { sb, cargarOperario, itemsDe } from './datos.js';
 import { cola } from './cola.js';
 import { estadoDoc, nombreDoc } from './mantenimiento.js';
@@ -60,6 +60,7 @@ function elegirPorQr(id) {
   if (dv) return toast(dv.equipo_id ? `${e.codigo} tiene ${nombreDoc(dv)} vencido. Avisá al supervisor.` : `Tu ${nombreDoc(dv)} está vencida. No podés iniciar jornada.`, 7000);
   if (!o.flow) o.flow = nuevoFlujo();
   if (o.flow.equipoId !== e.id) { o.flow.equipoId = e.id; o.flow.resp = {}; o.flow.medIni = ''; o.flow.medidorFoto = null; o.flow.periodicos = undefined; medUrl = null; }
+  if (!o.flow.obraId) o.flow.obraId = obraSugerida();
   o.flow.step = 0; o.flow.err = ''; o.resultado = null; o.cierre = null; o.detalle = null;
   guardarBorrador(); render();
   toast(`${e.codigo} · ${e.nombre} seleccionado.`);
@@ -235,16 +236,28 @@ function stEquipo() {
   const e = eqById(f.equipoId);
   return `<h1>¿Con qué equipo trabajás hoy?</h1>
     ${puedeEscanear() ? '<button class="btn dark block" data-act="opEscanear">Escanear QR del equipo</button>' : ''}${grid}
-    <label class="f">Obra o frente de trabajo<select class="inp" id="f-obra" data-fl="obraId"><option value="">Elegí la obra</option>
+    <div id="bloque-obra" class="bloque-paso">${e ? `<div class="elegido"><span class="eqcode">${esc(e.codigo)}</span><b>${esc(e.nombre)}</b><button class="linkbtn" data-act="opVerEquipos">Cambiar</button></div>` : '<p class="muted small">Tocá el equipo de arriba para seguir.</p>'}
+    <label class="f">Obra o frente de trabajo<select class="inp" id="f-obra" data-fl="obraId" data-vivo><option value="">Elegí la obra</option>
       ${misObras().map(ob => `<option value="${ob.id}" ${ob.id === f.obraId ? 'selected' : ''}>${esc(ob.nombre)}</option>`).join('')}</select></label>
     ${e ? `<label class="f">${e.medidor === 'km' ? 'Odómetro inicial (km)' : 'Horómetro inicial (horas)'}
       <input class="inp num" id="f-med" type="number" inputmode="decimal" step="0.1" data-fl="medIni" value="${esc(f.medIni)}">
       <small>Último registrado: <span class="num">${fNum(e.ultimo_medidor)} ${unidad(e.medidor)}</span></small></label>
     ${(() => { if (f.medidorFoto && !medUrl) medUrl = URL.createObjectURL(f.medidorFoto); return ''; })()}
     <label class="photo foto-chica" for="f-medfoto">${f.medidorFoto ? `<img src="${medUrl}" alt="Foto del ${e.medidor === 'km' ? 'odómetro' : 'horómetro'}">` : `<b>Foto del ${e.medidor === 'km' ? 'odómetro' : 'horómetro'}</b><span class="small muted">Obligatoria: que se lea el número</span>`}
-      <input class="vh" type="file" id="f-medfoto" accept="image/*" capture="environment" data-file="medidor"></label>` : ''}`;
+      <input class="vh" type="file" id="f-medfoto" accept="image/*" capture="environment" data-file="medidor"></label>` : ''}</div>`;
 }
 let medUrl = null;
+// Después de elegir el equipo (o la obra), la pantalla baja sola al paso siguiente.
+function bajarA(sel) {
+  setTimeout(() => { const el = document.querySelector(sel); if (el) el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); }, 60);
+}
+// Obra sugerida: si hay una sola, esa; si no, la última que usó esta persona (si sigue activa).
+function obraSugerida() {
+  const obras = misObras();
+  if (obras.length === 1) return obras[0].id;
+  const u = ls.get('co_ultima_obra_' + S.m.id, null);
+  return obras.some(o => o.id === u) ? u : '';
+}
 function stGps() {
   const f = O().flow, g = f.gps;
   const box = g ? `<div class="gps-box"><b>Ubicación registrada</b><span class="num">${g.lat.toFixed(6)}, ${g.lng.toFixed(6)}</span>
@@ -416,6 +429,7 @@ function vCarga() {
         ${e && e.ultimo_medidor != null ? `<small>Último registrado: <span class="num">${fNum(e.ultimo_medidor)} ${u}</span></small>` : ''}</label></div>
     <label class="check"><input type="checkbox" id="cg-ll" data-cg="lleno" ${c.lleno ? 'checked' : ''}><span>Llené el tanque <small class="muted">(sirve para calcular el consumo real)</small></span></label>
     <label class="f">De dónde salió<select class="inp" id="cg-o" data-cg="origen" data-vivo>${ORIGENES.map(([v, l]) => `<option value="${v}" ${c.origen === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    ${['surtidor_propio', 'cisterna'].includes(c.origen) && (d.tanques || []).length > 1 ? `<label class="f">¿De qué tanque?<select class="inp" id="cg-tq" data-cg="tanque"><option value="">Elegí el tanque</option>${d.tanques.map(t => `<option value="${t.id}" ${c.tanque === t.id ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select></label>` : ''}
     ${c.origen === 'estacion' ? `<div class="form-grid"><label class="f">Estación <small>Opcional</small><input class="inp" id="cg-p" data-cg="proveedor" value="${esc(c.proveedor)}"></label>
       <label class="f">Precio por litro <small>Opcional</small><input class="inp num" id="cg-pr" type="number" inputmode="decimal" data-cg="precio" value="${esc(c.precio)}"></label></div>` : ''}
     <label class="photo foto-chica" for="cg-foto">${c.foto ? `<img src="${c.fotoUrl}" alt="Foto del surtidor o ticket">` : '<b>Foto del surtidor o del ticket</b><span class="small muted">Opcional, pero ayuda a controlar</span>'}
@@ -437,7 +451,8 @@ async function guardarCarga() {
   const ab = jornadaAbierta();
   const payload = { client_id: id, equipo_id: e.id, obra_id: ab && ab.equipo_id === e.id ? ab.obra_id : null, cargado_en: new Date().toISOString(),
     litros: +c.litros, medidor: c.medidor === '' ? null : +c.medidor, tanque_lleno: !!c.lleno, origen: c.origen,
-    proveedor: c.proveedor || null, precio_litro: c.precio === '' ? null : +c.precio, foto_path: archivos.length ? archivos[0].path : null, notas: c.notas || null };
+    proveedor: c.proveedor || null, precio_litro: c.precio === '' ? null : +c.precio, foto_path: archivos.length ? archivos[0].path : null, notas: c.notas || null,
+    tanque_id: ['surtidor_propio', 'cisterna'].includes(c.origen) && c.tanque ? c.tanque : null };
   await cola.agregar({ id, tipo: 'carga', uid: S.user.id, empresa_id: S.m.empresa_id, payload, archivos });
   if (c.fotoUrl) URL.revokeObjectURL(c.fotoUrl);
   o.carga = null; o.cola = await cola.listar().catch(() => o.cola);
@@ -556,7 +571,9 @@ async function cerrar() {
 
 export const A = {
   opRecargar: () => cargar(),
-  opCarga: () => { const ab = jornadaAbierta(), e = ab && eqById(ab.equipo_id); O().carga = { equipoId: e ? e.id : '', litros: '', medidor: e && e.ultimo_medidor != null ? e.ultimo_medidor : '', lleno: true, origen: 'surtidor_propio', proveedor: '', precio: '', notas: '', foto: null, err: '' }; render(); },
+  opCarga: () => { const ab = jornadaAbierta(), e = ab && eqById(ab.equipo_id), tqs = O().d.tanques || [];
+    const tq = tqs.length === 1 ? tqs[0].id : (tqs.find(t => ab && t.obra_id === ab.obra_id) || {}).id || '';
+    O().carga = { equipoId: e ? e.id : '', litros: '', medidor: e && e.ultimo_medidor != null ? e.ultimo_medidor : '', lleno: true, origen: 'surtidor_propio', tanque: tq, proveedor: '', precio: '', notas: '', foto: null, err: '' }; render(); },
   opCargaCancelar: () => { const c = O().carga; if (c && c.fotoUrl) URL.revokeObjectURL(c.fotoUrl); O().carga = null; render(); },
   opCargaGuardar: () => guardarCarga(),
   opEscanear: () => abrirEscaner(),
@@ -565,7 +582,12 @@ export const A = {
   opSeguir: () => { const b = O().borrador; if (!b) return; O().flow = { ...nuevoFlujo(), ...b, t0: b.step === 3 ? Date.now() : null }; render(); },
   opDescartar: async () => { const o = O(); if (o.confirm !== 'borrador') { o.confirm = 'borrador'; return render(); } o.confirm = null; await cola.borrar(idBorrador()); o.borrador = null; render(); },
   opDescartarEnvio: async b => { const o = O(); if (o.confirm !== b.dataset.id) { o.confirm = b.dataset.id; return render(); } o.confirm = null; await cola.borrar(b.dataset.id); o.cola = await cola.listar(); render(); sync(); },
-  opEquipo: b => { const f = O().flow; if (f.equipoId !== b.dataset.id) { f.equipoId = b.dataset.id; f.resp = {}; f.medIni = ''; f.medidorFoto = null; f.periodicos = undefined; if (medUrl) URL.revokeObjectURL(medUrl); medUrl = null; } f.err = ''; guardarBorrador(); render(); },
+  opEquipo: b => {
+    const f = O().flow; if (f.equipoId !== b.dataset.id) { f.equipoId = b.dataset.id; f.resp = {}; f.medIni = ''; f.medidorFoto = null; f.periodicos = undefined; if (medUrl) URL.revokeObjectURL(medUrl); medUrl = null; }
+    if (!f.obraId) f.obraId = obraSugerida();
+    f.err = ''; guardarBorrador(); render(); bajarA('#bloque-obra');
+  },
+  opVerEquipos: () => bajarA('.eq-grid'),
   opGps: tomarGps,
   opResp: b => setResp(b.dataset.id, b.dataset.v),
   opSiguiente: siguiente,
@@ -587,7 +609,11 @@ export const A = {
 export function alEscribir(el, v) {
   const o = O(); if (!o) return false;
   if (el.dataset.buscar && el.id === 'eq-busca') { o.busca = v; filtrar(el.dataset.buscar, v); return true; }
-  if (el.dataset.fl && o.flow) { o.flow[el.dataset.fl] = v; guardarBorrador(); return true; }
+  if (el.dataset.fl && o.flow) {
+    o.flow[el.dataset.fl] = v; guardarBorrador();
+    if (el.dataset.fl === 'obraId' && v) { ls.set('co_ultima_obra_' + S.m.id, v); bajarA('#f-med'); }
+    return true;
+  }
   if (el.dataset.nota && o.flow) { o.flow.resp[el.dataset.nota].nota = v; guardarBorrador(); return true; }
   if (el.dataset.ci && o.cierre) { o.cierre[el.dataset.ci] = v; if (el.dataset.ci === 'falla') render(); return true; }
   if (el.dataset.cg && o.carga) {

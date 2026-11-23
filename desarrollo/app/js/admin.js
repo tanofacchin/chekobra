@@ -38,7 +38,7 @@ export async function cargar() {
   try {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
     const desde30 = new Date(); desde30.setDate(desde30.getDate() - 29);
-    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg] = await Promise.all([
+    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg, tq] = await Promise.all([
       sb.from('equipos').select('*').eq('empresa_id', E()).order('codigo'),
       sb.from('miembros').select('id, nombre, legajo, rol, activo, user_id, intentos_fallidos, bloqueado_en, recibir_avisos').eq('empresa_id', E()).order('nombre'),
       sb.from('obras').select('*').eq('empresa_id', E()).order('nombre'),
@@ -57,11 +57,12 @@ export async function cargar() {
       sb.from('ordenes_trabajo').select('id, numero, titulo, estado, prioridad, asignado_a, creada_en, equipo_id, equipo:equipos(codigo), fallas(id)').eq('empresa_id', E()).in('estado', Tal.ABIERTAS).order('numero'),
       sb.rpc('fallas_repetidas', { p_empresa: E(), p_dias: 30 }),
       sb.from('asignaciones').select('miembro_id, equipo_id, obra_id').eq('empresa_id', E()),
+      sb.rpc('stock_tanques', { p_empresa: E() }),
     ]);
     for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg]) if (r.error) throw r.error;
     a.d = { equipos: eq.data, miembros: mi.data, obras: ob.data, plantillas: vigentes(pl.data, E()), fallas: fa.data, abiertas: ab.data, hoy: jh.data,
       jd: tc.data.find(c => c.proveedor === 'john_deere') || null, cat: tc.data.find(c => c.proveedor === 'caterpillar') || null, tele: Object.fromEntries(tu.data.map(l => [l.equipo_id, l])), alertasTele: ta.data,
-      consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data, combustible: cb.data, ordenes: ot.data, repetidas: fr.data, asig: asg.data };
+      consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data, combustible: cb.data, ordenes: ot.data, repetidas: fr.data, asig: asg.data, tanques: tq.error ? [] : tq.data };
     if (a.tab === 'mantenimiento' && !a.mt) Mt.cargarMant();
     if (a.tab === 'indicadores' && !(a.ind && a.ind.datos)) Ind.cargarIndicadores();
     if (a.tab === 'combustible' && !(a.cb && a.cb.datos)) Cb.cargarCombustible();
@@ -158,6 +159,7 @@ function vResumen() {
   if (d.sug2fa) att.push(['warn', 'Tu cuenta no tiene verificación en dos pasos', 'Recomendada para quien administra la empresa: con la huella, una app del celular o un código por correo.', `<button class="btn sm" data-act="admTab" data-k="personal">Activar</button>`]);
   alertasFlota().forEach(x => att.push(x));
   Cb.alertasCombustible(d.combustible).forEach(x => att.push(x));
+  Cb.alertasTanques(d.tanques).forEach(([s, t, x]) => att.push([s, t, x, `<button class="btn sm" data-act="admTab" data-k="combustible">Ver</button>`]));
   d.miembros.filter(m => m.bloqueado_en).forEach(m => att.push(['bad', `Legajo bloqueado · ${m.nombre}`, `${m.intentos_fallidos} intentos fallidos de PIN · ${fFecha(m.bloqueado_en)} ${fHora(m.bloqueado_en)}`, `<button class="btn sm" data-act="admTab" data-k="personal">Desbloquear</button>`]));
   const sinCheck = activos.filter(e => e.estado === 'operativo' && !d.hoy.some(j => j.equipo_id === e.id));
   const vacio = !d.equipos.length ? `<section class="card"><h2>Primeros pasos</h2><ol class="pasos">
@@ -388,7 +390,7 @@ export const A = {
   admAsig: b => { const a = T(), xs = a.d.asig.filter(x => x.miembro_id === b.dataset.id); a.asig = { id: b.dataset.id, eq: xs.filter(x => x.equipo_id).map(x => x.equipo_id), ob: xs.filter(x => x.obra_id).map(x => x.obra_id) }; render(); },
   admAsigCancelar: () => { T().asig = null; render(); },
   admAsigGuardar: async () => { const a = T(), s = a.asig; if (await rpc('asignar', { p_miembro: s.id, p_equipos: s.eq, p_obras: s.ob }, s.eq.length || s.ob.length ? 'Asignación guardada.' : 'Sin restricciones: puede usar todos los equipos y obras.')) { a.asig = null; render(); } },
-  csExcel: () => { const c = T().cs; return exportarExcel({ desde: c.desde, hasta: c.hasta }); },
+  csExcel: () => { const c = T().cs; return exportarExcel({ desde: c.desde, hasta: c.hasta, obra: c.obra || '', obraNombre: c.obra && (T().d.obras.find(o => o.id === c.obra) || {}).nombre }); },
   etqUno: b => { T().etiquetas = [b.dataset.id]; render(); },
   etqTodas: () => { T().etiquetas = T().d.equipos.filter(e => e.activo).map(e => e.id); render(); },
   etqCerrar: () => { T().etiquetas = null; render(); },

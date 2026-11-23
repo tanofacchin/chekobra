@@ -27,3 +27,5 @@
 | 2026-11-18 | Las huellas quedan atadas al dominio de la app | Al mudar a app.operapto.com.ar habrá que volver a agregarlas (la app lo explica); la app autenticadora y el correo siguen sirviendo |
 | 2026-11-18 | Caterpillar con credenciales propias de cada empresa, cifradas con una clave fuera de la base | Caterpillar no ofrece "autorizar con tu cuenta" para la API ISO 15143-3; si alguien copia la base, no obtiene las credenciales |
 | 2026-11-20 | Las plantillas estándar no se reemplazan: se copian | Pedido del usuario. Siempre queda la estándar para volver o para otros equipos; la base lo impide (no solo la pantalla) |
+| 2026-11-23 | Las cargas sin precio se valúan con el promedio de las últimas 5 compras del tanque o, si no, con el precio de referencia, y se muestran como estimadas | Sin eso, el costo de combustible quedaba por debajo del real; marcarlo evita confundir estimado con facturado |
+| 2026-11-23 | Faltante de tanque: más de 50 L y más del 2 % de lo despachado entre dos mediciones | Evita falsas alarmas por diferencias de medición con varilla |

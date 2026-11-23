@@ -58,6 +58,13 @@
 - Plantillas estándar intocables (20/11): "Copiar y editar" crea una plantilla de la empresa y la estándar sigue
   disponible; cada equipo elige su checklist (estándar o propia); las propias se editan por versiones y se archivan.
 
+- Combustible y costos (23/11): tanques propios con stock (compras, despachos, mediciones) y alerta de faltantes;
+  precio de referencia y precio del tanque para las cargas sin precio (marcado como estimado); litros por día y
+  filtros por equipo y obra. Costos por obra en tarjetas con costo por hora de máquina, reparto por rubro,
+  detalle por equipo, filtro por obra y comparación con el período anterior.
+- Más amigable: al elegir el equipo la pantalla baja sola a la obra, se recuerda la última obra, tablas legibles
+  en el celular (fichas), pestañas y números que entran en pantalla.
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).

@@ -833,4 +833,39 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
 do $$ begin if exists (select 1 from public.plantillas where clave = 'p-cargadora-a') then raise exception 'FALLÓ: B ve plantillas de A'; end if; end $$;
 reset role;
 
+-- ===== Combustible: tanque propio con stock, precio de referencia y precio estimado en los costos
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+insert into public.tanques (empresa_id, nombre, capacidad) select v, 'Tanque obrador', 5000 from ctx where k = 'A' returning id \gset tq_
+select (select id from public.miembros where user_id = '00000000-0000-0000-0000-0000000000a1') as mid \gset
+insert into public.movimientos_tanque (empresa_id, tanque_id, tipo, fecha, litros, miembro_id) select v, :'tq_id', 'medicion', now() - interval '5 days', 1000, :'mid' from ctx where k = 'A';
+insert into public.movimientos_tanque (empresa_id, tanque_id, tipo, fecha, litros, precio_litro, miembro_id) select v, :'tq_id', 'ingreso', now() - interval '4 days', 2000, 1200, :'mid' from ctx where k = 'A';
+-- con un solo tanque, la carga del surtidor propio se le asigna sola; sin precio, toma el del tanque
+select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', :'eqOT_id', 'cargado_en', now() - interval '3 days', 'litros', 300, 'origen', 'surtidor_propio'))->>'tanque_id' as tq_asig \gset
+select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', :'eqOT_id', 'cargado_en', now() - interval '2 days', 'litros', 200, 'tanque_id', :'tq_id'));
+-- una carga en estación sin precio no es del tanque: toma el precio de referencia
+update public.empresas set precio_gasoil = 1500 where id = (select v from ctx where k = 'A');
+select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', :'eqOT_id', 'cargado_en', now() - interval '2 days', 'litros', 40, 'origen', 'estacion', 'tanque_id', :'tq_id'));
+insert into public.movimientos_tanque (empresa_id, tanque_id, tipo, fecha, litros, miembro_id) select v, :'tq_id', 'medicion', now() - interval '1 day', 2400, :'mid' from ctx where k = 'A';
+do $$ declare t jsonb; c jsonb; begin
+  if (select count(*) from public.cargas_combustible where tanque_id = (select id from public.tanques where nombre = 'Tanque obrador')) <> 2 then raise exception 'FALLÓ: las cargas del surtidor van al tanque y la de estación no'; end if;
+  select x into t from jsonb_array_elements(public.stock_tanques((select v from ctx where k = 'A'))) x;
+  -- 1000 + 2000 − 500 = 2500 esperados; se midieron 2400 → faltan 100 L (más de 50 y del 2 % de lo despachado)
+  if (t->>'esperado_en_medicion')::numeric <> 2500 or (t->>'diferencia')::numeric <> -100 or not (t->>'faltante')::boolean or (t->>'stock')::numeric <> 2400 or (t->>'precio')::numeric <> 1200 then
+    raise exception 'FALLÓ: stock del tanque %', t; end if;
+  c := public.costos_por_obra((select v from ctx where k = 'A'), (current_date - 10), current_date);
+  if (c->>'litros_sin_precio')::numeric <> 0 or (c->>'precio_referencia')::numeric <> 1500 then raise exception 'FALLÓ: precios %', c - 'filas'; end if;
+  -- 500 L a $1200 (tanque) + 40 L a $1500 (referencia) = $660.000, todo estimado; el equipo no trabajó en el período
+  if (c->>'combustible_sin_uso')::numeric <> 660000 then raise exception 'FALLÓ: combustible sin uso %', c->>'combustible_sin_uso'; end if;
+end $$;
+select pg_temp.esperar_error(format($$update public.movimientos_tanque set litros = 9999 where tanque_id = %L$$, :'tq_id'), 'permission denied');
+reset role;
+-- B no ve ni carga en el tanque de A
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+do $$ begin if exists (select 1 from public.tanques) or exists (select 1 from public.movimientos_tanque) then raise exception 'FALLÓ: B ve tanques de A'; end if; end $$;
+select pg_temp.esperar_error(format($$select public.stock_tanques(%L)$$, (select v from ctx where k = 'A')), 'No tenés permiso');
+select pg_temp.esperar_error(format($$insert into public.movimientos_tanque (empresa_id, tanque_id, tipo, litros) values (%L, %L, 'ingreso', 10)$$, (select v from ctx where k = 'B'), :'tq_id'), 'row-level security');
+reset role;
+
 \echo TODAS LAS PRUEBAS PASARON
