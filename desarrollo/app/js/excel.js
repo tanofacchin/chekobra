@@ -225,19 +225,19 @@ export async function generarExcel(js, f, cargas = [], costos = null) {
     const HC = 'Costos por obra', wk = wb.addWorksheet(HC, { views: [{ state: 'frozen', ySplit: 1 }], pageSetup: { ...IMPRESION, printTitlesRow: '1:1' } });
     const colsK = [{ t: 'Obra', w: 26 }, { t: 'Código', w: 9 }, { t: 'Equipo', w: 28 }, { t: 'Días', w: 7, n: 1 }, { t: 'Uso', w: 9, n: 1, f: '#,##0.0' }, { t: 'Unidad', w: 7 },
       { t: 'Tarifa por hora', w: 11, n: 1, f: '"$" #,##0' }, { t: 'Tarifa por día', w: 11, n: 1, f: '"$" #,##0' }, { t: 'Costo del equipo', w: 13, n: 1, f: '"$" #,##0' },
-      { t: 'Litros', w: 9, n: 1, f: '#,##0.0' }, { t: 'Combustible', w: 13, n: 1, f: '"$" #,##0' }, { t: 'Reparaciones', w: 13, n: 1, f: '"$" #,##0' }, { t: 'Total', w: 14, n: 1, f: '"$" #,##0' }];
+      { t: 'Litros', w: 9, n: 1, f: '#,##0.0' }, { t: 'Combustible', w: 13, n: 1, f: '"$" #,##0' }, { t: 'De eso, a precio estimado', w: 13, n: 1, f: '"$" #,##0' }, { t: 'Reparaciones', w: 13, n: 1, f: '"$" #,##0' }, { t: 'Total', w: 14, n: 1, f: '"$" #,##0' }];
     encabezado(wk, 1, colsK);
     const n = v => v == null ? null : Number(v);
     costos.filas.forEach((c, i) => {
       const r = wk.getRow(i + 2);
-      r.values = [c.obra, c.codigo, c.equipo, c.dias, n(c.uso), c.medidor === 'km' ? 'km' : 'h', n(c.tarifa_hora), n(c.tarifa_dia), n(c.costo_equipo), n(c.litros), n(c.combustible), n(c.reparaciones), n(c.total)];
+      r.values = [c.obra, c.codigo, c.equipo, c.dias, n(c.uso), c.medidor === 'km' ? 'km' : 'h', n(c.tarifa_hora), n(c.tarifa_dia), n(c.costo_equipo), n(c.litros), n(c.combustible), n(c.combustible_estimado) || null, n(c.reparaciones), n(c.total)];
       if (c.costo_equipo == null) { const x = r.getCell(9); x.value = 'Sin tarifa'; x.font = { bold: true, color: { argb: 'FF' + C.warnT } }; x.fill = fill(C.warnF); }
-      r.getCell(13).font = { bold: true };
+      r.getCell(14).font = { bold: true };
       r.eachCell(x => { x.border = borde; });
     });
     const ult = costos.filas.length + 1, tr = wk.getRow(ult + 1);
     tr.getCell(1).value = 'Total';
-    [9, 10, 11, 12, 13].forEach(k => { const L = String.fromCharCode(64 + k); tr.getCell(k).value = { formula: `SUM(${L}2:${L}${ult})` }; });
+    [9, 10, 11, 12, 13, 14].forEach(k => { const L = String.fromCharCode(64 + k); tr.getCell(k).value = { formula: `SUM(${L}2:${L}${ult})` }; });
     tr.eachCell(x => { x.font = { bold: true }; x.border = { top: { style: 'medium', color: { argb: 'FF' + C.tinta } } }; });
     wk.autoFilter = { from: { row: 1, column: 1 }, to: { row: ult, column: colsK.length } };
     // Total por obra al costado, con gráfico apilado por rubro.
@@ -248,7 +248,8 @@ export async function generarExcel(js, f, cargas = [], costos = null) {
     const tK = tablaSimple(wk, 1, k0, ['Obra', 'Equipos', 'Combustible', 'Reparaciones', 'Total'], obras, [null, '"$" #,##0', '"$" #,##0', '"$" #,##0', '"$" #,##0']);
     [24, 13, 13, 13, 14].forEach((w, i) => { wk.getColumn(k0 + i).width = w; });
     const notas = ['El costo del equipo es horas × tarifa por hora; sin tarifa por hora (o en km), días × tarifa por día.',
-      'El combustible sin obra y las reparaciones del período se reparten entre obras según las horas de cada equipo.'];
+      'El combustible sin obra y las reparaciones del período se reparten entre obras según las horas de cada equipo.',
+      'Precio estimado: cargas sin precio valuadas con el promedio de compras del tanque o el precio de referencia.'];
     if (costos.sin_tarifa.length) notas.push('Equipos sin tarifa: ' + costos.sin_tarifa.join(', '));
     notas.forEach((t, i) => { const c = wk.getRow(tK.ultima + 2 + i).getCell(k0); c.value = t; c.font = { italic: true, color: { argb: 'FF' + C.gris } }; });
     graficos[HC] = [{ titulo: 'Costo por obra', tipo: 'bar', apilado: true, desde: [k0 + 5, 0], hasta: [k0 + 14, Math.max(14, obras.length * 2 + 6)], cats: rango(HC, L(0), tK),

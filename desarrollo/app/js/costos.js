@@ -22,8 +22,12 @@ export async function costosPorObra(desde, hasta) {
   return data;
 }
 export async function cargarCostos() {
-  const f = filtro(); f.datos = null; render();
-  try { f.datos = await costosPorObra(f.desde, f.hasta); } catch (e) { toast(msgError(e)); }
+  const f = filtro(); f.datos = null; f.antes = null; render();
+  // Período anterior de la misma cantidad de días, para comparar.
+  const d0 = new Date(f.desde + 'T12:00:00'), d1 = new Date(f.hasta + 'T12:00:00'), n = Math.round((d1 - d0) / 864e5) + 1;
+  const a1 = new Date(d0); a1.setDate(a1.getDate() - 1); const a0 = new Date(a1); a0.setDate(a0.getDate() - n + 1);
+  try { [f.datos, f.antes] = await Promise.all([costosPorObra(f.desde, f.hasta), costosPorObra(dayKey(a0), dayKey(a1)).catch(() => null)]); }
+  catch (e) { toast(msgError(e)); f.datos = { filas: [], sin_tarifa: [], reparaciones_sin_uso: 0, combustible_sin_uso: 0, litros_sin_precio: 0 }; }
   render();
 }
 
@@ -38,36 +42,58 @@ export function agrupar(filas) {
 }
 
 const tarifaTxt = r => r.tarifa_hora != null && r.medidor === 'horas' ? `${fPeso(r.tarifa_hora)}/h` : r.tarifa_dia != null ? `${fPeso(r.tarifa_dia)}/día` : '<span class="chip warn">Sin tarifa</span>';
+const COLORES = [['costo_equipo', 'Equipos', 'c-eq'], ['combustible', 'Combustible', 'c-cb'], ['reparaciones', 'Reparaciones', 'c-rp']];
+const horasDe = rs => rs.filter(r => r.medidor === 'horas').reduce((s, r) => s + Number(r.uso || 0), 0);
+// Barra con la parte de cada rubro en el total.
+const barraRubros = o => { const t = Math.max(1, COLORES.reduce((s, [k]) => s + Number(o[k] || 0), 0));
+  return `<div class="rubros" role="img" aria-label="${COLORES.map(([k, l]) => `${l} ${Math.round(100 * (o[k] || 0) / t)} %`).join(', ')}">${COLORES.map(([k, l, c]) => `<span class="${c}" style="width:${100 * (o[k] || 0) / t}%" title="${l}: ${fPeso(o[k])}"></span>`).join('')}</div>`; };
+const variacion = (ahora, antes) => { if (antes == null || !(antes > 0)) return ''; const d = (ahora - antes) / antes;
+  return `<span class="var ${d > 0.05 ? 'sube' : d < -0.05 ? 'baja' : ''}">${d > 0 ? '▲' : d < 0 ? '▼' : '='} ${Math.abs(Math.round(d * 100))} % vs. período anterior</span>`; };
 
 export function vCostos() {
-  const a = T(), f = filtro(), x = f.datos;
-  const filtros = `<section class="card"><div class="filters ind-filtros">
+  const a = T(), f = filtro(), x = f.datos, d = a.d;
+  const filtros = `<section class="card"><div class="filters ind-filtros cs-filtros">
     <label>Período<select class="inp" id="cs-per" data-cs="periodo" data-vivo>${[['mes', 'Este mes'], ['mes_ant', 'Mes anterior'], ['30', 'Últimos 30 días'], ['otro', 'Otro']].map(([v, l]) => `<option value="${v}" ${f.periodo === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label>Desde<input class="inp" type="date" id="cs-des" data-cs="desde" data-vivo value="${f.desde}"></label>
     <label>Hasta<input class="inp" type="date" id="cs-has" data-cs="hasta" data-vivo value="${f.hasta}"></label>
-    <label>&nbsp;<button class="btn sm ${f.tarifas ? '' : 'ghost'}" data-act="csTarifas">${f.tarifas ? 'Ocultar tarifas' : 'Tarifas de los equipos'}</button></label>
-    <label>&nbsp;<button class="btn sm dark" data-act="csExcel" ${a.excelOcupado ? 'disabled' : ''}>${a.excelOcupado ? 'Armando el Excel…' : 'Descargar Excel'}</button></label></div></section>`;
+    <label>Obra<select class="inp" id="cs-ob" data-csf="obra" data-vivo><option value="">Todas</option>${d.obras.map(o => `<option value="${o.id}" ${f.obra === o.id ? 'selected' : ''}>${esc(o.nombre)}</option>`).join('')}</select></label></div>
+    <div class="row"><button class="btn sm ${f.tarifas ? '' : 'ghost'}" data-act="csTarifas">${f.tarifas ? 'Ocultar tarifas' : 'Tarifas de los equipos'}</button>
+      <button class="btn sm dark" data-act="csExcel" ${a.excelOcupado ? 'disabled' : ''}>${a.excelOcupado ? 'Armando el Excel…' : 'Descargar Excel'}</button></div></section>`;
   if (!x) return filtros + (f.tarifas ? vTarifas() : '') + '<p class="muted">Calculando…</p>';
-  const g = agrupar(x.filas);
-  const sinTar = x.sin_tarifa.length ? `<div class="warnbox small">Sin tarifa: ${x.sin_tarifa.map(esc).join(', ')}. Cargala en "Tarifas de los equipos" para sumar el costo de esos equipos.</div>` : '';
-  const filasObra = g.obras.map(o => `<tr class="sub"><td colspan="3">${esc(o.obra)}</td><td class="n">${fPeso(o.costo_equipo)}</td><td class="n">${fNum(o.litros)} L · ${fPeso(o.combustible)}</td><td class="n">${fPeso(o.reparaciones)}</td><td class="n">${fPeso(o.total)}</td></tr>
-    ${o.filas.map(r => `<tr><td>&nbsp;&nbsp;<b>${esc(r.codigo)}</b> <span class="muted">${esc(r.equipo)}</span></td><td class="n">${r.dias} d · ${fNum(r.uso)} ${unidad(r.medidor)}</td><td class="n">${tarifaTxt(r)}</td>
-      <td class="n">${fPeso(r.costo_equipo)}</td><td class="n">${fNum(r.litros)} L · ${fPeso(r.combustible)}</td><td class="n">${fPeso(r.reparaciones)}</td><td class="n">${fPeso(r.total)}</td></tr>`).join('')}`).join('');
-  const filasEq = g.equipos.map(r => `<tr><td><b>${esc(r.codigo)}</b> <span class="muted">${esc(r.equipo)}</span></td><td class="n">${r.obras}</td><td class="n">${r.dias} d · ${fNum(r.uso)} ${unidad(r.medidor)}</td>
-      <td class="n">${fPeso(r.costo_equipo)}</td><td class="n">${fPeso(r.combustible)}</td><td class="n">${fPeso(r.reparaciones)}</td><td class="n">${fPeso(r.total)}</td></tr>`).join('');
+  const filas = f.obra ? x.filas.filter(r => r.obra_id === f.obra) : x.filas;
+  const antes = f.antes ? (f.obra ? f.antes.filas.filter(r => r.obra_id === f.obra) : f.antes.filas) : null;
+  const g = agrupar(filas), gAntes = antes ? agrupar(antes) : null;
+  const horas = horasDe(filas), est = filas.reduce((s, r) => s + Number(r.combustible_estimado || 0), 0);
+  const avisos = [
+    x.sin_tarifa.length ? `<b>Sin tarifa:</b> ${x.sin_tarifa.map(esc).join(', ')}. Cargala en "Tarifas de los equipos" para sumar el costo de esos equipos.` : '',
+    Number(x.litros_sin_precio) ? `<b>${fNum(x.litros_sin_precio)} L de combustible sin precio</b> no suman al costo. Cargá el precio de referencia o las compras del tanque en la pestaña <button class="linkbtn" data-act="admTab" data-k="combustible">Combustible</button>.` : '',
+  ].filter(Boolean);
+  const tarjetas = g.obras.map(o => {
+    const h = horasDe(o.filas), abierto = a.csAbierta === o.obra;
+    return `<div class="obra-card"><button class="obra-cab" data-act="csAbrir" data-k="${esc(o.obra)}" aria-expanded="${abierto}">
+        <span class="t">${esc(o.obra)}</span><b class="num">${fPeso(o.total)}</b>
+        <span class="s">${o.filas.length} equipo${o.filas.length === 1 ? '' : 's'} · ${fNum(h)} h${h > 0 ? ` · <b>${fPeso(o.total / h)}</b> por hora de máquina` : ''}</span>
+        ${barraRubros(o)}
+        <span class="s rub">${COLORES.map(([k, l, c]) => `<i class="${c}"></i>${l} ${fPeso(o[k])}`).join(' · ')}</span>
+        <span class="mas">${abierto ? 'Ocultar detalle ▲' : 'Ver detalle por equipo ▼'}</span></button>
+      ${abierto ? `<div class="obra-det">${o.filas.map(r => `<div class="det-fila"><div><b>${esc(r.codigo)}</b> <span class="muted">${esc(r.equipo)}</span>
+          <div class="small muted">${r.dias} día${r.dias === 1 ? '' : 's'} · ${fNum(r.uso)} ${unidad(r.medidor)} · tarifa ${tarifaTxt(r)}${Number(r.litros) ? ` · ${fNum(r.litros)} L` : ''}${Number(r.combustible_estimado) ? ' (precio estimado)' : ''}</div></div>
+          <div class="det-num"><b class="num">${fPeso(r.total)}</b><span class="small muted">equipo ${fPeso(r.costo_equipo)} · comb. ${fPeso(r.combustible)}${Number(r.reparaciones) ? ` · rep. ${fPeso(r.reparaciones)}` : ''}</span></div></div>`).join('')}</div>` : ''}</div>`;
+  }).join('');
+  const filasEq = g.equipos.map(r => `<tr><td data-l="Equipo"><b>${esc(r.codigo)}</b> <span class="muted">${esc(r.equipo)}</span></td><td class="n" data-l="Obras">${r.obras}</td><td class="n" data-l="Uso">${r.dias} d · ${fNum(r.uso)} ${unidad(r.medidor)}</td>
+      <td class="n" data-l="Equipo">${fPeso(r.costo_equipo)}</td><td class="n" data-l="Combustible">${fPeso(r.combustible)}</td><td class="n" data-l="Reparaciones">${fPeso(r.reparaciones)}</td><td class="n" data-l="Total"><b>${fPeso(r.total)}</b></td>
+      <td class="n" data-l="Por hora">${r.medidor === 'horas' && r.uso > 0 ? fPeso(r.total / r.uso) + '/h' : '—'}</td></tr>`).join('');
   return `${filtros}${f.tarifas ? vTarifas() : ''}
-    <div class="kpis"><div class="kpi"><b>${fPeso(g.total.total)}</b><span>Costo total del período</span></div>
-      <div class="kpi"><b>${fPeso(g.total.costo_equipo)}</b><span>Equipos (según tarifa)</span></div>
-      <div class="kpi"><b>${fPeso(g.total.combustible)}</b><span>Combustible</span></div>
+    <div class="kpis"><div class="kpi"><b>${fPeso(g.total.total)}</b><span>Costo total${f.obra ? ' de la obra' : ''} ${variacion(g.total.total, gAntes && gAntes.total.total)}</span></div>
+      <div class="kpi"><b>${horas > 0 ? fPeso(g.total.total / horas) : '—'}</b><span>Por hora de máquina (${fNum(horas)} h)</span></div>
+      <div class="kpi"><b>${fPeso(g.total.combustible)}</b><span>Combustible · ${fNum(g.total.litros)} L${est ? ` · ${fPeso(est)} estimado` : ''}</span></div>
       <div class="kpi"><b>${fPeso(g.total.reparaciones)}</b><span>Reparaciones y services</span></div></div>
-    ${sinTar}
-    <section class="card"><h2>Por obra</h2>
-      <p class="small muted">Días y horas salen de las jornadas cerradas. El combustible cargado sin obra y las reparaciones se reparten entre las obras según las horas que trabajó cada equipo en cada una.</p>
-      ${x.filas.length ? `<div class="tabla"><table><thead><tr><th>Obra / equipo</th><th class="n">Uso</th><th class="n">Tarifa</th><th class="n">Equipo</th><th class="n">Combustible</th><th class="n">Reparaciones</th><th class="n">Total</th></tr></thead>
-        <tbody>${filasObra}<tr class="tot"><td colspan="3">Total</td><td class="n">${fPeso(g.total.costo_equipo)}</td><td class="n">${fNum(g.total.litros)} L · ${fPeso(g.total.combustible)}</td><td class="n">${fPeso(g.total.reparaciones)}</td><td class="n">${fPeso(g.total.total)}</td></tr></tbody></table></div>`
-        : '<div class="empty">No hay jornadas en el período.</div>'}
-      ${Number(x.reparaciones_sin_uso) ? `<p class="small muted">Hay ${fPeso(x.reparaciones_sin_uso)} en reparaciones de equipos que no trabajaron en el período (no se cargan a ninguna obra).</p>` : ''}</section>
-    ${g.equipos.length ? `<section class="card"><h2>Por equipo</h2><div class="tabla"><table><thead><tr><th>Equipo</th><th class="n">Obras</th><th class="n">Uso</th><th class="n">Equipo</th><th class="n">Combustible</th><th class="n">Reparaciones</th><th class="n">Total</th></tr></thead><tbody>${filasEq}</tbody></table></div></section>` : ''}`;
+    ${avisos.length ? `<div class="warnbox small">${avisos.join('<br>')}</div>` : ''}
+    <section class="card"><h2>${f.obra ? 'La obra' : 'Por obra'}</h2>
+      <p class="small muted">El costo del equipo sale de su tarifa y de las horas (o días) de las jornadas cerradas. El combustible cargado sin obra y las reparaciones se reparten según las horas de cada equipo en cada obra. Tocá una obra para ver el detalle.</p>
+      ${filas.length ? `<div class="obras">${tarjetas}</div>` : '<div class="empty">No hay jornadas en el período.</div>'}
+      ${Number(x.reparaciones_sin_uso) || Number(x.combustible_sin_uso) ? `<p class="small muted">No se cargan a ninguna obra porque esos equipos no trabajaron en el período: ${[Number(x.reparaciones_sin_uso) ? `${fPeso(x.reparaciones_sin_uso)} en reparaciones` : '', Number(x.combustible_sin_uso) ? `${fPeso(x.combustible_sin_uso)} en combustible` : ''].filter(Boolean).join(' y ')}.</p>` : ''}</section>
+    ${g.equipos.length ? `<section class="card"><h2>Por equipo</h2><div class="tabla tabla-cel"><table><thead><tr><th>Equipo</th><th class="n">Obras</th><th class="n">Uso</th><th class="n">Equipo</th><th class="n">Combustible</th><th class="n">Reparaciones</th><th class="n">Total</th><th class="n">Por hora</th></tr></thead><tbody>${filasEq}</tbody></table></div></section>` : ''}`;
 }
 
 function vTarifas() {
@@ -84,6 +110,7 @@ function vTarifas() {
 }
 
 export const A = {
+  csAbrir: b => { const a = T(); a.csAbierta = a.csAbierta === b.dataset.k ? null : b.dataset.k; render(); },
   csTarifas: () => { const f = filtro(); f.tarifas = !f.tarifas; render(); },
   csTarifaGuardar: async b => {
     const a = T(), id = b.dataset.id, e = a.d.equipos.find(x => x.id === id), v = (a.csEd || {})[id] || { h: e.tarifa_hora ?? '', d: e.tarifa_dia ?? '' };
@@ -98,6 +125,7 @@ export const A = {
 export function alEscribir(el, v) {
   const a = T(); if (!a) return false;
   if (el.dataset.cs) { const f = filtro(); f[el.dataset.cs] = v; if (el.dataset.cs === 'periodo' && v !== 'otro') Object.assign(f, rango(v)); if (el.dataset.cs !== 'periodo') f.periodo = 'otro'; cargarCostos(); return true; }
+  if (el.dataset.csf) { filtro()[el.dataset.csf] = v; T().csAbierta = null; render(); return true; }
   if (el.dataset.tf) { const e = a.d.equipos.find(x => x.id === el.dataset.id); a.csEd ||= {}; a.csEd[e.id] ||= { h: e.tarifa_hora ?? '', d: e.tarifa_dia ?? '' }; a.csEd[e.id][el.dataset.tf] = v; return true; }
   return false;
 }

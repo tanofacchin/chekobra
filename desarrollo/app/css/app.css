@@ -388,3 +388,60 @@ button.tl-it{cursor:pointer}button.tl-it:hover .t{text-decoration:underline}
 .qr-mfa{display:flex;justify-content:center;padding:12px;background:#fff;border-radius:12px;border:1px solid var(--line);align-self:center}
 .codigo-mfa{font-size:1.6rem;letter-spacing:.3em;text-align:center}
 .sev.ok{background:var(--ok)}
+
+/* paso 1 del operario: el equipo elegido y la obra, con margen para la barra de arriba al bajar sola */
+.bloque-paso{display:flex;flex-direction:column;gap:14px;scroll-margin-top:84px}
+#f-med,.eq-grid{scroll-margin-top:110px}
+.elegido{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border-radius:12px;background:var(--accent-soft, #fbead0);border:1.5px solid var(--accent)}
+.elegido b{flex:1 1 auto}
+
+/* ===== más amigable en el celular y en general (23/11) */
+.kpi b{font-size:clamp(1.5rem, 4.2vw, 2.4rem);overflow-wrap:anywhere}
+.kpi span{line-height:1.35}
+@media (max-width:860px){.tabs{flex-wrap:wrap;overflow:visible}.tab{min-height:38px;padding:0 12px;font-size:.9rem}}
+.cs-filtros,.cb-filtros{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+/* tablas que en el celular se leen como fichas: cada celda con su título (data-l) */
+@media (max-width:640px){
+  .tabla-cel table,.tabla-cel tbody,.tabla-cel tr,.tabla-cel td{display:block;width:100%}
+  .tabla-cel thead{display:none}
+  .tabla-cel tr{border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-bottom:10px;background:var(--surface)}
+  .tabla-cel td{border:0;padding:3px 0;display:flex;justify-content:space-between;gap:12px;text-align:right}
+  .tabla-cel td[data-l]::before{content:attr(data-l);color:var(--muted);font-size:.8rem;text-align:left;flex:none}
+  .tabla-cel td:first-child{text-align:left;font-size:1rem;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:4px}
+  .tabla-cel td:first-child::before{display:none}
+  .tabla-cel td.n{white-space:normal}
+}
+/* costos por obra */
+.obras{display:flex;flex-direction:column;gap:10px}
+.obra-card{border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.obra-cab{display:grid;grid-template-columns:1fr auto;gap:6px 12px;width:100%;text-align:left;padding:14px 16px;background:none;border:0;color:inherit;font:inherit;cursor:pointer}
+.obra-cab .t{font-family:var(--f-display);font-size:1.25rem;font-weight:700}
+.obra-cab>b{font-family:var(--f-display);font-size:1.4rem;align-self:center}
+.obra-cab .s,.obra-cab .rubros,.obra-cab .mas{grid-column:1/-1}
+.obra-cab .s{font-size:.88rem;color:var(--muted)}
+.obra-cab .mas{font-size:.85rem;font-weight:600;color:var(--ink)}
+.rubros{display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--line)}
+.c-eq{background:#1a1e22}.c-cb{background:#f0a500}.c-rp{background:#1f5fa8}
+:root[data-theme="dark"] .c-eq{background:#c9ccd1}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .c-eq{background:#c9ccd1}}
+.rub i{display:inline-block;width:9px;height:9px;border-radius:2px;margin:0 4px 0 2px}
+.obra-det{border-top:1px solid var(--line);padding:6px 16px 12px}
+.det-fila{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed var(--line)}
+.det-fila:last-child{border-bottom:0}
+.det-num{display:flex;flex-direction:column;align-items:flex-end;text-align:right}
+.var{display:block;font-size:.8rem;margin-top:2px}.var.sube{color:var(--bad)}.var.baja{color:var(--ok)}
+/* combustible: tanques y litros por día */
+.tanques{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.tanque{border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}
+.tanque.mal{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad) inset}
+.tanque-stock b{font-family:var(--f-display);font-size:1.8rem;margin-right:6px}
+.nivel{height:12px;border-radius:7px;background:var(--line);overflow:hidden}
+.nivel span{display:block;height:100%;background:var(--ok)}.nivel span.medio{background:var(--accent)}.nivel span.bajo{background:var(--bad)}
+.txt-bad{color:var(--bad);font-weight:600}
+.movs{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--line);padding-top:8px}
+.mov{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;font-size:.9rem}
+@media (max-width:480px){.mov{grid-template-columns:1fr auto}.mov>span:first-child{grid-column:1/-1}}
+.barras{display:flex;align-items:flex-end;height:140px;gap:2px;padding:6px 0;border-bottom:1px solid var(--line)}
+.barra{height:100%;display:flex;align-items:flex-end}
+.barra span{display:block;width:100%;background:var(--accent);border-radius:3px 3px 0 0;min-height:1px}
+.barra:hover span{background:var(--ink)}
