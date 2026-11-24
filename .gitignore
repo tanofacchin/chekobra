@@ -18,3 +18,13 @@ service-account*.json
 
 # Capturas de las pruebas del navegador
 desarrollo/e2e/capturas/
+
+# Carpetas confidenciales: quedan solo en la computadora, nunca en GitHub
+/README.md
+/producto/
+/estrategia/
+/comercial/
+/legal/
+/seguridad/
+/operaciones/
+/conversaciones/
