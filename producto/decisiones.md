@@ -29,3 +29,6 @@
 | 2026-11-20 | Las plantillas estándar no se reemplazan: se copian | Pedido del usuario. Siempre queda la estándar para volver o para otros equipos; la base lo impide (no solo la pantalla) |
 | 2026-11-23 | Las cargas sin precio se valúan con el promedio de las últimas 5 compras del tanque o, si no, con el precio de referencia, y se muestran como estimadas | Sin eso, el costo de combustible quedaba por debajo del real; marcarlo evita confundir estimado con facturado |
 | 2026-11-23 | Faltante de tanque: más de 50 L y más del 2 % de lo despachado entre dos mediciones | Evita falsas alarmas por diferencias de medición con varilla |
+| 2026-11-24 | Costo por hora del personal en tabla aparte, visible solo para administración; la mano de obra en costos también | Los sueldos son sensibles: supervisores no deben verlos |
+| 2026-11-24 | La lectura de la foto del horómetro la hace el servidor (Claude Opus 5.5, esfuerzo bajo) después de recibir el checklist | No frena al operario ni necesita señal; con confianza baja no se acusa: queda "no se pudo leer" para que mire una persona |
+| 2026-11-24 | La marca de agua de la foto del medidor ya no incluye el número cargado | Si no, la lectura copiaría lo que escribió el operario y el control no serviría |

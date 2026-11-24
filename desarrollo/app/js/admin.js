@@ -17,6 +17,8 @@ import * as Rd from './resumen.js';
 import * as Seg from './seguridad.js';
 import * as Au from './auditoria.js';
 import * as Cat from './caterpillar.js';
+import * as Dep from './deposito.js';
+import * as Imp from './importar.js';
 
 const T = () => S.adm;
 export function reiniciar() {
@@ -38,7 +40,7 @@ export async function cargar() {
   try {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
     const desde30 = new Date(); desde30.setDate(desde30.getDate() - 29);
-    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg, tq] = await Promise.all([
+    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg, tq, ar, cp, lf] = await Promise.all([
       sb.from('equipos').select('*').eq('empresa_id', E()).order('codigo'),
       sb.from('miembros').select('id, nombre, legajo, rol, activo, user_id, intentos_fallidos, bloqueado_en, recibir_avisos').eq('empresa_id', E()).order('nombre'),
       sb.from('obras').select('*').eq('empresa_id', E()).order('nombre'),
@@ -58,11 +60,15 @@ export async function cargar() {
       sb.rpc('fallas_repetidas', { p_empresa: E(), p_dias: 30 }),
       sb.from('asignaciones').select('miembro_id, equipo_id, obra_id').eq('empresa_id', E()),
       sb.rpc('stock_tanques', { p_empresa: E() }),
+      sb.from('articulos').select('id, descripcion, unidad, stock, minimo, activo').eq('empresa_id', E()).eq('activo', true),
+      esAdmin() ? sb.from('costos_personal').select('miembro_id, costo_hora').eq('empresa_id', E()) : Promise.resolve({ data: [] }),
+      sb.rpc('lecturas_diferentes', { p_empresa: E(), p_dias: 7 }),
     ]);
     for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg]) if (r.error) throw r.error;
     a.d = { equipos: eq.data, miembros: mi.data, obras: ob.data, plantillas: vigentes(pl.data, E()), fallas: fa.data, abiertas: ab.data, hoy: jh.data,
       jd: tc.data.find(c => c.proveedor === 'john_deere') || null, cat: tc.data.find(c => c.proveedor === 'caterpillar') || null, tele: Object.fromEntries(tu.data.map(l => [l.equipo_id, l])), alertasTele: ta.data,
-      consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data, combustible: cb.data, ordenes: ot.data, repetidas: fr.data, asig: asg.data, tanques: tq.error ? [] : tq.data };
+      consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data, combustible: cb.data, ordenes: ot.data, repetidas: fr.data, asig: asg.data, tanques: tq.error ? [] : tq.data, articulos: ar.error ? [] : ar.data,
+      costoPersonal: Object.fromEntries((cp.data || []).map(x => [x.miembro_id, x.costo_hora])), lecturas: lf.error ? [] : lf.data };
     if (a.tab === 'mantenimiento' && !a.mt) Mt.cargarMant();
     if (a.tab === 'indicadores' && !(a.ind && a.ind.datos)) Ind.cargarIndicadores();
     if (a.tab === 'combustible' && !(a.cb && a.cb.datos)) Cb.cargarCombustible();
@@ -71,15 +77,28 @@ export async function cargar() {
     if (a.tab === 'mapa') Mapa.cargarMapa();
     if (a.tab === 'personal' && !a.seg) Seg.cargarSeguridad();
     Seg.sugerencia().then(v => { if (a.d) { a.d.sug2fa = v; render(); } }).catch(() => {});
+    presupuestosDelMes();
     a.err = '';
     if (a.tab === 'jornadas') await cargarJornadas();
   } catch (e) { a.err = msgError(e); }
   a.cargando = false; render();
 }
 
+// Obras con presupuesto: cuánto van gastando en el mes (avisa desde el 80 %). Lo ve administración y supervisión.
+async function presupuestosDelMes() {
+  const a = T(), conP = a.d.obras.filter(o => o.activa && o.presupuesto_mensual > 0);
+  if (!conP.length) { a.d.presuMes = []; return; }
+  const h = new Date(), d1 = new Date(h.getFullYear(), h.getMonth(), 1);
+  try {
+    const c = await Cs.costosPorObra(dayKey(d1), dayKey(h));
+    a.d.presuMes = conP.map(o => { const gastado = c.filas.filter(r => r.obra_id === o.id).reduce((s, r) => s + Number(r.total || 0), 0), presu = Number(o.presupuesto_mensual);
+      return { obra: o.nombre, gastado, presu, pct: Math.round(100 * gastado / presu) }; }).filter(p => p.pct >= 80);
+    render();
+  } catch { a.d.presuMes = []; }
+}
 async function cargarJornadas() {
   const a = T(), f = a.f;
-  let q = sb.from('jornadas').select('id, inicio, fin, estado, resultado, med_ini, med_fin, uso, n_fallas, n_criticas, n_alertas, rapido, dur_checklist_s, lat, lng, precision_m, ubic_ref, litros, novedades, equipo:equipos(id, codigo, nombre, medidor, plantilla_clave), operario:miembros(id, nombre, legajo), obra:obras(nombre), fallas(texto, nota, critica, estado)')
+  let q = sb.from('jornadas').select('id, inicio, fin, estado, resultado, med_ini, med_fin, uso, n_fallas, n_criticas, n_alertas, rapido, dur_checklist_s, lectura_estado, lat, lng, precision_m, ubic_ref, litros, novedades, equipo:equipos(id, codigo, nombre, medidor, plantilla_clave), operario:miembros(id, nombre, legajo), obra:obras(nombre), fallas(texto, nota, critica, estado)')
     .eq('empresa_id', E()).order('inicio', { ascending: false }).limit(1000);
   if (f.desde) q = q.gte('inicio', new Date(f.desde + 'T00:00:00').toISOString());
   if (f.hasta) q = q.lt('inicio', new Date(new Date(f.hasta + 'T00:00:00').getTime() + 864e5).toISOString());
@@ -125,7 +144,7 @@ export function vista() {
   if (a.detalle) return `<main class="wrap wide"><button class="btn ghost sm" data-act="admVolver" style="align-self:flex-start">← Volver</button>${vDetalle()}</main>`;
   const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['mapa', 'Mapa'], ['taller', `Taller${a.d.ordenes.length ? ` (${a.d.ordenes.length})` : ''}`], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['combustible', `Combustible${Cb.alertasCombustible(a.d.combustible).length ? ` (${Cb.alertasCombustible(a.d.combustible).length})` : ''}`], ['costos', 'Costos por obra'], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras'], ...(esAdmin() ? [['auditoria', 'Auditoría']] : [])]
     .map(([k, l]) => `<button class="tab ${a.tab === k ? 'on' : ''}" data-act="admTab" data-k="${k}">${l}</button>`).join('');
-  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, mapa: Mapa.vMapa, taller: Tal.vTaller, costos: Cs.vCostos, auditoria: Au.vAuditoria, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
+  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, mapa: Mapa.vMapa, taller: Tal.vTallerPanel, costos: Cs.vCostos, auditoria: Au.vAuditoria, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
   return `<main class="wrap wide"><section class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="eyebrow">${esc(fechaLarga())}</p><h1>${esc(S.m.empresa.nombre)}</h1></div>
     <div class="row"><button class="btn sm" data-act="rdAbrir">Resumen del día</button><button class="btn sm ghost" data-act="admRecargar">${a.cargando ? 'Actualizando…' : 'Actualizar'}</button></div></section>
     ${a.err ? `<div class="badbox">${esc(a.err)}</div>` : ''}<nav class="tabs">${tabs}</nav>${body}</main>`;
@@ -159,13 +178,19 @@ function vResumen() {
   if (d.sug2fa) att.push(['warn', 'Tu cuenta no tiene verificación en dos pasos', 'Recomendada para quien administra la empresa: con la huella, una app del celular o un código por correo.', `<button class="btn sm" data-act="admTab" data-k="personal">Activar</button>`]);
   alertasFlota().forEach(x => att.push(x));
   Cb.alertasCombustible(d.combustible).forEach(x => att.push(x));
+  d.lecturas.forEach(l => att.push(['warn', `${l.medidor === 'km' ? 'Odómetro' : 'Horómetro'} distinto a la foto · ${l.codigo}`,
+    `${l.operario} cargó ${fNum(l.cargado)} ${unidad(l.medidor)} y la foto dice ${fNum(l.foto)} ${unidad(l.medidor)} · ${fFecha(l.inicio)}`, `<button class="btn sm" data-act="admVer" data-id="${l.jornada_id}">Ver</button>`]));
+  Dep.alertasDeposito(d.articulos).forEach(x => att.push(x));
+  (d.presuMes || []).forEach(p => att.push([p.pct >= 100 ? 'bad' : 'warn', `${p.pct >= 100 ? 'Presupuesto pasado' : 'Presupuesto al ' + p.pct + ' %'} · ${p.obra}`,
+    `Este mes van $ ${fNum(Math.round(p.gastado))} de $ ${fNum(Math.round(p.presu))} (${p.pct} %).`, `<button class="btn sm" data-act="admTab" data-k="costos">Ver</button>`]));
   Cb.alertasTanques(d.tanques).forEach(([s, t, x]) => att.push([s, t, x, `<button class="btn sm" data-act="admTab" data-k="combustible">Ver</button>`]));
   d.miembros.filter(m => m.bloqueado_en).forEach(m => att.push(['bad', `Legajo bloqueado · ${m.nombre}`, `${m.intentos_fallidos} intentos fallidos de PIN · ${fFecha(m.bloqueado_en)} ${fHora(m.bloqueado_en)}`, `<button class="btn sm" data-act="admTab" data-k="personal">Desbloquear</button>`]));
   const sinCheck = activos.filter(e => e.estado === 'operativo' && !d.hoy.some(j => j.equipo_id === e.id));
   const vacio = !d.equipos.length ? `<section class="card"><h2>Primeros pasos</h2><ol class="pasos">
       <li>Cargá las obras en <button class="linkbtn" data-act="admTab" data-k="personal">Personal y obras</button>.</li>
       <li>Dá de alta los equipos en <button class="linkbtn" data-act="admTab" data-k="equipos">Equipos</button>.</li>
-      <li>Dá de alta a los operarios con legajo y PIN. Entran con el código de empresa <b class="mono">${esc(S.m.empresa.slug)}</b>.</li></ol></section>` : '';
+      <li>Dá de alta a los operarios con legajo y PIN. Entran con el código de empresa <b class="mono">${esc(S.m.empresa.slug)}</b>.</li></ol>
+      ${esAdmin() ? '<p>¿Tenés muchos equipos o personas? <button class="btn sm dark" data-act="impAbrir">Importar todo desde Excel</button></p>' : ''}</section>` : '';
   return `${vacio}<div class="kpis">
       <div class="kpi"><b>${d.hoy.length}</b><span>Checklists hoy</span></div>
       <div class="kpi"><b>${d.abiertas.length}</b><span>Equipos trabajando ahora</span></div>
@@ -197,7 +222,7 @@ function vJornadas() {
       <span><span class="t" style="display:block">${esc(j.equipo.codigo)} · ${esc(j.equipo.nombre)}</span><span class="s" style="display:block">${esc(j.obra ? j.obra.nombre : '—')}</span></span>
       <span class="t">${esc(j.operario.nombre)}</span>
       <span class="s">${j.n_fallas ? `${j.n_fallas} falla${j.n_fallas > 1 ? 's' : ''}${j.n_criticas ? ` (${j.n_criticas} crít.)` : ''}` : 'Sin fallas'} · ${j.estado === 'abierta' ? 'en curso' : j.estado === 'cerrada' ? 'cerrada' : 'rechazada'}</span>
-      <span class="flags">${j.n_alertas ? '<span class="chip bad">Advertencia</span>' : ''}${j.rapido ? '<span class="chip warn">Rápido</span>' : ''}${chipRes(j.resultado)}</span></button>`).join('')}</div>`
+      <span class="flags">${j.lectura_estado === 'diferente' ? '<span class="chip bad">Medidor ≠ foto</span>' : ''}${j.n_alertas ? '<span class="chip bad">Advertencia</span>' : ''}${j.rapido ? '<span class="chip warn">Rápido</span>' : ''}${chipRes(j.resultado)}</span></button>`).join('')}</div>`
       : '<div class="empty">No hay jornadas con estos filtros.</div>'}`;
 }
 
@@ -312,18 +337,22 @@ function vPersonal() {
       <div class="row" style="justify-content:flex-end">${adm && m.bloqueado_en ? `<button class="btn sm primary" data-act="admDesbloquear" data-id="${m.id}">Desbloquear</button>` : ''}
       ${!gestor(m) && m.activo ? `<button class="btn sm ghost" data-act="admAsig" data-id="${m.id}">Equipos y obras</button>` : ''}
       ${adm && gestor(m) && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admAvisos" data-id="${m.id}">${m.recibir_avisos ? 'Sin avisos' : 'Con avisos'}</button>` : ''}${adm && m.rol !== 'dueno' && m.legajo ? `<button class="btn sm ghost" data-act="admPin" data-id="${m.id}">Cambiar PIN</button>` : ''}${adm && !m.legajo && m.user_id !== S.user.id && (m.rol !== 'dueno' || S.m.rol === 'dueno') ? `<button class="btn sm ghost" data-act="admReset2fa" data-id="${m.id}">${a.confirm === '2fa' + m.id ? 'Tocá de nuevo para quitarle la verificación' : 'Restablecer verificación'}</button>` : ''}
+      ${adm && ['operario', 'mecanico'].includes(m.rol) ? `<button class="btn sm ghost" data-act="admCosto" data-id="${m.id}">${d.costoPersonal[m.id] != null ? `$ ${fNum(d.costoPersonal[m.id])}/h` : 'Costo/h'}</button>` : ''}
       ${adm && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admActivo" data-id="${m.id}">${m.activo ? 'Desactivar' : 'Activar'}</button>` : ''}</div>
       ${a.pin && a.pin.id === m.id ? `<div style="grid-column:1/-1" class="row"><input class="inp num" id="pin-nuevo" data-pin="pin" inputmode="numeric" maxlength="6" placeholder="Nuevo PIN (6 números)" value="${esc(a.pin.pin)}" style="flex:1 1 180px">
-        <button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admPinOk">Guardar</button></div>` : ''}${edAsig(m)}</div>`).join('');
+        <button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admPinOk">Guardar</button></div>` : ''}${edAsig(m)}${a.costo && a.costo.id === m.id ? `<div style="grid-column:1/-1" class="row"><label class="f" style="flex:1 1 220px">Costo por hora de ${esc(m.nombre)} <small>Sueldo y cargas sociales divididos por las horas del mes. Solo lo ve administración.</small><input class="inp num" id="costo-h" type="number" inputmode="decimal" data-costo="v" value="${esc(a.costo.v)}"></label>
+        <button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admCostoOk">Guardar</button></div>` : ''}</div>`).join('');
   const form = n ? `<div class="form-grid"><label class="f">Nombre y apellido<input class="inp" id="np-nom" data-np="nombre" value="${esc(n.nombre)}"></label>
       <label class="f">Legajo<input class="inp" id="np-leg" data-np="legajo" value="${esc(n.legajo)}" autocapitalize="none"></label>
       <label class="f">PIN de 6 números<input class="inp num" id="np-pin" data-np="pin" inputmode="numeric" maxlength="6" value="${esc(n.pin)}"></label>
       <label class="f">Rol<select class="inp" id="np-rol" data-np="rol"><option value="operario" ${n.rol === 'operario' ? 'selected' : ''}>Operario</option><option value="mecanico" ${n.rol === 'mecanico' ? 'selected' : ''}>Mecánico (taller)</option><option value="supervisor" ${n.rol === 'supervisor' ? 'selected' : ''}>Supervisor</option></select></label></div>
       ${n.err ? `<p class="err">${esc(n.err)}</p>` : ''}<div class="row"><button class="btn sm" data-act="admPerCancelar">Cancelar</button><button class="btn sm primary" data-act="admPerGuardar" ${n.ocupado ? 'disabled' : ''}>Dar de alta</button></div>`
     : adm ? '<button class="btn sm dark" data-act="admPerNuevo" style="align-self:flex-start">Dar de alta a una persona</button>' : '';
-  return `<div class="cols"><section class="card"><h2>Personal (${d.miembros.length})</h2>
+  return `${Imp.vImportar()}<div class="cols"><section class="card"><div class="row" style="justify-content:space-between"><h2>Personal (${d.miembros.length})</h2>${adm && !a.imp ? '<button class="btn sm ghost" data-act="impAbrir">Importar desde Excel</button>' : ''}</div>
       <p class="small muted">Operarios y mecánicos entran con el código de empresa <b class="mono">${esc(S.m.empresa.slug)}</b>, su legajo y su PIN.</p>${form}${per ? `<div>${per}</div>` : ''}</section>
-    <div class="stack">${Seg.vSeguridad()}<section class="card"><h2>Obras</h2>${d.obras.length ? `<div>${d.obras.map(o => `<div class="att" style="grid-template-columns:1fr auto"><div class="t">${esc(o.nombre)}${o.activa ? '' : ' <span class="chip">Cerrada</span>'}</div><button class="btn sm ghost" data-act="admObra" data-id="${o.id}">${o.activa ? 'Cerrar' : 'Reabrir'}</button></div>`).join('')}</div>` : '<p class="muted">Sin obras cargadas.</p>'}
+    <div class="stack">${Seg.vSeguridad()}<section class="card"><h2>Obras</h2>${d.obras.length ? `<div>${d.obras.map(o => `<div class="att" style="grid-template-columns:1fr auto"><div><div class="t">${esc(o.nombre)}${o.activa ? '' : ' <span class="chip">Cerrada</span>'}</div><div class="s">${o.presupuesto_mensual != null ? `Presupuesto $ ${fNum(o.presupuesto_mensual)} por mes` : 'Sin presupuesto'}</div>
+        ${a.presu && a.presu.id === o.id ? `<div class="row"><input class="inp num" id="presu-v" type="number" inputmode="decimal" data-presu="v" value="${esc(a.presu.v)}" placeholder="$ por mes" style="width:160px"><button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admPresuOk">Guardar</button></div>` : ''}</div>
+        <div class="row">${adm ? `<button class="btn sm ghost" data-act="admPresu" data-id="${o.id}">Presupuesto</button>` : ''}<button class="btn sm ghost" data-act="admObra" data-id="${o.id}">${o.activa ? 'Cerrar' : 'Reabrir'}</button></div></div>`).join('')}</div>` : '<p class="muted">Sin obras cargadas.</p>'}
       <div class="row"><input class="inp" id="nueva-obra" data-ad="nuevaObra" value="${esc(a.nuevaObra)}" placeholder="Nombre de la obra" style="flex:1 1 200px"><button class="btn sm dark" data-act="admObraNueva">Agregar</button></div></section></div></div>`;
 }
 
@@ -344,6 +373,8 @@ function vDetalle() {
       <dt>Checklist</dt><dd>${fDur(j.dur_checklist_s)}${j.motivo_rapido ? ` · "${esc(j.motivo_rapido)}"` : ''}</dd>
       <dt>Estado</dt><dd>${j.estado === 'abierta' ? 'Jornada en curso' : j.estado === 'cerrada' ? `Cerrada ${fHora(j.fin)} h` : 'Rechazada: equipo bloqueado'}</dd>
       <dt>${j.equipo.medidor === 'km' ? 'Odómetro' : 'Horómetro'}</dt><dd class="num">${fNum(j.med_ini)} → ${j.med_fin != null ? fNum(j.med_fin) : '…'} ${u}${j.uso != null ? ` (${fNum(j.uso)} ${u})` : ''}</dd>
+      ${j.lectura_estado ? `<dt>Lectura de la foto</dt><dd>${{ ok: `<span class="chip ok">Coincide</span> la foto dice ${fNum(j.lectura_foto)} ${u}`, diferente: `<span class="chip bad">No coincide</span> la foto dice <b>${fNum(j.lectura_foto)} ${u}</b>`,
+        ilegible: '<span class="chip plain">No se pudo leer</span>', error: '<span class="chip plain">No se pudo leer</span>', omitida: '<span class="chip plain">Sin foto</span>' }[j.lectura_estado]}${j.lectura_nota ? ` <span class="small muted">· ${esc(j.lectura_nota)}</span>` : ''}</dd>` : ''}
       ${j.litros != null ? `<dt>Combustible</dt><dd class="num">${fNum(j.litros)} L</dd>` : ''}
       <dt>Ubicación</dt><dd>${j.lat != null ? `<span class="num">${j.lat.toFixed(5)}, ${j.lng.toFixed(5)}</span> ±${Math.round(j.precision_m || 0)} m · <a href="${mapsUrl(j.lat, j.lng)}" target="_blank" rel="noopener">Ver mapa ↗</a>` : `Sin GPS · ${esc(j.ubic_ref || '—')}`}</dd>
       <dt>Recibido</dt><dd>${fFecha(j.recibido_en)} ${fHora(j.recibido_en)} h</dd></dl>
@@ -386,7 +417,7 @@ export const A = {
     if (a.tab === 'personal') Seg.cargarSeguridad();
     if (a.tab === 'auditoria') Au.cargarAuditoria();
   },
-  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A, ...Cs.A, ...Mapa.A, ...Rd.A, ...Au.A, ...Cat.A,
+  ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A, ...Cs.A, ...Mapa.A, ...Rd.A, ...Au.A, ...Cat.A, ...Imp.A,
   admAsig: b => { const a = T(), xs = a.d.asig.filter(x => x.miembro_id === b.dataset.id); a.asig = { id: b.dataset.id, eq: xs.filter(x => x.equipo_id).map(x => x.equipo_id), ob: xs.filter(x => x.obra_id).map(x => x.obra_id) }; render(); },
   admAsigCancelar: () => { T().asig = null; render(); },
   admAsigGuardar: async () => { const a = T(), s = a.asig; if (await rpc('asignar', { p_miembro: s.id, p_equipos: s.eq, p_obras: s.ob }, s.eq.length || s.ob.length ? 'Asignación guardada.' : 'Sin restricciones: puede usar todos los equipos y obras.')) { a.asig = null; render(); } },
@@ -420,7 +451,22 @@ export const A = {
     if (error) return toast(msgError(error), 6000);
     a.eqPl = null; toast(`${e.codigo} usa ahora "${(a.d.plantillas[x.clave] || {}).nombre || x.clave}" en los checklists nuevos.`, 6000); cargar();
   },
-  admCancelar: () => { const a = T(); a.eqPl = null; a.liberar = null; a.reparar = null; a.pin = null; a.nota = ''; render(); },
+  admCosto: b => { const a = T(); a.costo = { id: b.dataset.id, v: a.d.costoPersonal[b.dataset.id] ?? '' }; render(); },
+  admCostoOk: async () => {
+    const a = T(), c = a.costo;
+    const { error } = c.v === '' ? await sb.from('costos_personal').delete().eq('miembro_id', c.id)
+      : await sb.from('costos_personal').upsert({ miembro_id: c.id, empresa_id: E(), costo_hora: +c.v, actualizado_en: new Date().toISOString() });
+    if (error) return toast(msgError(error), 6000);
+    a.costo = null; toast('Costo por hora guardado. Se suma como mano de obra en Costos por obra.'); if (a.cs) a.cs.datos = null; cargar();
+  },
+  admPresu: b => { const a = T(), o = a.d.obras.find(x => x.id === b.dataset.id); a.presu = { id: o.id, v: o.presupuesto_mensual ?? '' }; render(); },
+  admPresuOk: async () => {
+    const a = T(), p = a.presu;
+    const { error } = await sb.from('obras').update({ presupuesto_mensual: p.v === '' ? null : +p.v }).eq('id', p.id);
+    if (error) return toast(msgError(error), 6000);
+    a.presu = null; toast('Presupuesto guardado.'); if (a.cs) a.cs.datos = null; cargar();
+  },
+  admCancelar: () => { const a = T(); a.eqPl = null; a.costo = null; a.presu = null; a.liberar = null; a.reparar = null; a.pin = null; a.nota = ''; render(); },
   admLiberar: b => { const a = T(); a.liberar = b.dataset.id; a.nota = ''; render(); },
   admLiberarOk: async b => { const a = T(); if (a.nota.trim().length < 3) return toast('Contá qué se reparó antes de liberar.'); if (await rpc('liberar_equipo', { p_equipo: b.dataset.id, p_reparacion: a.nota }, 'Equipo liberado.')) { a.liberar = null; a.nota = ''; render(); } },
   admReparar: b => { const a = T(); a.reparar = b.dataset.id; a.nota = ''; render(); },
@@ -521,12 +567,14 @@ async function errorFuncion(error) {
 
 export function alEscribir(el, v) {
   const a = T(); if (!a) return false;
-  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v) || Cs.alEscribir(el, v) || Rd.alEscribir(el, v) || Au.alEscribir(el, v) || Cat.alEscribir(el, v)) return true;
+  if (Ed.alEscribir(el, v) || Mt.alEscribir(el, v) || Ind.alEscribir(el, v) || Cb.alEscribir(el, v) || Cs.alEscribir(el, v) || Rd.alEscribir(el, v) || Au.alEscribir(el, v) || Cat.alEscribir(el, v) || Dep.alEscribir(el, v)) return true;
   if (el.dataset.asig && a.asig) { const k = el.dataset.asig, id = el.dataset.id; a.asig[k] = v ? [...a.asig[k], id] : a.asig[k].filter(x => x !== id); return true; }
   if (el.id === 'adm-busca-eq') { a.buscaEq = v; filtrar(el.dataset.buscar, v); return true; }
   if (el.dataset.fa) { a.f[el.dataset.fa] = v; a.jornadas = null; render(); cargarJornadas().then(render); return true; }
   if (el.dataset.ne && a.addEq) { a.addEq[el.dataset.ne] = v; if (el.dataset.ne === 'plantilla') render(); return true; }
   if (el.dataset.eqpl && a.eqPl) { a.eqPl.clave = v; return true; }
+  if (el.dataset.costo && a.costo) { a.costo.v = v; return true; }
+  if (el.dataset.presu && a.presu) { a.presu.v = v; return true; }
   if (el.dataset.np && a.addPer) { a.addPer[el.dataset.np] = v; return true; }
   if (el.dataset.pin && a.pin) { a.pin.pin = v; return true; }
   if (el.dataset.ad) { a[el.dataset.ad] = v; return true; }

@@ -65,6 +65,12 @@
 - Más amigable: al elegir el equipo la pantalla baja sola a la obra, se recuerda la última obra, tablas legibles
   en el celular (fichas), pestañas y números que entran en pantalla.
 
+- Para vender y controlar costos (24/11): carga inicial desde Excel (equipos, personal con PIN automático, obras) con
+  revisión fila por fila; costo por hora de cada operario (solo administración) sumado como mano de obra en costos;
+  presupuesto mensual por obra con avance y aviso desde el 80 %; depósito de repuestos del taller (compras con costo
+  promedio, conteos, salida y devolución por orden de trabajo, aviso de poco stock); lectura automática de la foto
+  del horómetro con Claude y aviso si no coincide con lo cargado (se activa con la clave de Anthropic).
+
 ## Próximo (piloto Concivi)
 
 1. Prueba en celulares reales en obra (GPS, cámara, firma, sin señal, QR).

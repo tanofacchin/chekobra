@@ -8,6 +8,7 @@ import * as Adm from './admin.js';
 import * as Tal from './taller.js';
 import { dictar } from './voz.js';
 import * as Seg from './seguridad.js';
+import * as Imp from './importar.js';
 
 const MARK = (n = 26) => `<svg width="${n}" height="${n}" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="5" fill="var(--accent)"/><path d="M7 13.5l4 4 8-9" fill="none" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
@@ -282,7 +283,7 @@ document.addEventListener('input', e => {
   else if (Seg.alEscribir(el, v)) { /* código del segundo factor */ }
   else (Tal.alEscribir(el, v) || Op.alEscribir(el, v) || Adm.alEscribir(el, v));
 });
-document.addEventListener('change', e => { if (e.target.dataset.file === 'ot') Tal.alArchivo(e.target); else if (e.target.dataset.file) Op.alArchivo(e.target); });
+document.addEventListener('change', e => { if (e.target.dataset.file === 'importar') Imp.alArchivo(e.target); else if (e.target.dataset.file === 'ot') Tal.alArchivo(e.target); else if (e.target.dataset.file) Op.alArchivo(e.target); });
 
 addEventListener('online', () => { S.online = true; render(); sync(); });
 addEventListener('offline', () => { S.online = false; render(); });

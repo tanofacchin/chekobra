@@ -647,7 +647,7 @@ export async function alArchivo(input) {
       if (selfieUrl) URL.revokeObjectURL(selfieUrl); selfieUrl = null; f.err = '';
       render();
     } else if (input.dataset.file === 'medidor') {
-      f.medidorFoto = await comprimir(file, 1080, 0.7, [`${e.codigo} · ${e.medidor === 'km' ? 'Odómetro' : 'Horómetro'} ${f.medIni || ''}`, `${S.m.nombre} · ${fFecha(now)} ${fHora(now)} h`]);
+      f.medidorFoto = await comprimir(file, 1280, 0.8, [`${e.codigo} · ${e.medidor === 'km' ? 'Odómetro' : 'Horómetro'}`, `${S.m.nombre} · ${fFecha(now)} ${fHora(now)} h`]);
       if (medUrl) URL.revokeObjectURL(medUrl); medUrl = null;
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       render();

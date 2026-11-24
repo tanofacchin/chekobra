@@ -25,3 +25,10 @@ Primero `scripts/preparar-proyecto.sh <ref-de-pruebas>` (aplica solo lo que falt
 - Otro dueño o administrador de la empresa: Personal y obras → la persona → **Restablecer verificación**.
 - Si es el único dueño: desde la base (soporte de Operapto), después de confirmar la identidad por otro medio,
   borrar sus factores en `auth.mfa_factors`, sus filas de `public.huellas` y poner `correo = false` en `public.ajustes_2fa`.
+
+## Lectura automática de la foto del horómetro (activar)
+
+1. Crear una clave en console.anthropic.com → API Keys (cuenta de la empresa, con un límite de gasto mensual).
+2. Cargarla en Supabase → Project Settings → Edge Functions → Secrets como `ANTHROPIC_API_KEY`.
+3. Listo: cada 10 minutos la función `leer-medidor` lee las fotos nuevas (unos US$ 0,01 por foto).
+Sin la clave, la función no hace nada y la app funciona igual.

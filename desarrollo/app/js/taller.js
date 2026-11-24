@@ -3,6 +3,7 @@ import { esc, fFecha, fHora, fNum, unidad, toast, msgError, comprimir } from './
 import { sb } from './datos.js';
 import { S, render, esGestor } from './estado.js';
 import { botonVoz } from './voz.js';
+import * as Dep from './deposito.js';
 
 export const ESTADO = { abierta: ['Abierta', 'warn'], en_curso: ['En curso', 'acc'], esperando_repuestos: ['Esperando repuestos', 'warn'], terminada: ['Terminada', 'ok'], cancelada: ['Cancelada', 'plain'] };
 export const PRIORIDAD = { alta: ['Alta', 'bad'], media: ['Media', 'warn'], baja: ['Baja', 'plain'] };
@@ -25,15 +26,16 @@ async function cargarLista(filtro) {
   return data;
 }
 async function cargarOrden(id) {
-  const [o, f, r] = await Promise.all([
+  const [o, f, r, ar] = await Promise.all([
     sb.from('ordenes_trabajo').select(SEL).eq('id', id).single(),
     sb.from('fallas').select('id, texto, nota, critica, grave, foto_path, estado, creada_en, seccion').eq('orden_id', id).order('critica', { ascending: false }),
     sb.from('repuestos_orden').select('*').eq('orden_id', id).order('creado_en'),
+    sb.from('articulos').select('id, codigo, descripcion, unidad, stock, costo_promedio').eq('activo', true).gt('stock', 0).order('descripcion'),
   ]);
   for (const x of [o, f, r]) if (x.error) throw x.error;
   const paths = [...f.data.map(x => x.foto_path), o.data.foto_path].filter(Boolean), urls = {};
   if (paths.length) { const { data } = await sb.storage.from('evidencias').createSignedUrls(paths, 3600); (data || []).forEach(u => { if (u.signedUrl) urls[u.path] = u.signedUrl; }); }
-  return { o: o.data, fallas: f.data, rep: r.data, urls };
+  return { o: o.data, fallas: f.data, rep: r.data, urls, articulos: ar.error ? [] : ar.data };
 }
 const costoRep = rs => (rs || []).reduce((s, r) => s + Number(r.cantidad) * Number(r.costo_unitario || 0), 0);
 const nombreMiembro = id => { const ms = S.adm && S.adm.d ? S.adm.d.miembros : []; const m = ms.find(x => x.id === id); return m ? m.nombre : (id && S.m && id === S.m.id ? S.m.nombre : null); };
@@ -100,9 +102,11 @@ export function vOrden(t) {
     ${fin ? vTerminar(t) : ''}
     <section class="card flat"><div class="row" style="justify-content:space-between"><h3>Repuestos</h3><b class="num">${fPeso(totRep)}</b></div>
       ${reps || '<p class="muted small">Sin repuestos cargados.</p>'}
-      ${abierta && puedo ? (nr ? `<div class="form-grid"><label class="f">Repuesto<input class="inp" id="ot-rd" data-otr="descripcion" value="${esc(nr.descripcion)}" placeholder="Ej.: filtro de aceite"></label>
+      ${abierta && puedo ? (nr ? `<div class="form-grid">${t.det.articulos.length ? `<label class="f">Del depósito<select class="inp" id="ot-art" data-otr="articulo" data-vivo><option value="">No está en el depósito (escribirlo)</option>${t.det.articulos.map(x => `<option value="${x.id}" ${nr.articulo === x.id ? 'selected' : ''}>${esc(x.descripcion)}${x.codigo ? ' · ' + esc(x.codigo) : ''} — hay ${fNum(x.stock)}</option>`).join('')}</select></label>` : ''}
+          ${nr.articulo ? '' : `<label class="f">Repuesto<input class="inp" id="ot-rd" data-otr="descripcion" value="${esc(nr.descripcion)}" placeholder="Ej.: filtro de aceite"></label>`}
           <label class="f">Cantidad<input class="inp num" id="ot-rc" type="number" inputmode="decimal" data-otr="cantidad" value="${esc(nr.cantidad)}"></label>
-          <label class="f">Precio unitario <small>Opcional</small><input class="inp num" id="ot-rp" type="number" inputmode="decimal" data-otr="costo" value="${esc(nr.costo)}"></label></div>
+          ${nr.articulo ? '' : `<label class="f">Precio unitario <small>Opcional</small><input class="inp num" id="ot-rp" type="number" inputmode="decimal" data-otr="costo" value="${esc(nr.costo)}"></label>`}</div>
+          ${nr.articulo ? '<p class="small muted">Sale del depósito con su costo promedio.</p>' : ''}
           <div class="row"><button class="btn sm" data-act="otRepCancelar">Cancelar</button><button class="btn sm primary" data-act="otRepGuardar" ${t.ocupado ? 'disabled' : ''}>Agregar</button></div>`
         : '<button class="btn sm" data-act="otRepNuevo" style="align-self:flex-start">Agregar repuesto</button>') : ''}</section>
     ${o.estado === 'terminada' ? `<section class="card flat"><h3>Trabajo realizado</h3><p>${esc(o.trabajo_realizado)}</p>
@@ -172,6 +176,14 @@ export function vTaller() {
   const lista = !t.lista ? '<p class="muted">Cargando…</p>' : t.lista.length ? `<div class="list">${t.lista.map(filaOrden).join('')}</div>` : '<div class="empty">No hay órdenes con este filtro.</div>';
   return filtros + (t.nueva ? vNueva(t.nueva) : '') + lista;
 }
+// Pestaña Taller del panel: órdenes de trabajo y depósito de repuestos.
+export function vTallerPanel() {
+  const a = S.adm, v = a.tallerVista || 'ordenes', nb = (a.d.articulos || []).filter(Dep.bajo).length;
+  const sub = `<div class="seg-tabs" role="tablist" style="margin-bottom:4px">${[['ordenes', 'Órdenes de trabajo'], ['deposito', `Depósito${nb ? ` (${nb} con poco stock)` : ''}`]].map(([k, l]) =>
+    `<button role="tab" aria-selected="${v === k}" class="${v === k ? 'on' : ''}" data-act="tallerVista" data-k="${k}">${l}</button>`).join('')}</div>`;
+  if (a.ot && a.ot.det) return vOrden(a.ot);
+  return sub + (v === 'deposito' ? Dep.vDeposito() : vTaller());
+}
 
 function vNueva(n) {
   const d = S.adm.d, eqs = d.equipos.filter(e => e.activo), e = eqs.find(x => x.id === n.equipo_id);
@@ -202,6 +214,8 @@ export function alertasTaller(ordenes) {
 
 /* ================================================================ acciones */
 export const A = {
+  ...Dep.A,
+  tallerVista: b => { const a = S.adm; a.tallerVista = b.dataset.k; render(); if (b.dataset.k === 'deposito') Dep.cargarDeposito(); },
   otRecargar: () => cargar(),
   otFiltro: b => { const t = esGestor() && !S.modoOperario ? S.adm.ot : S.tal; t.filtro = b.dataset.k; t.lista = null; render(); t === S.tal ? cargar() : cargarTaller(); },
   otAbrir: b => abrir(b.dataset.id),
@@ -213,13 +227,14 @@ export const A = {
     t.confirm = null;
     await llamar('cambiar_estado_orden', { p_orden: t.det.o.id, p_estado: k }, { en_curso: 'Orden en curso.', esperando_repuestos: 'Orden esperando repuestos.', cancelada: 'Orden cancelada.' }[k]);
   },
-  otRepNuevo: () => { D().rep = { descripcion: '', cantidad: '1', costo: '' }; render(); },
+  otRepNuevo: () => { D().rep = { descripcion: '', cantidad: '1', costo: '', articulo: '' }; render(); },
   otRepCancelar: () => { D().rep = null; render(); },
   otRepGuardar: async () => {
     const t = D(), r = t.rep;
-    if (r.descripcion.trim().length < 2) return toast('Escribí qué repuesto es.');
+    if (!r.articulo && r.descripcion.trim().length < 2) return toast('Escribí qué repuesto es o elegilo del depósito.');
     if (!(+r.cantidad > 0)) return toast('Indicá la cantidad.');
-    if (await llamar('agregar_repuesto', { p_orden: t.det.o.id, p_descripcion: r.descripcion.trim(), p_cantidad: +r.cantidad, p_costo: r.costo === '' ? null : +r.costo })) { t.rep = null; render(); }
+    if (await llamar('agregar_repuesto', { p_orden: t.det.o.id, p_descripcion: r.articulo ? null : r.descripcion.trim(), p_cantidad: +r.cantidad,
+      p_costo: r.articulo || r.costo === '' ? null : +r.costo, p_articulo: r.articulo || null })) { t.rep = null; render(); }
   },
   otRepQuitar: b => llamar('quitar_repuesto', { p_repuesto: b.dataset.id }),
   otTerminar: () => { const t = D(); t.fin = { trabajo: '', horas: '', mano: '', medidor: t.det.o.equipo.ultimo_medidor ?? '', foto: null, fotoUrl: null, err: '' }; render(); },
@@ -275,7 +290,7 @@ export const A = {
 
 export function alEscribir(el, v) {
   const t = D();
-  if (el.dataset.otr && t && t.rep) { t.rep[el.dataset.otr] = v; return true; }
+  if (el.dataset.otr && t && t.rep) { t.rep[el.dataset.otr] = v; if (el.dataset.otr === 'articulo') render(); return true; }
   if (el.dataset.otf && t && t.fin) { t.fin[el.dataset.otf] = v; return true; }
   if (!S.adm || !S.adm.ot) return false;
   const ot = S.adm.ot;

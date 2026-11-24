@@ -868,4 +868,63 @@ select pg_temp.esperar_error(format($$select public.stock_tanques(%L)$$, (select
 select pg_temp.esperar_error(format($$insert into public.movimientos_tanque (empresa_id, tanque_id, tipo, litros) values (%L, %L, 'ingreso', 10)$$, (select v from ctx where k = 'B'), :'tq_id'), 'row-level security');
 reset role;
 
+-- ===== Mano de obra (solo administración), presupuestos y stock del taller
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+insert into public.costos_personal (miembro_id, empresa_id, costo_hora) select :'opA3_id', v, 5000 from ctx where k = 'A';
+update public.obras set presupuesto_mensual = 1000000 where id = :'obraA_id';
+do $$ declare c jsonb; r jsonb; begin
+  c := public.costos_por_obra((select v from ctx where k = 'A'), '2026-11-01', '2026-11-30');
+  -- jornada del 12/11 de Operario A3 en Ruta 5 (RE-OT): de 07:00 a la hora del cierre → mano de obra > 0 y suma al total
+  select x into r from jsonb_array_elements(c->'filas') x where x->>'codigo' = 'RE-OT' and x->>'obra' = 'Ruta 5';
+  if not (c->>'con_mano_obra')::boolean or coalesce((r->>'mano_obra')::numeric, 0) <= 0 then raise exception 'FALLÓ: mano de obra %', r; end if;
+  if (r->>'total')::numeric <> (r->>'costo_equipo')::numeric + (r->>'combustible')::numeric + (r->>'reparaciones')::numeric + (r->>'mano_obra')::numeric then raise exception 'FALLÓ: total con mano de obra %', r; end if;
+  if (c->'presupuestos'->((select v from ctx where k = 'obraA')::text)->>'mensual')::numeric <> 1000000 then raise exception 'FALLÓ: presupuesto %', c->'presupuestos'; end if;
+end $$;
+reset role;
+-- la supervisora no ve el costo de las personas ni la mano de obra
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a6';
+do $$ declare c jsonb; begin
+  if exists (select 1 from public.costos_personal) then raise exception 'FALLÓ: supervisora ve costos del personal'; end if;
+  c := public.costos_por_obra((select v from ctx where k = 'A'), '2026-11-01', '2026-11-30');
+  if (c->>'con_mano_obra')::boolean or exists (select 1 from jsonb_array_elements(c->'filas') x where x->>'mano_obra' is not null) then raise exception 'FALLÓ: supervisora ve mano de obra'; end if;
+end $$;
+reset role;
+-- depósito: alta, compra con costo promedio, salida por OT, devolución y ajuste
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+insert into public.articulos (empresa_id, codigo, descripcion, unidad, minimo) select v, 'FIL-01', 'Filtro de aceite', 'u', 2 from ctx where k = 'A' returning id \gset art_
+insert into public.movimientos_stock (empresa_id, articulo_id, tipo, cantidad, costo_unitario, miembro_id) select v, :'art_id', 'ingreso', 4, 10000, :'mid' from ctx where k = 'A';
+insert into public.movimientos_stock (empresa_id, articulo_id, tipo, cantidad, costo_unitario, miembro_id) select v, :'art_id', 'ingreso', 4, 14000, :'mid' from ctx where k = 'A';
+select pg_temp.esperar_error(format($$update public.articulos set stock = 99 where id = %L$$, :'art_id'), 'permission denied');
+select public.crear_orden(jsonb_build_object('equipo_id', :'eqOT_id', 'titulo', 'Service con filtro', 'asignado_a', :'mecA_id'))->>'orden_id' as ot9 \gset
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a4';
+select pg_temp.esperar_error(format($$select public.agregar_repuesto(%L, null, 20, null, %L)$$, :'ot9', :'art_id'), 'En el depósito hay');
+select public.agregar_repuesto(:'ot9', null, 3, null, :'art_id') as rep9 \gset
+do $$ declare a public.articulos; r public.repuestos_orden; begin
+  select * into a from public.articulos where codigo = 'FIL-01';
+  select * into r from public.repuestos_orden where articulo_id = a.id;
+  if a.stock <> 5 or a.costo_promedio <> 12000 or r.costo_unitario <> 12000 or r.descripcion <> 'Filtro de aceite' then raise exception 'FALLÓ: salida del depósito % %', row_to_json(a), row_to_json(r); end if;
+end $$;
+select pg_temp.esperar_error(format($$insert into public.movimientos_stock (empresa_id, articulo_id, tipo, cantidad) values (%L, %L, 'ingreso', 5)$$, (select v from ctx where k = 'A'), :'art_id'), 'row-level security');
+select public.quitar_repuesto(:'rep9');
+do $$ begin if (select stock from public.articulos where codigo = 'FIL-01') <> 8 then raise exception 'FALLÓ: devolución al depósito'; end if; end $$;
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+insert into public.movimientos_stock (empresa_id, articulo_id, tipo, cantidad, miembro_id, notas) select v, :'art_id', 'ajuste', 1, :'mid', 'Conteo' from ctx where k = 'A';
+do $$ begin
+  if (select stock from public.articulos where codigo = 'FIL-01') <> 1 then raise exception 'FALLÓ: ajuste por conteo'; end if;
+  if exists (select 1 from public.auditoria where tabla = 'articulos' and accion = 'cambio') then raise exception 'FALLÓ: los movimientos de stock no van a la auditoría'; end if;
+end $$;
+select public.cambiar_estado_orden(:'ot9', 'cancelada');
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+do $$ begin if exists (select 1 from public.articulos) or exists (select 1 from public.costos_personal) then raise exception 'FALLÓ: B ve datos de A'; end if; end $$;
+reset role;
+
 \echo TODAS LAS PRUEBAS PASARON
