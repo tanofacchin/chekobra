@@ -38,7 +38,7 @@ export function sincronizar(sb, alCambiar) {
       for (const e of await cola.listar()) {
         if (e.estado === 'rechazado' || e.tipo === 'borrador') continue;
         try {
-          const r = await ({ checklist: enviarChecklist, cierre: enviarCierre, carga: enviarCarga }[e.tipo])(sb, e);
+          const r = await ({ checklist: enviarChecklist, cierre: enviarCierre, carga: enviarCarga, marca: enviarMarca, marca_reloj: enviarMarcaReloj }[e.tipo])(sb, e);
           if (r === 'esperar') continue;
           await cola.borrar(e.id); enviados++;
           alCambiar && alCambiar({ tipo: 'enviado', envio: e, respuesta: r });
@@ -95,4 +95,23 @@ async function enviarCierre(sb, e) {
     throw /fetch/i.test(error.message) ? new TypeError(error.message) : new Error(error.message);
   }
   return { jornada_id: jid };
+}
+
+// Tarjetero: marcación desde el celular propio o con el QR de la obra.
+async function enviarMarca(sb, e) {
+  for (const a of e.archivos) await subir(sb, a);
+  const { data, error } = await sb.rpc('marcar', { p: e.payload });
+  if (error) throw /fetch/i.test(error.message) ? new TypeError(error.message) : new Error(error.message);
+  return data;
+}
+// Tarjetero: marcación del reloj del obrador hecha sin señal (sin PIN: queda para revisar con la foto).
+async function enviarMarcaReloj(sb, e) {
+  for (const a of e.archivos) await subir(sb, a);
+  const { data, error } = await sb.functions.invoke('reloj', { body: e.payload });
+  if (error) {
+    if (!error.context || !error.context.status) throw new TypeError(error.message);
+    let m = error.message; try { const b = await error.context.json(); if (b && b.error) m = b.error; } catch { /* sin cuerpo */ }
+    throw new Error(m);
+  }
+  return data;
 }

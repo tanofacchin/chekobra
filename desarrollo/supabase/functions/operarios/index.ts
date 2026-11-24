@@ -3,7 +3,7 @@
 // (dominio reservado, nunca recibe correos) y entran con código de empresa + legajo + PIN de 6 dígitos
 // a través de la función 'ingresar'. La contraseña real se deriva del PIN (ver _shared/pin.js).
 //
-// POST { accion: "alta", empresa_id, nombre, legajo, pin, rol? }
+// POST { accion: "alta", empresa_id, nombre, legajo, pin, rol? }   rol: operario | mecanico | supervisor | personal | reloj
 // POST { accion: "pin", miembro_id, pin }
 // POST { accion: "restablecer_2fa", miembro_id }   (quien perdió el celular de la verificación en dos pasos)
 // Todo queda en la auditoría de la empresa.
@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
 
   if (b.accion === "alta") {
     const nombre = (b.nombre ?? "").trim(), legajo = (b.legajo ?? "").trim();
-    const rol = b.rol === "supervisor" || b.rol === "mecanico" ? b.rol : "operario";
+    const rol = ["supervisor", "mecanico", "personal", "reloj"].includes(b.rol) ? b.rol : "operario";
     if (!(await esAdmin(b.empresa_id))) return json({ error: "No tenés permiso para dar de alta personal" }, 403);
     if (nombre.length < 2) return json({ error: "Escribí el nombre" }, 400);
     if (!/^[A-Za-z0-9._-]{1,30}$/.test(legajo)) return json({ error: "El legajo admite letras, números, punto y guion" }, 400);

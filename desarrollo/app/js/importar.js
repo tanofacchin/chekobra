@@ -8,8 +8,8 @@ import { excelJS, encabezadoExcel } from './excel.js';
 
 const T = () => S.adm;
 const E = () => S.m.empresa_id;
-const ROLES = { operario: 'operario', operaria: 'operario', mecanico: 'mecanico', mecanica: 'mecanico', supervisor: 'supervisor', supervisora: 'supervisor' };
-const ROL_TXT = { operario: 'Operario', mecanico: 'Mecánico', supervisor: 'Supervisor' };
+const ROLES = { operario: 'operario', operaria: 'operario', mecanico: 'mecanico', mecanica: 'mecanico', supervisor: 'supervisor', supervisora: 'supervisor', personal: 'personal', 'personal de obra': 'personal', ayudante: 'personal', oficial: 'personal', peon: 'personal' };
+const ROL_TXT = { operario: 'Operario', mecanico: 'Mecánico', supervisor: 'Supervisor', personal: 'Personal de obra' };
 const COLS = {
   Equipos: [{ t: 'Código', w: 12 }, { t: 'Nombre (marca y modelo)', w: 32 }, { t: 'Tipo de checklist', w: 28 }, { t: 'Horómetro u odómetro actual', w: 16, n: 1 },
     { t: 'N.º de serie / PIN', w: 22 }, { t: 'Patente', w: 12 }, { t: 'Tarifa por hora ($)', w: 14, n: 1 }, { t: 'Tarifa por día ($)', w: 14, n: 1 }],
@@ -24,7 +24,7 @@ async function modelo() {
   const ay = wb.addWorksheet('Cómo completar');
   [['Planilla para cargar datos en Operapto'], [''], ['1. Completá las hojas Equipos, Personal y Obras (podés dejar vacía la que no uses).'],
     ['2. No cambies los títulos de la primera fila.'], ['3. "Tipo de checklist": elegilo de la lista (son las plantillas disponibles).'],
-    ['4. Rol: Operario, Mecánico o Supervisor. Si no ponés PIN, Operapto genera uno y te lo muestra al importar.'],
+    ['4. Rol: Operario, Mecánico, Supervisor o Personal de obra (solo marca entrada y salida). Si no ponés PIN, Operapto genera uno y te lo muestra al importar.'],
     ['5. Subí el archivo en Operapto: Personal y obras → Importar desde Excel. Antes de cargar, te muestra qué está bien y qué hay que corregir.']]
     .forEach((r, i) => { ay.getRow(i + 1).values = r; });
   ay.getCell('A1').font = { bold: true, size: 14 }; ay.getColumn(1).width = 110;
@@ -82,7 +82,7 @@ async function leer(file) {
     else if (legajos.has(r.legajo.toLowerCase())) r.err.push('ya existe ese legajo');
     else if (vistos.leg.has(r.legajo.toLowerCase())) r.err.push('legajo repetido en la planilla');
     vistos.leg.add(r.legajo.toLowerCase());
-    if (!r.rol) r.err.push(`rol "${r.rolTxt}" no válido (Operario, Mecánico o Supervisor)`);
+    if (!r.rol) r.err.push(`rol "${r.rolTxt}" no válido (Operario, Mecánico, Supervisor o Personal de obra)`);
     if (texto(v[3]) && !/^\d{6}$/.test(r.pin)) r.err.push('el PIN tiene que tener 6 números');
     return r;
   });

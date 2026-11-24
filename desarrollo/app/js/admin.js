@@ -19,6 +19,7 @@ import * as Au from './auditoria.js';
 import * as Cat from './caterpillar.js';
 import * as Dep from './deposito.js';
 import * as Imp from './importar.js';
+import * as Tj from './tarjetero.js';
 
 const T = () => S.adm;
 export function reiniciar() {
@@ -30,7 +31,7 @@ export function reiniciar() {
     recargar: () => cargar(), recargarDetalle: id => cargarDetalle(id),
   };
 }
-export const clave = () => { const a = T(); return a ? [a.tab, a.detalle, a.ficha && a.ficha.id, !!a.etiquetas, !!a.rd].join(',') : ''; };
+export const clave = () => { const a = T(); return a ? [a.tab, a.detalle, a.ficha && a.ficha.id, !!a.etiquetas, !!a.rd, a.as && a.as.vista, !!(a.as && a.as.cartel)].join(',') : ''; };
 export const despues = () => { Ind.despues(); Mapa.despues(); };
 const E = () => S.m.empresa_id;
 
@@ -76,6 +77,7 @@ export async function cargar() {
     if (a.tab === 'costos' && !(a.cs && a.cs.datos)) Cs.cargarCostos();
     if (a.tab === 'mapa') Mapa.cargarMapa();
     if (a.tab === 'personal' && !a.seg) Seg.cargarSeguridad();
+    if (a.tab === 'asistencia' && a.as) { a.as.hoy = null; a.as.per.datos = null; a.as.rev = null; }
     Seg.sugerencia().then(v => { if (a.d) { a.d.sug2fa = v; render(); } }).catch(() => {});
     presupuestosDelMes();
     a.err = '';
@@ -140,11 +142,12 @@ export function vista() {
   if (!a.d) return `<main class="wrap wide">${a.err ? `<div class="badbox">${esc(a.err)}</div><button class="btn" data-act="admRecargar">Reintentar</button>` : '<p class="muted">Cargando panel…</p>'}</main>`;
   if (a.rd) return Rd.vResumenDia();
   if (a.ficha) return Rep.vFicha();
+  if (a.as && a.as.cartel) return Tj.vCartel();
   if (a.etiquetas) return vEtiquetas(a.d.equipos.filter(e => a.etiquetas.includes(e.id)), S.m.empresa.nombre);
   if (a.detalle) return `<main class="wrap wide"><button class="btn ghost sm no-print" data-act="admVolver" style="align-self:flex-start">← Volver</button>${vDetalle()}</main>`;
-  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['mapa', 'Mapa'], ['taller', `Taller${a.d.ordenes.length ? ` (${a.d.ordenes.length})` : ''}`], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['combustible', `Combustible${Cb.alertasCombustible(a.d.combustible).length ? ` (${Cb.alertasCombustible(a.d.combustible).length})` : ''}`], ['costos', 'Costos por obra'], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras'], ...(esAdmin() ? [['auditoria', 'Auditoría']] : [])]
+  const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['mapa', 'Mapa'], ['taller', `Taller${a.d.ordenes.length ? ` (${a.d.ordenes.length})` : ''}`], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['combustible', `Combustible${Cb.alertasCombustible(a.d.combustible).length ? ` (${Cb.alertasCombustible(a.d.combustible).length})` : ''}`], ['asistencia', 'Asistencia'], ['costos', 'Costos por obra'], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras'], ...(esAdmin() ? [['auditoria', 'Auditoría']] : [])]
     .map(([k, l]) => `<button class="tab ${a.tab === k ? 'on' : ''}" data-act="admTab" data-k="${k}">${l}</button>`).join('');
-  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, mapa: Mapa.vMapa, taller: Tal.vTallerPanel, costos: Cs.vCostos, auditoria: Au.vAuditoria, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
+  const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, mapa: Mapa.vMapa, taller: Tal.vTallerPanel, costos: Cs.vCostos, auditoria: Au.vAuditoria, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal, asistencia: Tj.vAsistencia }[a.tab]();
   return `<main class="wrap wide"><section class="row no-print" style="justify-content:space-between;align-items:flex-end"><div><p class="eyebrow">${esc(fechaLarga())}</p><h1>${esc(S.m.empresa.nombre)}</h1></div>
     <div class="row"><button class="btn sm" data-act="rdAbrir">Resumen del día</button><button class="btn sm ghost" data-act="admRecargar">${a.cargando ? 'Actualizando…' : 'Actualizar'}</button></div></section>
     ${a.err ? `<div class="badbox">${esc(a.err)}</div>` : ''}<nav class="tabs">${tabs}</nav>${body}</main>`;
@@ -321,7 +324,7 @@ function vAvisos() {
 
 function vPersonal() {
   const a = T(), d = a.d, adm = esAdmin(), n = a.addPer;
-  const roles = { dueno: 'Dueño', admin: 'Administración', supervisor: 'Supervisor', operario: 'Operario', mecanico: 'Mecánico' };
+  const roles = Tj.ROL_TXT;
   const gestor = m => ['dueno', 'admin', 'supervisor'].includes(m.rol);
   const asigDe = m => { const xs = d.asig.filter(x => x.miembro_id === m.id); return { eq: xs.filter(x => x.equipo_id).map(x => x.equipo_id), ob: xs.filter(x => x.obra_id).map(x => x.obra_id) }; };
   const txtAsig = m => { const s = asigDe(m); if (!s.eq.length && !s.ob.length) return '';
@@ -333,11 +336,11 @@ function vPersonal() {
       <fieldset class="f"><legend class="small"><b>Obras</b></legend><div class="asig">${d.obras.filter(o => o.activa).map(o => `<label class="check"><input type="checkbox" data-asig="ob" data-id="${o.id}" ${s.ob.includes(o.id) ? 'checked' : ''}><span>${esc(o.nombre)}</span></label>`).join('') || '<span class="muted small">Sin obras cargadas.</span>'}</div></fieldset>
       <div class="row"><button class="btn sm" data-act="admAsigCancelar">Cancelar</button><button class="btn sm primary" data-act="admAsigGuardar">Guardar</button></div></div>`; };
   const per = d.miembros.map(m => `<div class="eqrow"><span class="eqcode">${esc(m.legajo || '—')}</span><div><b>${esc(m.nombre)}</b> <span class="chip plain">${roles[m.rol]}</span>${m.activo ? '' : ' <span class="chip">Inactivo</span>'}${m.bloqueado_en ? ' <span class="chip bad">Bloqueado por PIN</span>' : ''}
-      <div class="small muted">${d.consent[m.id] ? `Aceptó la política de privacidad el ${fFecha(d.consent[m.id])}` : 'Todavía no aceptó la política de privacidad'}${gestor(m) ? ` · ${m.recibir_avisos ? 'recibe avisos por correo' : 'no recibe avisos'}` : ''}</div>${txtAsig(m)}</div>
+      <div class="small muted">${m.rol === 'reloj' ? 'Teléfono fijo del obrador para marcar entrada y salida' : d.consent[m.id] ? `Aceptó la política de privacidad el ${fFecha(d.consent[m.id])}` : 'Todavía no aceptó la política de privacidad'}${gestor(m) ? ` · ${m.recibir_avisos ? 'recibe avisos por correo' : 'no recibe avisos'}` : ''}</div>${txtAsig(m)}</div>
       <div class="row" style="justify-content:flex-end">${adm && m.bloqueado_en ? `<button class="btn sm primary" data-act="admDesbloquear" data-id="${m.id}">Desbloquear</button>` : ''}
-      ${!gestor(m) && m.activo ? `<button class="btn sm ghost" data-act="admAsig" data-id="${m.id}">Equipos y obras</button>` : ''}
+      ${!gestor(m) && m.rol !== 'reloj' && m.activo ? `<button class="btn sm ghost" data-act="admAsig" data-id="${m.id}">Equipos y obras</button>` : ''}
       ${adm && gestor(m) && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admAvisos" data-id="${m.id}">${m.recibir_avisos ? 'Sin avisos' : 'Con avisos'}</button>` : ''}${adm && m.rol !== 'dueno' && m.legajo ? `<button class="btn sm ghost" data-act="admPin" data-id="${m.id}">Cambiar PIN</button>` : ''}${adm && !m.legajo && m.user_id !== S.user.id && (m.rol !== 'dueno' || S.m.rol === 'dueno') ? `<button class="btn sm ghost" data-act="admReset2fa" data-id="${m.id}">${a.confirm === '2fa' + m.id ? 'Tocá de nuevo para quitarle la verificación' : 'Restablecer verificación'}</button>` : ''}
-      ${adm && ['operario', 'mecanico'].includes(m.rol) ? `<button class="btn sm ghost" data-act="admCosto" data-id="${m.id}">${d.costoPersonal[m.id] != null ? `$ ${fNum(d.costoPersonal[m.id])}/h` : 'Costo/h'}</button>` : ''}
+      ${adm && ['operario', 'mecanico', 'personal', 'supervisor'].includes(m.rol) ? `<button class="btn sm ghost" data-act="admCosto" data-id="${m.id}">${d.costoPersonal[m.id] != null ? `$ ${fNum(d.costoPersonal[m.id])}/h` : 'Costo/h'}</button>` : ''}
       ${adm && m.rol !== 'dueno' ? `<button class="btn sm ghost" data-act="admActivo" data-id="${m.id}">${m.activo ? 'Desactivar' : 'Activar'}</button>` : ''}</div>
       ${a.pin && a.pin.id === m.id ? `<div style="grid-column:1/-1" class="row"><input class="inp num" id="pin-nuevo" data-pin="pin" inputmode="numeric" maxlength="6" placeholder="Nuevo PIN (6 números)" value="${esc(a.pin.pin)}" style="flex:1 1 180px">
         <button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admPinOk">Guardar</button></div>` : ''}${edAsig(m)}${a.costo && a.costo.id === m.id ? `<div style="grid-column:1/-1" class="row"><label class="f" style="flex:1 1 220px">Costo por hora de ${esc(m.nombre)} <small>Sueldo y cargas sociales divididos por las horas del mes. Solo lo ve administración.</small><input class="inp num" id="costo-h" type="number" inputmode="decimal" data-costo="v" value="${esc(a.costo.v)}"></label>
@@ -345,11 +348,11 @@ function vPersonal() {
   const form = n ? `<div class="form-grid"><label class="f">Nombre y apellido<input class="inp" id="np-nom" data-np="nombre" value="${esc(n.nombre)}"></label>
       <label class="f">Legajo<input class="inp" id="np-leg" data-np="legajo" value="${esc(n.legajo)}" autocapitalize="none"></label>
       <label class="f">PIN de 6 números<input class="inp num" id="np-pin" data-np="pin" inputmode="numeric" maxlength="6" value="${esc(n.pin)}"></label>
-      <label class="f">Rol<select class="inp" id="np-rol" data-np="rol"><option value="operario" ${n.rol === 'operario' ? 'selected' : ''}>Operario</option><option value="mecanico" ${n.rol === 'mecanico' ? 'selected' : ''}>Mecánico (taller)</option><option value="supervisor" ${n.rol === 'supervisor' ? 'selected' : ''}>Supervisor</option></select></label></div>
+      <label class="f">Rol<select class="inp" id="np-rol" data-np="rol"><option value="operario" ${n.rol === 'operario' ? 'selected' : ''}>Operario</option><option value="mecanico" ${n.rol === 'mecanico' ? 'selected' : ''}>Mecánico (taller)</option><option value="supervisor" ${n.rol === 'supervisor' ? 'selected' : ''}>Supervisor</option><option value="personal" ${n.rol === 'personal' ? 'selected' : ''}>Personal de obra (solo marca entrada y salida)</option><option value="reloj" ${n.rol === 'reloj' ? 'selected' : ''}>Reloj del obrador (teléfono fijo para marcar)</option></select></label></div>
       ${n.err ? `<p class="err">${esc(n.err)}</p>` : ''}<div class="row"><button class="btn sm" data-act="admPerCancelar">Cancelar</button><button class="btn sm primary" data-act="admPerGuardar" ${n.ocupado ? 'disabled' : ''}>Dar de alta</button></div>`
     : adm ? '<button class="btn sm dark" data-act="admPerNuevo" style="align-self:flex-start">Dar de alta a una persona</button>' : '';
   return `${Imp.vImportar()}<div class="cols"><section class="card"><div class="row" style="justify-content:space-between"><h2>Personal (${d.miembros.length})</h2>${adm && !a.imp ? '<button class="btn sm ghost" data-act="impAbrir">Importar desde Excel</button>' : ''}</div>
-      <p class="small muted">Operarios y mecánicos entran con el código de empresa <b class="mono">${esc(S.m.empresa.slug)}</b>, su legajo y su PIN.</p>${form}${per ? `<div>${per}</div>` : ''}</section>
+      <p class="small muted">Operarios, mecánicos, personal de obra y relojes del obrador entran con el código de empresa <b class="mono">${esc(S.m.empresa.slug)}</b>, su legajo y su PIN.</p>${form}${per ? `<div>${per}</div>` : ''}</section>
     <div class="stack">${Seg.vSeguridad()}<section class="card"><h2>Obras</h2>${d.obras.length ? `<div>${d.obras.map(o => `<div class="att" style="grid-template-columns:1fr auto"><div><div class="t">${esc(o.nombre)}${o.activa ? '' : ' <span class="chip">Cerrada</span>'}</div><div class="s">${o.presupuesto_mensual != null ? `Presupuesto $ ${fNum(o.presupuesto_mensual)} por mes` : 'Sin presupuesto'}</div>
         ${a.presu && a.presu.id === o.id ? `<div class="row"><input class="inp num" id="presu-v" type="number" inputmode="decimal" data-presu="v" value="${esc(a.presu.v)}" placeholder="$ por mes" style="width:160px"><button class="btn sm" data-act="admCancelar">Cancelar</button><button class="btn sm primary" data-act="admPresuOk">Guardar</button></div>` : ''}</div>
         <div class="row">${adm ? `<button class="btn sm ghost" data-act="admPresu" data-id="${o.id}">Presupuesto</button>` : ''}<button class="btn sm ghost" data-act="admObra" data-id="${o.id}">${o.activa ? 'Cerrar' : 'Reabrir'}</button></div></div>`).join('')}</div>` : '<p class="muted">Sin obras cargadas.</p>'}
@@ -416,6 +419,7 @@ export const A = {
     if (a.tab === 'mapa') Mapa.cargarMapa();
     if (a.tab === 'personal') Seg.cargarSeguridad();
     if (a.tab === 'auditoria') Au.cargarAuditoria();
+    if (a.tab === 'asistencia') Tj.cargarAsistencia();
   },
   ...Ed.A, ...Mt.A, ...Ind.A, ...Rep.A, ...Cb.A, ...Cs.A, ...Mapa.A, ...Rd.A, ...Au.A, ...Cat.A, ...Imp.A,
   admAsig: b => { const a = T(), xs = a.d.asig.filter(x => x.miembro_id === b.dataset.id); a.asig = { id: b.dataset.id, eq: xs.filter(x => x.equipo_id).map(x => x.equipo_id), ob: xs.filter(x => x.obra_id).map(x => x.obra_id) }; render(); },
@@ -553,6 +557,7 @@ async function exportarExcel(f) {
     const conCostos = !f.equipo && !f.operario;
     const [js, cargas, costos] = await Promise.all([jornadasParaExcel(f), cargasParaExcel(f), conCostos ? Cs.costosPorObra(f.desde, f.hasta) : null]);
     if (!js.length && !cargas.length) { toast('No hay datos en ese período.'); return; }
+    if (costos) costos.filas = Cs.conTarjetero(costos).map(c => c.tarjetero ? { ...c, equipo: `Mano de obra del tarjetero (${fNum(c.horas)} h)`, costo_equipo: 0, tarifa_hora: null, tarifa_dia: null } : c);
     if (costos && f.obra) costos.filas = costos.filas.filter(c => c.obra_id === f.obra);
     const blob = await generarExcel(js, f, cargas, costos);
     const slug = S.m.empresa.slug;

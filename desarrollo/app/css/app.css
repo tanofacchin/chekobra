@@ -488,3 +488,48 @@ button.tl-it{cursor:pointer}button.tl-it:hover .t{text-decoration:underline}
   .allitems .chip{font-size:9px;padding:1px 6px;min-height:0}
   .tabla td{font-size:11px}
 }
+
+/* ---- tarjetero: marcar entrada y salida, reloj del obrador, asistencia ---- */
+.tj-wrap{padding-bottom:0}
+.tj-franja{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface);border:1.5px solid var(--line);border-radius:var(--r);padding:10px 12px}
+.tj-franja.on{border-color:var(--ok);background:var(--ok-soft)}
+.tj-franja .tj-txt{display:flex;flex-direction:column;flex:1 1 180px;min-width:0}
+.tj-franja .btn{flex:0 0 auto}
+.tj-dot{width:12px;height:12px;border-radius:50%;background:var(--muted);flex:none}
+.tj-franja.on .tj-dot{background:var(--ok);box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 25%,transparent)}
+.tj-start.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.tj-flujo{gap:12px}
+.tj-foto{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.tj-foto img{width:96px;height:96px;object-fit:cover;border-radius:12px;border:1.5px solid var(--line)}
+.tj-li{grid-template-columns:1fr auto}
+.tabs.sub{margin-top:-4px}
+.tabs.sub .tab{font-size:.92rem}
+.rl{max-width:560px}
+.rl-cab{display:flex;flex-direction:column;align-items:center;text-align:center;gap:2px}
+.rl-hora{font-family:var(--f-display);font-size:clamp(3.2rem,16vw,5.5rem);line-height:1;font-variant-numeric:tabular-nums}
+.rl-form{gap:14px}
+.rl-inp{font-size:1.6rem;min-height:64px;text-align:center}
+.rl-btn{min-height:68px;font-size:1.2rem}
+.rl-res{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;border-radius:calc(var(--r) * 2);padding:40px 20px;min-height:60vh;justify-content:center}
+.rl-res b{font-family:var(--f-display);font-size:clamp(2.4rem,12vw,4rem);text-transform:uppercase;letter-spacing:.04em}
+.rl-res .rl-nom{font-size:1.6rem;font-weight:700}
+.rl-res.ok{background:var(--ok);color:#fff}
+.rl-res.sal{background:var(--ink);color:var(--bg)}
+.rl-res.bad{background:var(--bad-soft);color:var(--bad)}
+.rl-res .btn{margin-top:16px;min-width:160px}
+.rev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.rev{display:grid;grid-template-columns:96px 1fr;gap:12px;align-items:start;border:1.5px solid var(--line);border-radius:var(--r);padding:10px}
+.rev img,.rev-sin{width:96px;height:96px;object-fit:cover;border-radius:10px;background:var(--sunk);display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--muted)}
+.rev .row{margin-top:6px}
+.as-tabla tr.det>td{background:var(--sunk);padding:8px}
+.as-tabla tr.det table{font-size:.9rem}
+.cartel{display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;background:#fff;color:#1a1e22;border:3px solid #1a1e22;border-radius:16px;padding:32px 24px;max-width:640px;margin:0 auto;width:100%}
+.cartel h1{font-size:clamp(1.8rem,7vw,2.8rem)}
+.cartel-qr{width:min(100%,420px)}
+.cartel-qr svg{width:100%;height:auto;display:block}
+.cartel-ins{font-size:1.25rem;font-weight:600;max-width:30ch}
+@media print{
+  .cartel{border-width:2px;max-width:none;min-height:250mm;justify-content:center}
+  .cartel-qr{width:150mm}
+  .rev-grid{grid-template-columns:1fr 1fr}
+}

@@ -37,10 +37,14 @@ export function agrupar(filas) {
   const tot = rs => ({ costo_equipo: suma(rs, 'costo_equipo'), combustible: suma(rs, 'combustible'), reparaciones: suma(rs, 'reparaciones'), mano_obra: suma(rs, 'mano_obra'), litros: suma(rs, 'litros'), total: suma(rs, 'total') });
   const por = (k) => { const m = new Map(); filas.forEach(r => { const id = r[k] || '-'; if (!m.has(id)) m.set(id, []); m.get(id).push(r); }); return m; };
   const obras = [...por('obra_id')].map(([, rs]) => ({ obra: rs[0].obra, obra_id: rs[0].obra_id, filas: rs, ...tot(rs) })).sort((a, b) => b.total - a.total);
-  const equipos = [...por('equipo_id')].map(([, rs]) => ({ codigo: rs[0].codigo, equipo: rs[0].equipo, medidor: rs[0].medidor, dias: suma(rs, 'dias'), uso: suma(rs, 'uso'), obras: rs.length, ...tot(rs) })).sort((a, b) => b.total - a.total);
+  const equipos = [...por('equipo_id')].filter(([id]) => id !== 'tarjetero').map(([, rs]) => ({ codigo: rs[0].codigo, equipo: rs[0].equipo, medidor: rs[0].medidor, dias: suma(rs, 'dias'), uso: suma(rs, 'uso'), obras: rs.length, ...tot(rs) })).sort((a, b) => b.total - a.total);
   return { obras, equipos, total: tot(filas) };
 }
 
+// Mano de obra del tarjetero: una fila por obra ("Personal") que suma al total de la obra (solo administración).
+export const conTarjetero = x => x.mano_obra_fuente !== 'tarjetero' ? x.filas : [...x.filas, ...Object.values(x.mano_obra_obras || {}).length ? Object.entries(x.mano_obra_obras).filter(([, m]) => m.pesos != null).map(([id, m]) => ({
+  tarjetero: true, obra_id: id === '-' ? null : id, obra: m.obra, equipo_id: 'tarjetero', codigo: 'Personal', equipo: 'Mano de obra', medidor: 'personal', dias: 0, uso: 0,
+  costo_equipo: 0, combustible: 0, reparaciones: 0, litros: 0, mano_obra: Number(m.pesos || 0), total: Number(m.pesos || 0), horas: m.horas, personas: m.personas, horas_sin_costo: m.horas_sin_costo })) : []];
 const tarifaTxt = r => r.tarifa_hora != null && r.medidor === 'horas' ? `${fPeso(r.tarifa_hora)}/h` : r.tarifa_dia != null ? `${fPeso(r.tarifa_dia)}/día` : '<span class="chip warn">Sin tarifa</span>';
 let COLORES = [];
 const rubros = conMO => [['costo_equipo', 'Equipos', 'c-eq'], ['combustible', 'Combustible', 'c-cb'], ['reparaciones', 'Reparaciones', 'c-rp'], ...(conMO ? [['mano_obra', 'Mano de obra', 'c-mo']] : [])];
@@ -65,8 +69,8 @@ export function vCostos() {
     <div class="row"><button class="btn sm ${f.tarifas ? '' : 'ghost'}" data-act="csTarifas">${f.tarifas ? 'Ocultar tarifas' : 'Tarifas de los equipos'}</button>
       <button class="btn sm dark" data-act="csExcel" ${a.excelOcupado ? 'disabled' : ''}>${a.excelOcupado ? 'Armando el Excel…' : 'Descargar Excel'}</button></div></section>`;
   if (!x) return filtros + (f.tarifas ? vTarifas() : '') + '<p class="muted">Calculando…</p>';
-  const filas = f.obra ? x.filas.filter(r => r.obra_id === f.obra) : x.filas;
-  const antes = f.antes ? (f.obra ? f.antes.filas.filter(r => r.obra_id === f.obra) : f.antes.filas) : null;
+  const todas = conTarjetero(x), filas = f.obra ? todas.filter(r => r.obra_id === f.obra) : todas;
+  const antes = f.antes ? (f.obra ? conTarjetero(f.antes).filter(r => r.obra_id === f.obra) : conTarjetero(f.antes)) : null;
   COLORES = rubros(x.con_mano_obra);
   const g = agrupar(filas), gAntes = antes ? agrupar(antes) : null;
   const horas = horasDe(filas), est = filas.reduce((s, r) => s + Number(r.combustible_estimado || 0), 0);
@@ -78,12 +82,14 @@ export function vCostos() {
     const h = horasDe(o.filas), abierto = a.csAbierta === o.obra;
     return `<div class="obra-card"><button class="obra-cab" data-act="csAbrir" data-k="${esc(o.obra)}" aria-expanded="${abierto}">
         <span class="t">${esc(o.obra)}</span><b class="num">${fPeso(o.total)}</b>
-        <span class="s">${o.filas.length} equipo${o.filas.length === 1 ? '' : 's'} · ${fNum(h)} h${h > 0 ? ` · <b>${fPeso(o.total / h)}</b> por hora de máquina` : ''}</span>
+        <span class="s">${o.filas.filter(r => !r.tarjetero).length} equipo${o.filas.filter(r => !r.tarjetero).length === 1 ? '' : 's'} · ${fNum(h)} h${h > 0 ? ` · <b>${fPeso(o.total / h)}</b> por hora de máquina` : ''}</span>
         ${barraRubros(o)}
         ${barraPresu(o.total, presupuestoPeriodo((x.presupuestos || {})[o.obra_id], f.desde, f.hasta))}
         <span class="s rub">${COLORES.map(([k, l, c]) => `<i class="${c}"></i>${l} ${fPeso(o[k])}`).join(' · ')}</span>
         <span class="mas">${abierto ? 'Ocultar detalle ▲' : 'Ver detalle por equipo ▼'}</span></button>
-      ${abierto ? `<div class="obra-det">${o.filas.map(r => `<div class="det-fila"><div><b>${esc(r.codigo)}</b> <span class="muted">${esc(r.equipo)}</span>
+      ${abierto ? `<div class="obra-det">${o.filas.map(r => r.tarjetero ? `<div class="det-fila"><div><b>Personal</b> <span class="muted">mano de obra del tarjetero</span>
+          <div class="small muted">${fNum(r.horas)} h de ${r.personas} persona${r.personas === 1 ? '' : 's'}, con extras al 50 % y 100 %${Number(r.horas_sin_costo) ? ` · ${fNum(r.horas_sin_costo)} h de personas sin costo por hora cargado` : ''}</div></div>
+          <div class="det-num"><b class="num">${fPeso(r.total)}</b></div></div>` : `<div class="det-fila"><div><b>${esc(r.codigo)}</b> <span class="muted">${esc(r.equipo)}</span>
           <div class="small muted">${r.dias} día${r.dias === 1 ? '' : 's'} · ${fNum(r.uso)} ${unidad(r.medidor)} · tarifa ${tarifaTxt(r)}${Number(r.litros) ? ` · ${fNum(r.litros)} L` : ''}${Number(r.combustible_estimado) ? ' (precio estimado)' : ''}</div></div>
           <div class="det-num"><b class="num">${fPeso(r.total)}</b><span class="small muted">equipo ${fPeso(r.costo_equipo)} · comb. ${fPeso(r.combustible)}${Number(r.reparaciones) ? ` · rep. ${fPeso(r.reparaciones)}` : ''}${Number(r.mano_obra) ? ` · m. de obra ${fPeso(r.mano_obra)}` : ''}</span></div></div>`).join('')}</div>` : ''}</div>`;
   }).join('');
@@ -97,10 +103,10 @@ export function vCostos() {
     <div class="kpis"><div class="kpi"><b>${fPeso(g.total.total)}</b><span>Costo total${f.obra ? ' de la obra' : ''} ${variacion(g.total.total, gAntes && gAntes.total.total)}</span></div>
       <div class="kpi"><b>${horas > 0 ? fPeso(g.total.total / horas) : '—'}</b><span>Por hora de máquina (${fNum(horas)} h)</span></div>
       <div class="kpi"><b>${fPeso(g.total.combustible)}</b><span>Combustible · ${fNum(g.total.litros)} L${est ? ` · ${fPeso(est)} estimado` : ''}</span></div>
-      <div class="kpi"><b>${fPeso(g.total.reparaciones)}</b><span>Reparaciones y services</span></div>${x.con_mano_obra ? `<div class="kpi"><b>${fPeso(g.total.mano_obra)}</b><span>Mano de obra (operarios)</span></div>` : ''}</div>
+      <div class="kpi"><b>${fPeso(g.total.reparaciones)}</b><span>Reparaciones y services</span></div>${x.con_mano_obra ? `<div class="kpi"><b>${fPeso(g.total.mano_obra)}</b><span>Mano de obra (${x.mano_obra_fuente === 'tarjetero' ? 'tarjetero' : 'operarios'})</span></div>` : ''}</div>
     ${avisos.length ? `<div class="warnbox small">${avisos.join('<br>')}</div>` : ''}
     <section class="card"><h2>${f.obra ? 'La obra' : 'Por obra'}</h2>
-      <p class="small muted">El costo del equipo sale de su tarifa y de las horas (o días) de las jornadas cerradas.${x.con_mano_obra ? ' La mano de obra, de las horas de cada jornada por el costo por hora del operario.' : ''} El combustible cargado sin obra y las reparaciones se reparten según las horas de cada equipo en cada obra. <span class="no-print">Tocá una obra para ver el detalle.</span></p>
+      <p class="small muted">El costo del equipo sale de su tarifa y de las horas (o días) de las jornadas cerradas.${x.con_mano_obra ? (x.mano_obra_fuente === 'tarjetero' ? ' La mano de obra, de las horas del tarjetero de todo el personal (con extras al 50 % y 100 %) por su costo por hora.' : ' La mano de obra, de las horas de cada jornada por el costo por hora del operario. Cuando el personal marque en el tarjetero, se toma de ahí.') : ''} El combustible cargado sin obra y las reparaciones se reparten según las horas de cada equipo en cada obra. <span class="no-print">Tocá una obra para ver el detalle.</span></p>
       ${filas.length ? `<div class="obras">${tarjetas}</div>` : '<div class="empty">No hay jornadas en el período.</div>'}
       ${Number(x.reparaciones_sin_uso) || Number(x.combustible_sin_uso) ? `<p class="small muted">No se cargan a ninguna obra porque esos equipos no trabajaron en el período: ${[Number(x.reparaciones_sin_uso) ? `${fPeso(x.reparaciones_sin_uso)} en reparaciones` : '', Number(x.combustible_sin_uso) ? `${fPeso(x.combustible_sin_uso)} en combustible` : ''].filter(Boolean).join(' y ')}.</p>` : ''}</section>
     ${g.equipos.length ? `<section class="card"><h2>Por equipo</h2><div class="tabla tabla-cel"><table><thead><tr><th>Equipo</th><th class="n">Obras</th><th class="n">Uso</th><th class="n">Equipo</th><th class="n">Combustible</th><th class="n">Reparaciones</th><th class="n">Total</th><th class="n">Por hora</th></tr></thead><tbody>${filasEq}</tbody></table></div></section>` : ''}`;

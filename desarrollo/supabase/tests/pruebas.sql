@@ -927,4 +927,116 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
 do $$ begin if exists (select 1 from public.articulos) or exists (select 1 from public.costos_personal) then raise exception 'FALLÓ: B ve datos de A'; end if; end $$;
 reset role;
 
+-- ===== Tarjetero: marcaciones, horas para sueldos, ausentes y mano de obra por obra
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000a7', 'reloj-a@ejemplo.com');
+update public.miembros set creado_en = '2026-10-01' where id = :'opA3_id';
+create function pg_temp.afirmar(ok boolean, que text) returns void language plpgsql as $$
+begin if not coalesce(ok, false) then raise exception 'FALLÓ: %', que; end if; end $$;   -- dado de alta antes del período (antes de eso no hay ausencias)
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+update public.obras set lat = -31.4, lng = -64.2, radio_m = 200 where id = :'obraA_id';
+insert into public.miembros (empresa_id, user_id, nombre, legajo, rol) select v, '00000000-0000-0000-0000-0000000000a7', 'Reloj obrador', 'R1', 'reloj' from ctx where k = 'A';
+insert into public.ajustes_asistencia (empresa_id) select v from ctx where k = 'A';
+insert into public.feriados (empresa_id, fecha, nombre) select v, '2026-11-23', 'Soberanía Nacional' from ctx where k = 'A';
+-- marcaciones cargadas a mano (con motivo) para Operario A3 en Ruta 5
+select public.marcacion_manual(v, :'opA3_id', x.t, x.c::timestamptz, :'obraA_id', 'Prueba de horas') from ctx, (values
+  ('entrada', '2026-11-02 08:30-03'), ('salida', '2026-11-02 12:00-03'),     -- lunes: llegó tarde
+  ('entrada', '2026-11-04 07:00-03'), ('salida', '2026-11-04 18:00-03'),     -- miércoles: 11 h → 9 normales + 2 al 50 %
+  ('entrada', '2026-11-07 07:00-03'), ('salida', '2026-11-07 15:00-03'),     -- sábado: 4 normales + 2 al 50 % + 2 al 100 % (desde las 13)
+  ('entrada', '2026-11-08 08:00-03'), ('salida', '2026-11-08 12:00-03')      -- domingo: 4 al 100 %
+) x(t, c) where k = 'A';
+select pg_temp.esperar_error(format($$select public.marcacion_manual(%L, %L, 'entrada', now(), null, '')$$, (select v from ctx where k = 'A'), :'opA3_id'), 'motivo');
+do $$ declare r jsonb; d jsonb; begin
+  r := public.asistencia((select v from ctx where k = 'A'), '2026-11-02', '2026-11-08');
+  select x into d from jsonb_array_elements(r->'dias') x where x->>'fecha' = '2026-11-04' and x->>'miembro_id' = (select id::text from public.miembros where nombre = 'Operario A3');
+  if (d->>'normales')::numeric <> 9 or (d->>'al50')::numeric <> 2 or (d->>'al100')::numeric <> 0 or (d->>'tarde')::boolean then raise exception 'FALLÓ: día de semana %', d; end if;
+  select x into d from jsonb_array_elements(r->'dias') x where x->>'fecha' = '2026-11-07' and x->>'miembro_id' = (select id::text from public.miembros where nombre = 'Operario A3');
+  if (d->>'normales')::numeric <> 4 or (d->>'al50')::numeric <> 2 or (d->>'al100')::numeric <> 2 then raise exception 'FALLÓ: sábado %', d; end if;
+  select x into d from jsonb_array_elements(r->'dias') x where x->>'fecha' = '2026-11-08' and x->>'miembro_id' = (select id::text from public.miembros where nombre = 'Operario A3');
+  if (d->>'normales')::numeric <> 0 or (d->>'al100')::numeric <> 4 then raise exception 'FALLÓ: domingo %', d; end if;
+  select x into d from jsonb_array_elements(r->'dias') x where x->>'fecha' = '2026-11-02' and x->>'miembro_id' = (select id::text from public.miembros where nombre = 'Operario A3');
+  if not (d->>'tarde')::boolean or (d->>'horas')::numeric <> 3.5 then raise exception 'FALLÓ: llegada tarde %', d; end if;
+  -- martes 3 y jueves 5 sin marcar: ausente; el reloj y la dueña no se cuentan
+  if not exists (select 1 from jsonb_array_elements(r->'ausencias') x where x->>'fecha' = '2026-11-03' and x->>'miembro_id' = (select id::text from public.miembros where nombre = 'Operario A3'))
+    then raise exception 'FALLÓ: ausencia %', r->'ausencias'; end if;
+  if exists (select 1 from jsonb_array_elements(r->'ausencias') x where x->>'miembro_id' in (select id::text from public.miembros where rol::text in ('reloj', 'dueno')))
+    then raise exception 'FALLÓ: cuenta ausente al reloj o a la dueña'; end if;
+  if exists (select 1 from jsonb_array_elements(r->'ausencias') x where x->>'fecha' = '2026-11-08') then raise exception 'FALLÓ: el domingo no es ausencia'; end if;
+  -- feriado del 23: no es ausencia
+  r := public.asistencia((select v from ctx where k = 'A'), '2026-11-23', '2026-11-23');
+  if jsonb_array_length(r->'ausencias') <> 0 then raise exception 'FALLÓ: feriado contado como ausencia %', r->'ausencias'; end if;
+  -- mano de obra por obra desde el tarjetero: (9 + 1,5×2) + (4 + 1,5×2 + 2×2) + 2×4 + 3,5 = 34,5 h equivalentes × $ 5000
+  r := public.costos_por_obra((select v from ctx where k = 'A'), '2026-11-01', '2026-11-10');
+  if r->>'mano_obra_fuente' <> 'tarjetero' or (r->'mano_obra_obras'->((select v from ctx where k = 'obraA')::text)->>'pesos')::numeric <> 172500
+    or exists (select 1 from jsonb_array_elements(r->'filas') x where x->>'mano_obra' is not null) then raise exception 'FALLÓ: mano de obra del tarjetero %', r->'mano_obra_obras'; end if;
+  if (select count(*) from public.auditoria where accion = 'marcacion_manual') <> 8 then raise exception 'FALLÓ: auditoría de marcaciones manuales'; end if;
+end $$;
+select public.qr_de_obra(:'obraA_id') as qra \gset
+reset role;
+
+-- el operario marca desde su celular: entrada, salida, fuera de la obra, QR, foto obligatoria, sin duplicar
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
+select (select empresa_id::text from public.miembros where user_id = auth.uid()) || '/' || auth.uid()::text || '/marca.jpg' as fm \gset
+select gen_random_uuid() as cid \gset
+select public.marcar(jsonb_build_object('empresa_id', v, 'obra_id', :'obraA_id', 'lat', -31.4005, 'lng', -64.2005, 'precision_m', 20, 'foto_path', :'fm', 'client_id', :'cid')) as m1 from ctx where k = 'A' \gset
+select pg_temp.afirmar(r->>'tipo' = 'entrada' and (r->>'dentro')::boolean and (r->>'verificada')::boolean, 'entrada desde el celular ' || r::text) from (select :'m1'::jsonb as r) x;
+-- reenviar lo mismo (bandeja sin señal) no duplica
+select public.marcar(jsonb_build_object('empresa_id', v, 'obra_id', :'obraA_id', 'lat', -31.4005, 'lng', -64.2005, 'foto_path', :'fm', 'client_id', :'cid'))->>'ya' as ya from ctx where k = 'A' \gset
+select pg_temp.afirmar(:'ya' = 'true' and (select count(*) from public.marcaciones where modo = 'celular') = 1, 'idempotencia de marcar');
+select public.marcar(jsonb_build_object('empresa_id', v, 'lat', -31.4005, 'lng', -64.2005, 'foto_path', :'fm'))->>'tipo' as t2 from ctx where k = 'A' \gset
+select pg_temp.afirmar(:'t2' = 'salida' and (select obra_id from public.marcaciones where tipo = 'salida' and modo = 'celular') is not null, 'la salida va a la obra de la entrada');
+select pg_temp.esperar_error(format($$select public.marcar(jsonb_build_object('empresa_id', %L, 'tipo', 'salida', 'foto_path', %L))$$, (select v from ctx where k = 'A'), :'fm'), 'hace un momento');
+select pg_temp.esperar_error(format($$select public.marcar(jsonb_build_object('empresa_id', %L, 'obra_id', %L))$$, (select v from ctx where k = 'A'), :'obraA_id'), 'Falta la foto');
+select pg_temp.esperar_error(format($$select public.marcar(jsonb_build_object('empresa_id', %L, 'foto_path', %L))$$, (select v from ctx where k = 'A'), (select v from ctx where k = 'A')::text || '/otro/x.jpg'), 'Foto inválida');
+-- a 5 km de la obra: queda para revisar
+select public.marcar(jsonb_build_object('empresa_id', v, 'tipo', 'entrada', 'obra_id', :'obraA_id', 'lat', -31.45, 'lng', -64.2, 'precision_m', 10, 'foto_path', :'fm')) as m3 from ctx where k = 'A' \gset
+select pg_temp.afirmar(not (r->>'dentro')::boolean and not (r->>'verificada')::boolean and r->>'observacion' like 'Fuera de la obra%', 'fuera de la obra ' || r::text) from (select :'m3'::jsonb as r) x;
+-- con el QR de la obra (el operario no puede leer los QR)
+select public.marcar(jsonb_build_object('empresa_id', v, 'tipo', 'salida', 'qr', :'qra', 'foto_path', :'fm'))->>'obra' as oq from ctx where k = 'A' \gset
+select pg_temp.afirmar(:'oq' = 'Ruta 5' and exists (select 1 from public.marcaciones where modo = 'qr'), 'marcar con QR');
+select pg_temp.esperar_error(format($$select public.marcar(jsonb_build_object('empresa_id', %L, 'qr', 'falso', 'foto_path', %L))$$, (select v from ctx where k = 'A'), :'fm'), 'QR');
+do $$ begin if exists (select 1 from public.obras_qr) then raise exception 'FALLÓ: el operario ve los QR de las obras'; end if; end $$;
+select pg_temp.esperar_error(format($$select public.qr_de_obra(%L)$$, :'obraA_id'), 'No tenés permiso');
+-- hasta 3 días sin señal vale la hora del teléfono (queda para revisar); más, no
+select public.marcar(jsonb_build_object('empresa_id', v, 'tipo', 'entrada', 'cuando', now() - interval '1 day', 'foto_path', :'fm'))->>'verificada' as vd from ctx where k = 'A' \gset
+select pg_temp.afirmar(:'vd' = 'false', 'marcación diferida sin revisar');
+select pg_temp.esperar_error(format($$select public.marcar(jsonb_build_object('empresa_id', %L, 'cuando', now() - interval '5 days', 'foto_path', %L))$$, (select v from ctx where k = 'A'), :'fm'), 'más de 3 días');
+-- no puede escribir directo, ni ver el reporte de la empresa (solo el suyo), ni las marcaciones de otros
+select pg_temp.esperar_error(format($$insert into public.marcaciones (empresa_id, miembro_id, tipo, cuando, modo) values (%L, %L, 'entrada', now(), 'manual')$$, (select v from ctx where k = 'A'), :'opA3_id'), 'permission denied');
+select pg_temp.esperar_error(format($$select public.asistencia(%L, '2026-11-01', '2026-11-30')$$, (select v from ctx where k = 'A')), 'No tenés permiso');
+select pg_temp.esperar_error(format($$select public.marcacion_manual(%L, %L, 'entrada', now(), null, 'me olvidé')$$, (select v from ctx where k = 'A'), :'opA3_id'), 'No tenés permiso');
+select pg_temp.esperar_error(format($$select public.registrar_marcacion(%L, %L, null, 'entrada', null, 'reloj', null, null, null, null, null, null, true, null)$$, (select v from ctx where k = 'A'), :'opA3_id'), 'permission denied');
+do $$ begin
+  perform public.asistencia((select v from ctx where k = 'A'), '2026-11-01', '2026-11-30', public.mi_miembro_id((select v from ctx where k = 'A')));
+  if exists (select 1 from public.marcaciones where miembro_id <> public.mi_miembro_id((select v from ctx where k = 'A'))) then raise exception 'FALLÓ: el operario ve marcaciones de otros'; end if;
+end $$;
+reset role;
+-- el reloj del obrador no marca por sí mismo
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a7';
+select pg_temp.esperar_error(format($$select public.marcar(jsonb_build_object('empresa_id', %L, 'foto_path', %L))$$, (select v from ctx where k = 'A'), (select v from ctx where k = 'A')::text || '/00000000-0000-0000-0000-0000000000a7/x.jpg'), 'reloj');
+reset role;
+-- la supervisora revisa: valida la de fuera de la obra y anula la diferida (con motivo); todo a la auditoría
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a6';
+select pg_temp.esperar_error(format($$select public.anular_marcacion(%L, '')$$, (select id from public.marcaciones where observacion like 'Marcada sin señal%')), 'motivo');
+select public.anular_marcacion((select id from public.marcaciones where observacion like 'Marcada sin señal%'), 'No vino ese día');
+select public.validar_marcacion((select id from public.marcaciones where observacion like 'Fuera de la obra%'));
+do $$ begin
+  if exists (select 1 from public.marcaciones where not verificada and anulada_en is null) then raise exception 'FALLÓ: quedaron marcaciones sin revisar'; end if;
+  if (select count(*) from public.obras_qr) <> 1 then raise exception 'FALLÓ: la supervisora no ve el QR'; end if;
+end $$;
+do $$ begin
+  update public.ajustes_asistencia set horas_semana = 12;
+  if (select horas_semana from public.ajustes_asistencia limit 1) <> 9 then raise exception 'FALLÓ: la supervisora cambia el horario'; end if;
+end $$;
+reset role;
+select pg_temp.afirmar((select count(*) from public.auditoria where accion in ('anular_marcacion', 'validar_marcacion') and quien = 'Supervisora A') = 2, 'auditoría de la revisión');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+do $$ begin if exists (select 1 from public.marcaciones) or exists (select 1 from public.obras_qr) or exists (select 1 from public.feriados) then raise exception 'FALLÓ: B ve el tarjetero de A'; end if; end $$;
+select pg_temp.esperar_error(format($$select public.asistencia(%L, '2026-11-01', '2026-11-30')$$, (select v from ctx where k = 'A')), 'No tenés permiso');
+reset role;
+
 \echo TODAS LAS PRUEBAS PASARON

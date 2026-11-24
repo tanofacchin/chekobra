@@ -9,18 +9,20 @@ import * as Tal from './taller.js';
 import { dictar } from './voz.js';
 import * as Seg from './seguridad.js';
 import * as Imp from './importar.js';
+import * as Tj from './tarjetero.js';
 
 const MARK = (n = 26) => `<svg width="${n}" height="${n}" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="5" fill="var(--accent)"/><path d="M7 13.5l4 4 8-9" fill="none" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /* ---------------------------------------------------------------- render */
 let lastKey = '', pendiente = false;
 function claveVista() {
-  return [S.vista, S.m && S.m.id, S.modoOperario, Op.clave(), Adm.clave(), Tal.clave()].join('|');
+  return [S.vista, S.m && S.m.id, S.modoOperario, Op.clave(), Adm.clave(), Tal.clave(), !!(S.tj && S.tj.flujo), !!(S.rl && S.rl.res)].join('|');
 }
 function dibujar() {
-  const a = document.activeElement;
-  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && $('#app').contains(a) && a.dataset.vivo === undefined) { pendiente = true; return; }
-  const k = claveVista(), y = scrollY;
+  const a = document.activeElement, k = claveVista();
+  // Con un campo activo se espera a que lo suelte (para no perder lo que está escribiendo), salvo que cambie de pantalla.
+  if (k === lastKey && a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && $('#app').contains(a) && a.dataset.vivo === undefined) { pendiente = true; return; }
+  const y = scrollY;
   $('#app').innerHTML = vista();
   scrollTo(0, k === lastKey ? y : 0); lastKey = k;
   Op.despues && Op.despues(); Adm.despues && Adm.despues();
@@ -38,13 +40,22 @@ function vista() {
     case 'privacidad': return vTop() + vPrivacidad();
     case 'mfa': return Seg.vMfa();
     case 'politica': return `<main class="wrap politica"><button class="btn ghost sm" data-act="cerrarPolitica" style="align-self:flex-start">← Volver</button>${politicaHtml()}</main>`;
-    default: return vTop() + (S.modoOperario ? Op.vista() : esGestor() ? Adm.vista() : esMecanico() ? Tal.vistaMecanico() : Op.vista());
+    default:
+      if (S.m.rol === 'reloj') return vTop() + Tj.vReloj();
+      if (S.m.rol === 'personal') return vTop() + Tj.vPersonalObra();
+      return vTop() + (S.modoOperario || !esGestor() ? franja() : '') + (S.modoOperario ? Op.vista() : esGestor() ? Adm.vista() : esMecanico() ? Tal.vistaMecanico() : Op.vista());
   }
+}
+
+// Tarjetero arriba de la vista del operario y del mecánico (no durante el checklist, el cierre o una carga).
+function franja() {
+  const o = S.op; if (o && (o.flow || o.resultado || o.cierre || o.carga || o.detalle)) return '';
+  return Tj.vFranja();
 }
 
 function vTop() {
   const nom = S.m ? S.m.nombre : (S.user && S.user.email) || '';
-  const rol = S.m ? { dueno: 'Dueño', admin: 'Administración', supervisor: 'Supervisor', operario: 'Operario', mecanico: 'Mecánico' }[S.m.rol] : '';
+  const rol = S.m ? Tj.ROL_TXT[S.m.rol] || S.m.rol : '';
   const estado = !S.online ? ['local', 'Sin señal'] : S.pendientes ? ['lento', `${S.pendientes} por enviar`] : ['ok', 'Conectado'];
   const ban = !S.online ? `Sin señal. Podés seguir cargando: se envía solo cuando vuelva la conexión.${S.pendientes ? ` (${S.pendientes} pendiente${S.pendientes > 1 ? 's' : ''})` : ''}`
     : S.pendientes ? `${S.pendientes} registro${S.pendientes > 1 ? 's' : ''} enviándose…` : '';
@@ -138,7 +149,8 @@ async function entrar(m) {
   S.m = m; ls.set('co_membresia', m.id); S.modoOperario = false;
   Op.reiniciar(); Adm.reiniciar(); Tal.reiniciar();
   // Consentimiento de privacidad (Ley 25.326): sin aceptarlo no se puede usar la app.
-  if (await privacidadPendiente(m.empresa_id, m.id)) { S.vista = 'privacidad'; S.priv = {}; render(); return; }
+  S.tj = null; S.rl = null;
+  if (m.rol !== 'reloj' && await privacidadPendiente(m.empresa_id, m.id)) { S.vista = 'privacidad'; S.priv = {}; render(); return; }
   S.vista = 'app';
   // Vuelta desde John Deere después de autorizar (?jd=ok | ?jd=error&msg=...)
   const q = new URLSearchParams(location.search);
@@ -156,12 +168,18 @@ async function entrar(m) {
 
 // QR pegado en la máquina: ?equipo=<id>. Se guarda al abrir la app (aunque haya que iniciar sesión primero).
 function guardarQr() {
-  const q = new URLSearchParams(location.search), id = q.get('equipo');
+  const q = new URLSearchParams(location.search), id = q.get('equipo'), mq = q.get('marcar');
+  if (mq) {   // cartel QR de la obra (tarjetero): ?marcar=<código>
+    if (/^[0-9a-f]{32}$/i.test(mq)) ls.set('co_marcar', { t: mq, ts: Date.now() });
+    q.delete('marcar'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
+  }
   if (!id) return;
   if (/^[0-9a-f-]{36}$/i.test(id)) ls.set('co_qr', { id, ts: Date.now() });
   q.delete('equipo'); history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
 }
 function abrirQrPendiente() {
+  const mq = ls.get('co_marcar', null);
+  if (mq) { ls.del('co_marcar'); if (Date.now() - mq.ts < 30 * 60000 && S.m.rol !== 'reloj') { if (esGestor() || esMecanico()) { S.modoOperario = true; Op.cargar(); } Tj.abrirDesdeQr(mq.t); } }
   const qr = ls.get('co_qr', null); if (!qr) return;
   ls.del('co_qr');
   if (Date.now() - qr.ts > 30 * 60000) return;
@@ -170,15 +188,17 @@ function abrirQrPendiente() {
 }
 
 async function sync() {
+  let avisado = false;
   const r = await sincronizar(sb, ev => {
     if (ev.tipo === 'enviado' && ev.envio.tipo === 'checklist') Op.alEnviar(ev);
+    if (ev.tipo === 'enviado' && ev.envio.tipo === 'marca' && Tj.alEnviar(ev)) avisado = true;
     if (ev.tipo === 'rechazado') { toast('Un registro fue rechazado: ' + ev.envio.error, 7000); if (ev.envio.tipo === 'checklist') Op.alRechazar(ev); }
   }).catch(() => null);
   const l = await cola.listar().catch(() => []);
   const pend = l.filter(x => x.estado === 'pendiente');
   const cambio = pend.length !== S.pendientes || (r && r.enviados);
   S.pendientes = pend.length; S.rechazados = l.filter(x => x.estado === 'rechazado');
-  if (r && r.enviados) { toast(r.enviados === 1 ? 'Registro enviado.' : `${r.enviados} registros enviados.`); if (S.vista === 'app') cargarVista(); }
+  if (r && r.enviados) { if (!avisado) toast(r.enviados === 1 ? 'Registro enviado.' : `${r.enviados} registros enviados.`); if (S.vista === 'app') cargarVista(); }
   if (cambio) render();
 }
 export { sync };
@@ -189,6 +209,9 @@ function despuesMfa(activando) {
 S.mfaContinuar = despuesMfa;
 // Carga los datos de la vista activa: panel, taller del mecánico o checklist.
 function cargarVista() {
+  if (S.m && S.m.rol === 'reloj') return Tj.cargarReloj();
+  if (S.m && S.m.rol === 'personal') return Tj.cargarMio();
+  if (S.modoOperario || !esGestor()) Tj.cargarMio();
   if (S.modoOperario) return Op.cargar();
   if (esGestor()) return Adm.cargar();
   if (esMecanico()) return Tal.cargar();
@@ -223,6 +246,7 @@ const A = {
 
 const FORMS = {
   mfa() { Seg.enviar(despuesMfa); },
+  reloj() { Tj.enviarReloj(); },
   async login() {
     const L = S.login; L.err = ''; L.aviso = '';
     if (L.modo === 'operario') {
@@ -269,7 +293,7 @@ const FORMS = {
 
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
-  const f = A[b.dataset.act] || Op.A[b.dataset.act] || Adm.A[b.dataset.act] || Tal.A[b.dataset.act];
+  const f = A[b.dataset.act] || Op.A[b.dataset.act] || Adm.A[b.dataset.act] || Tal.A[b.dataset.act] || Tj.A[b.dataset.act];
   if (f) { e.preventDefault(); f(b, e); }
 });
 document.addEventListener('submit', e => {
@@ -281,9 +305,9 @@ document.addEventListener('input', e => {
   else if (el.dataset.priv) S.priv.ok = v;
   else if (el.dataset.o) S.onb[el.dataset.o] = v;
   else if (Seg.alEscribir(el, v)) { /* código del segundo factor */ }
-  else (Tal.alEscribir(el, v) || Op.alEscribir(el, v) || Adm.alEscribir(el, v));
+  else (Tj.alEscribir(el, v) || Tal.alEscribir(el, v) || Op.alEscribir(el, v) || Adm.alEscribir(el, v));
 });
-document.addEventListener('change', e => { if (e.target.dataset.file === 'importar') Imp.alArchivo(e.target); else if (e.target.dataset.file === 'ot') Tal.alArchivo(e.target); else if (e.target.dataset.file) Op.alArchivo(e.target); });
+document.addEventListener('change', e => { if (e.target.dataset.file === 'importar') Imp.alArchivo(e.target); else if (e.target.dataset.file === 'marca') Tj.alArchivo(e.target); else if (e.target.dataset.file === 'ot') Tal.alArchivo(e.target); else if (e.target.dataset.file) Op.alArchivo(e.target); });
 
 addEventListener('online', () => { S.online = true; render(); sync(); });
 addEventListener('offline', () => { S.online = false; render(); });
