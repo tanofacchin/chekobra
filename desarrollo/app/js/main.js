@@ -302,4 +302,8 @@ sb.auth.onAuthStateChange((ev, ses) => {
   const { data } = await sb.auth.getSession();
   if (data.session) await alIniciarSesion(data.session.user); else { S.vista = 'login'; render(); }
 })();
+// Al imprimir, se abren los desplegables (por ejemplo, "Ver los 50 puntos") y se vuelven a cerrar después.
+let abiertosParaImprimir = [];
+addEventListener('beforeprint', () => { abiertosParaImprimir = [...document.querySelectorAll('details:not([open])')]; abiertosParaImprimir.forEach(d => { d.open = true; }); });
+addEventListener('afterprint', () => { abiertosParaImprimir.forEach(d => { d.open = false; }); abiertosParaImprimir = []; });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});

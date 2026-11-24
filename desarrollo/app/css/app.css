@@ -452,3 +452,39 @@ button.tl-it{cursor:pointer}button.tl-it:hover .t{text-decoration:underline}
 
 .fila-mal td{background:var(--bad-soft)}
 @media print{ body:has(.imp) .wrap > :not(.imp){display:none!important} }
+
+/* ===== impresión y PDF (24/11): una columna para las tablas, cortes de página prolijos, sin botones */
+@media print{
+  @page{size:A4;margin:12mm 10mm}
+  html,body{background:#fff!important;color:#111}
+  .wrap,.wrap.wide{width:auto;max-width:none;margin:0;padding:0 3px!important;gap:10px}
+  .btn,.btn-s,.linkbtn,input,select,.mas,.tabs,.seg-tabs,.no-print{display:none!important}
+  .cols{display:block}
+  .cols>*,.stack>*{margin-bottom:10px}
+  .card{box-shadow:none;border-color:#c8c8c8;padding:12px 14px;break-inside:avoid}
+  .card:has(table),.card:has(.tl),.card:has(.obras),.card:has(.galeria){break-inside:auto}
+  tr,.tl-it,.att,.eqrow,.obra-card,.kpi,.fl,.det-fila,.galeria a{break-inside:avoid}
+  h1,h2,h3,.tl-dia{break-after:avoid}
+  .kpis{grid-template-columns:repeat(4,1fr);gap:8px}
+  .kpi{padding:10px 12px}
+  .kpi b{font-size:1.5rem}
+  .tabla{overflow:visible}
+  .tabla table{font-size:10.5px;table-layout:auto}
+  .tabla th{white-space:normal;padding:4px 6px}
+  .tabla td{padding:4px 6px}
+  .minibar{width:44px}
+  .chart svg{min-width:0;max-height:240px}
+  .det-grid,.rd-cols{grid-template-columns:1fr 1fr;gap:10px}
+  .galeria{grid-template-columns:repeat(4,1fr)}
+  a{color:inherit;text-decoration:none}
+  details>summary{list-style:none;font-weight:600}
+}
+@media print{
+  .det-grid{display:block}
+  .det-grid>*{margin-bottom:10px}
+  .card:has(details),.card:has(.allitems){break-inside:auto}
+  .allitems{display:block;columns:2;column-gap:18px;font-size:10.5px}
+  .allitems>div{break-inside:avoid;padding:2px 0;min-height:0}
+  .allitems .chip{font-size:9px;padding:1px 6px;min-height:0}
+  .tabla td{font-size:11px}
+}

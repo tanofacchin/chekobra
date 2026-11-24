@@ -141,11 +141,11 @@ export function vista() {
   if (a.rd) return Rd.vResumenDia();
   if (a.ficha) return Rep.vFicha();
   if (a.etiquetas) return vEtiquetas(a.d.equipos.filter(e => a.etiquetas.includes(e.id)), S.m.empresa.nombre);
-  if (a.detalle) return `<main class="wrap wide"><button class="btn ghost sm" data-act="admVolver" style="align-self:flex-start">← Volver</button>${vDetalle()}</main>`;
+  if (a.detalle) return `<main class="wrap wide"><button class="btn ghost sm no-print" data-act="admVolver" style="align-self:flex-start">← Volver</button>${vDetalle()}</main>`;
   const tabs = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['fallas', `Fallas${a.d.fallas.length ? ` (${a.d.fallas.length})` : ''}`], ['equipos', 'Equipos'], ['mapa', 'Mapa'], ['taller', `Taller${a.d.ordenes.length ? ` (${a.d.ordenes.length})` : ''}`], ['mantenimiento', `Mantenimiento${alertasFlota().length ? ` (${alertasFlota().length})` : ''}`], ['combustible', `Combustible${Cb.alertasCombustible(a.d.combustible).length ? ` (${Cb.alertasCombustible(a.d.combustible).length})` : ''}`], ['costos', 'Costos por obra'], ['indicadores', 'Indicadores'], ['plantillas', 'Plantillas'], ['personal', 'Personal y obras'], ...(esAdmin() ? [['auditoria', 'Auditoría']] : [])]
     .map(([k, l]) => `<button class="tab ${a.tab === k ? 'on' : ''}" data-act="admTab" data-k="${k}">${l}</button>`).join('');
   const body = { resumen: vResumen, jornadas: vJornadas, fallas: vFallas, equipos: vEquipos, mapa: Mapa.vMapa, taller: Tal.vTallerPanel, costos: Cs.vCostos, auditoria: Au.vAuditoria, mantenimiento: Mt.vMantenimiento, indicadores: Ind.vIndicadores, combustible: Cb.vCombustible, plantillas: Ed.vPlantillas, personal: vPersonal }[a.tab]();
-  return `<main class="wrap wide"><section class="row" style="justify-content:space-between;align-items:flex-end"><div><p class="eyebrow">${esc(fechaLarga())}</p><h1>${esc(S.m.empresa.nombre)}</h1></div>
+  return `<main class="wrap wide"><section class="row no-print" style="justify-content:space-between;align-items:flex-end"><div><p class="eyebrow">${esc(fechaLarga())}</p><h1>${esc(S.m.empresa.nombre)}</h1></div>
     <div class="row"><button class="btn sm" data-act="rdAbrir">Resumen del día</button><button class="btn sm ghost" data-act="admRecargar">${a.cargando ? 'Actualizando…' : 'Actualizar'}</button></div></section>
     ${a.err ? `<div class="badbox">${esc(a.err)}</div>` : ''}<nav class="tabs">${tabs}</nav>${body}</main>`;
 }
