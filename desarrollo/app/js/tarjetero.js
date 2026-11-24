@@ -298,7 +298,7 @@ export function porPersona(x) {
     p.horas += Number(d.horas); p.normales += Number(d.normales); p.al50 += Number(d.al50); p.al100 += Number(d.al100);
     if (d.tarde) p.tarde++; if (d.incompleta) p.incompletas++; if (d.sin_verificar) p.revisar++; }
   for (const a of x.ausencias) { const p = m.get(a.miembro_id); if (p) { p.ausencias++; p.fechas.push({ fecha: a.fecha, ausente: true }); } }
-  return [...m.values()].filter(p => p.fechas.length || p.controla).map(p => ({ ...p, fechas: p.fechas.sort((a, b) => a.fecha < b.fecha ? -1 : 1) }));
+  return [...m.values()].filter(p => p.fechas.length || (p.controla && ['operario', 'mecanico', 'personal'].includes(p.rol))).map(p => ({ ...p, fechas: p.fechas.sort((a, b) => a.fecha < b.fecha ? -1 : 1) }));
 }
 
 export function vAsistencia() {

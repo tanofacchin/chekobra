@@ -45,7 +45,19 @@ async function codigo(secreto) {   // nunca el mismo código dos veces
 let duenaId = null, ok = 0;
 const paso = n => { ok++; console.log('✔', n); };
 const b = await chromium.launch(process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY, bypass: 'localhost,127.0.0.1' } } : {});
-const ctx = await b.newContext({ viewport: { width: 1280, height: 900 }, geolocation: { latitude: -31.42, longitude: -64.19, accuracy: 7 }, permissions: ['geolocation'], timezoneId: 'America/Argentina/Buenos_Aires' });
+const ctx = await b.newContext({ viewport: { width: 1280, height: 900 }, geolocation: { latitude: -31.42, longitude: -64.19, accuracy: 7 }, permissions: ['geolocation'], timezoneId: 'America/Argentina/Buenos_Aires', serviceWorkers: 'block' });
+// SERVIR_LOCAL=app: la app se sirve desde esta carpeta pero bajo la dirección de APP_URL (la publicada),
+// para probar la huella con el origen real cuando la red no llega al sitio publicado.
+if (process.env.SERVIR_LOCAL) {
+  const { readFile } = await import('node:fs/promises'), { join, extname } = await import('node:path');
+  const TIPOS = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
+  await ctx.route(APP + '**', async r => {
+    let ruta = new URL(r.request().url()).pathname.slice(new URL(APP).pathname.length) || 'index.html';
+    if (ruta.endsWith('/')) ruta += 'index.html';
+    try { await r.fulfill({ body: await readFile(join(process.env.SERVIR_LOCAL, ruta)), contentType: TIPOS[extname(ruta)] || 'application/octet-stream' }); }
+    catch { await r.fulfill({ status: 404, body: 'no encontrado' }); }
+  });
+}
 const p = await ctx.newPage(); const errores = [];
 p.on('pageerror', e => errores.push(e.message + ' @ ' + (e.stack || '').split('\n').slice(1, 3).join(' ').trim()));
 p.on('console', m => { if (m.type() === 'error' && !/the server responded with a status of 4\d\d|tile\.openstreetmap|ERR_/.test(m.text())) errores.push(m.text()); });
