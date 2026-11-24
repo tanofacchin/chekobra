@@ -71,6 +71,10 @@ function tablaSimple(ws, fila, col, cabeceras, filas, formatos = []) {
   return { primera: fila + 1, ultima: fila + filas.length };
 }
 
+// ExcelJS listo para usar (para leer planillas que sube el usuario).
+export async function excelJS() { await cargarLibs(); return window.ExcelJS; }
+export { encabezado as encabezadoExcel, borde as bordeExcel, fill as rellenoExcel, C as coloresExcel };
+
 /* ------------------------------------------------------------ hoja simple (auditoría y otros listados) */
 export async function hojaSimple(nombre, tit, sub, cols, filas) {
   await cargarLibs();
@@ -225,19 +229,19 @@ export async function generarExcel(js, f, cargas = [], costos = null) {
     const HC = 'Costos por obra', wk = wb.addWorksheet(HC, { views: [{ state: 'frozen', ySplit: 1 }], pageSetup: { ...IMPRESION, printTitlesRow: '1:1' } });
     const colsK = [{ t: 'Obra', w: 26 }, { t: 'Código', w: 9 }, { t: 'Equipo', w: 28 }, { t: 'Días', w: 7, n: 1 }, { t: 'Uso', w: 9, n: 1, f: '#,##0.0' }, { t: 'Unidad', w: 7 },
       { t: 'Tarifa por hora', w: 11, n: 1, f: '"$" #,##0' }, { t: 'Tarifa por día', w: 11, n: 1, f: '"$" #,##0' }, { t: 'Costo del equipo', w: 13, n: 1, f: '"$" #,##0' },
-      { t: 'Litros', w: 9, n: 1, f: '#,##0.0' }, { t: 'Combustible', w: 13, n: 1, f: '"$" #,##0' }, { t: 'De eso, a precio estimado', w: 13, n: 1, f: '"$" #,##0' }, { t: 'Reparaciones', w: 13, n: 1, f: '"$" #,##0' }, { t: 'Total', w: 14, n: 1, f: '"$" #,##0' }];
+      { t: 'Litros', w: 9, n: 1, f: '#,##0.0' }, { t: 'Combustible', w: 13, n: 1, f: '"$" #,##0' }, { t: 'De eso, a precio estimado', w: 13, n: 1, f: '"$" #,##0' }, { t: 'Reparaciones', w: 13, n: 1, f: '"$" #,##0' }, { t: 'Mano de obra', w: 13, n: 1, f: '"$" #,##0' }, { t: 'Total', w: 14, n: 1, f: '"$" #,##0' }];
     encabezado(wk, 1, colsK);
     const n = v => v == null ? null : Number(v);
     costos.filas.forEach((c, i) => {
       const r = wk.getRow(i + 2);
-      r.values = [c.obra, c.codigo, c.equipo, c.dias, n(c.uso), c.medidor === 'km' ? 'km' : 'h', n(c.tarifa_hora), n(c.tarifa_dia), n(c.costo_equipo), n(c.litros), n(c.combustible), n(c.combustible_estimado) || null, n(c.reparaciones), n(c.total)];
+      r.values = [c.obra, c.codigo, c.equipo, c.dias, n(c.uso), c.medidor === 'km' ? 'km' : 'h', n(c.tarifa_hora), n(c.tarifa_dia), n(c.costo_equipo), n(c.litros), n(c.combustible), n(c.combustible_estimado) || null, n(c.reparaciones), n(c.mano_obra), n(c.total)];
       if (c.costo_equipo == null) { const x = r.getCell(9); x.value = 'Sin tarifa'; x.font = { bold: true, color: { argb: 'FF' + C.warnT } }; x.fill = fill(C.warnF); }
-      r.getCell(14).font = { bold: true };
+      r.getCell(15).font = { bold: true };
       r.eachCell(x => { x.border = borde; });
     });
     const ult = costos.filas.length + 1, tr = wk.getRow(ult + 1);
     tr.getCell(1).value = 'Total';
-    [9, 10, 11, 12, 13, 14].forEach(k => { const L = String.fromCharCode(64 + k); tr.getCell(k).value = { formula: `SUM(${L}2:${L}${ult})` }; });
+    [9, 10, 11, 12, 13, 14, 15].forEach(k => { const L = String.fromCharCode(64 + k); tr.getCell(k).value = { formula: `SUM(${L}2:${L}${ult})` }; });
     tr.eachCell(x => { x.font = { bold: true }; x.border = { top: { style: 'medium', color: { argb: 'FF' + C.tinta } } }; });
     wk.autoFilter = { from: { row: 1, column: 1 }, to: { row: ult, column: colsK.length } };
     // Total por obra al costado, con gráfico apilado por rubro.

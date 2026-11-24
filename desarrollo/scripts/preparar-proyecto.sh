@@ -29,7 +29,7 @@ commit;" >/dev/null
   echo "aplicada: $b"
 done
 
-for fn in ingresar operarios verificacion avisos johndeere caterpillar; do
+for fn in ingresar operarios verificacion avisos johndeere caterpillar leer-medidor; do
   [ -d "supabase/functions/$fn" ] || continue
   jwt=false; case "$fn" in operarios|verificacion) jwt=true;; esac   # el resto valida por su cuenta (cron, OAuth, PIN)
   args=(-F "metadata={\"entrypoint_path\":\"$fn/index.ts\",\"name\":\"$fn\",\"verify_jwt\":$jwt};type=application/json")

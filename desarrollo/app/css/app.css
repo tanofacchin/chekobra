@@ -445,3 +445,10 @@ button.tl-it{cursor:pointer}button.tl-it:hover .t{text-decoration:underline}
 .barra{height:100%;display:flex;align-items:flex-end}
 .barra span{display:block;width:100%;background:var(--accent);border-radius:3px 3px 0 0;min-height:1px}
 .barra:hover span{background:var(--ink)}
+
+.c-mo{background:#7a4cc2}
+.presu{display:flex;flex-direction:column;gap:4px}
+.presu .nivel{height:8px}
+
+.fila-mal td{background:var(--bad-soft)}
+@media print{ body:has(.imp) .wrap > :not(.imp){display:none!important} }
