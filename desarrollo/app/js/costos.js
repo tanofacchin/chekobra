@@ -57,7 +57,7 @@ const variacion = (ahora, antes) => { if (antes == null || !(antes > 0)) return 
 
 export function vCostos() {
   const a = T(), f = filtro(), x = f.datos, d = a.d;
-  const filtros = `<section class="card"><div class="filters ind-filtros cs-filtros">
+  const filtros = `<section class="card no-print"><div class="filters ind-filtros cs-filtros">
     <label>Período<select class="inp" id="cs-per" data-cs="periodo" data-vivo>${[['mes', 'Este mes'], ['mes_ant', 'Mes anterior'], ['30', 'Últimos 30 días'], ['otro', 'Otro']].map(([v, l]) => `<option value="${v}" ${f.periodo === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label>Desde<input class="inp" type="date" id="cs-des" data-cs="desde" data-vivo value="${f.desde}"></label>
     <label>Hasta<input class="inp" type="date" id="cs-has" data-cs="hasta" data-vivo value="${f.hasta}"></label>
@@ -90,14 +90,17 @@ export function vCostos() {
   const filasEq = g.equipos.map(r => `<tr><td data-l="Equipo"><b>${esc(r.codigo)}</b> <span class="muted">${esc(r.equipo)}</span></td><td class="n" data-l="Obras">${r.obras}</td><td class="n" data-l="Uso">${r.dias} d · ${fNum(r.uso)} ${unidad(r.medidor)}</td>
       <td class="n" data-l="Equipo">${fPeso(r.costo_equipo)}</td><td class="n" data-l="Combustible">${fPeso(r.combustible)}</td><td class="n" data-l="Reparaciones">${fPeso(r.reparaciones)}</td><td class="n" data-l="Total"><b>${fPeso(r.total)}</b></td>
       <td class="n" data-l="Por hora">${r.medidor === 'horas' && r.uso > 0 ? fPeso(r.total / r.uso) + '/h' : '—'}</td></tr>`).join('');
-  return `${filtros}${f.tarifas ? vTarifas() : ''}
+  const obraNom = f.obra && (d.obras.find(o => o.id === f.obra) || {}).nombre;
+  return `<section class="solo-print"><p class="eyebrow">Costos por obra · ${esc(S.m.empresa.nombre)}</p><h1>${obraNom ? esc(obraNom) : 'Todas las obras'}</h1>
+      <p class="small">Del ${f.desde.split('-').reverse().join('/')} al ${f.hasta.split('-').reverse().join('/')} · emitido el ${new Date().toLocaleDateString('es-AR')}</p></section>
+    ${filtros}${f.tarifas ? vTarifas() : ''}
     <div class="kpis"><div class="kpi"><b>${fPeso(g.total.total)}</b><span>Costo total${f.obra ? ' de la obra' : ''} ${variacion(g.total.total, gAntes && gAntes.total.total)}</span></div>
       <div class="kpi"><b>${horas > 0 ? fPeso(g.total.total / horas) : '—'}</b><span>Por hora de máquina (${fNum(horas)} h)</span></div>
       <div class="kpi"><b>${fPeso(g.total.combustible)}</b><span>Combustible · ${fNum(g.total.litros)} L${est ? ` · ${fPeso(est)} estimado` : ''}</span></div>
       <div class="kpi"><b>${fPeso(g.total.reparaciones)}</b><span>Reparaciones y services</span></div>${x.con_mano_obra ? `<div class="kpi"><b>${fPeso(g.total.mano_obra)}</b><span>Mano de obra (operarios)</span></div>` : ''}</div>
     ${avisos.length ? `<div class="warnbox small">${avisos.join('<br>')}</div>` : ''}
     <section class="card"><h2>${f.obra ? 'La obra' : 'Por obra'}</h2>
-      <p class="small muted">El costo del equipo sale de su tarifa y de las horas (o días) de las jornadas cerradas.${x.con_mano_obra ? ' La mano de obra, de las horas de cada jornada por el costo por hora del operario.' : ''} El combustible cargado sin obra y las reparaciones se reparten según las horas de cada equipo en cada obra. Tocá una obra para ver el detalle.</p>
+      <p class="small muted">El costo del equipo sale de su tarifa y de las horas (o días) de las jornadas cerradas.${x.con_mano_obra ? ' La mano de obra, de las horas de cada jornada por el costo por hora del operario.' : ''} El combustible cargado sin obra y las reparaciones se reparten según las horas de cada equipo en cada obra. <span class="no-print">Tocá una obra para ver el detalle.</span></p>
       ${filas.length ? `<div class="obras">${tarjetas}</div>` : '<div class="empty">No hay jornadas en el período.</div>'}
       ${Number(x.reparaciones_sin_uso) || Number(x.combustible_sin_uso) ? `<p class="small muted">No se cargan a ninguna obra porque esos equipos no trabajaron en el período: ${[Number(x.reparaciones_sin_uso) ? `${fPeso(x.reparaciones_sin_uso)} en reparaciones` : '', Number(x.combustible_sin_uso) ? `${fPeso(x.combustible_sin_uso)} en combustible` : ''].filter(Boolean).join(' y ')}.</p>` : ''}</section>
     ${g.equipos.length ? `<section class="card"><h2>Por equipo</h2><div class="tabla tabla-cel"><table><thead><tr><th>Equipo</th><th class="n">Obras</th><th class="n">Uso</th><th class="n">Equipo</th><th class="n">Combustible</th><th class="n">Reparaciones</th><th class="n">Total</th><th class="n">Por hora</th></tr></thead><tbody>${filasEq}</tbody></table></div></section>` : ''}`;
