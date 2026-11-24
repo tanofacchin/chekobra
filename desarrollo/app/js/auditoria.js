@@ -6,10 +6,10 @@ import { S, render } from './estado.js';
 const T = () => S.adm;
 const TABLA = { equipos: 'Equipo', miembros: 'Persona', obras: 'Obra', plantillas: 'Plantilla de checklist', planes_mantenimiento: 'Plan de service', documentos: 'Documento',
   mantenimientos: 'Trabajo de mantenimiento', cargas_combustible: 'Carga de combustible', jornadas: 'Checklist', ordenes_trabajo: 'Orden de trabajo', empresas: 'Datos de la empresa', telemetria_conexiones: 'Telemetría',
-  marcaciones: 'Marcación', ajustes_asistencia: 'Horario del tarjetero', feriados: 'Feriado' };
+  marcaciones: 'Marcación', ajustes_asistencia: 'Horario del tarjetero', feriados: 'Feriado', lugares_marcacion: 'Lugar permitido para marcar' };
 const ACCION = { alta: 'Alta', cambio: 'Cambio', baja: 'Borrado', liberacion: 'Liberó el equipo', fuera_servicio: 'Sacó de servicio', en_servicio: 'Volvió a servicio',
   asignacion: 'Asignó equipos y obras', pin: 'Cambió el PIN', restablecer_2fa: 'Restableció la verificación en dos pasos', conectar_telemetria: 'Conectó', desconectar_telemetria: 'Desconectó', alta_personal: 'Dio de alta',
-  marcacion_manual: 'Cargó una marcación a mano', anular_marcacion: 'Anuló una marcación', validar_marcacion: 'Confirmó una marcación', renovar_qr: 'Renovó el QR de la obra' };
+  marcacion_manual: 'Cargó una marcación a mano', anular_marcacion: 'Anuló una marcación', validar_marcacion: 'Confirmó una marcación', autorizar_marcacion: 'Autorizó una marcación fuera de las ubicaciones', rechazar_marcacion: 'Rechazó una marcación', renovar_qr: 'Renovó el QR de la obra' };
 const CAMPO = { nombre: 'nombre', codigo: 'código', activo: 'activo', activa: 'activa', rol: 'rol', legajo: 'legajo', recibir_avisos: 'recibe avisos', bloqueado_en: 'bloqueo por PIN',
   tarifa_hora: 'tarifa por hora', tarifa_dia: 'tarifa por día', plantilla_clave: 'tipo de checklist', serie: 'n.º de serie', patente: 'patente', medidor: 'medidor',
   consumo_referencia: 'consumo de referencia', capacidad_tanque: 'capacidad del tanque', secciones: 'puntos del checklist', vence: 'vencimiento', bloquea: 'bloquea al vencer',

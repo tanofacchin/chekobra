@@ -991,7 +991,7 @@ select pg_temp.esperar_error(format($$select public.marcar(jsonb_build_object('e
 select pg_temp.esperar_error(format($$select public.marcar(jsonb_build_object('empresa_id', %L, 'foto_path', %L))$$, (select v from ctx where k = 'A'), (select v from ctx where k = 'A')::text || '/otro/x.jpg'), 'Foto inválida');
 -- a 5 km de la obra: queda para revisar
 select public.marcar(jsonb_build_object('empresa_id', v, 'tipo', 'entrada', 'obra_id', :'obraA_id', 'lat', -31.45, 'lng', -64.2, 'precision_m', 10, 'foto_path', :'fm')) as m3 from ctx where k = 'A' \gset
-select pg_temp.afirmar(not (r->>'dentro')::boolean and not (r->>'verificada')::boolean and r->>'observacion' like 'Fuera de la obra%', 'fuera de la obra ' || r::text) from (select :'m3'::jsonb as r) x;
+select pg_temp.afirmar(not (r->>'dentro')::boolean and not (r->>'verificada')::boolean and r->>'observacion' like 'Fuera de las ubicaciones permitidas (a 5,6 km de Ruta 5)%' and r->>'autorizacion' = 'pendiente', 'fuera de la obra ' || r::text) from (select :'m3'::jsonb as r) x;
 -- con el QR de la obra (el operario no puede leer los QR)
 select public.marcar(jsonb_build_object('empresa_id', v, 'tipo', 'salida', 'qr', :'qra', 'foto_path', :'fm'))->>'obra' as oq from ctx where k = 'A' \gset
 select pg_temp.afirmar(:'oq' = 'Ruta 5' and exists (select 1 from public.marcaciones where modo = 'qr'), 'marcar con QR');
@@ -1022,7 +1022,7 @@ set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a6';
 select pg_temp.esperar_error(format($$select public.anular_marcacion(%L, '')$$, (select id from public.marcaciones where observacion like 'Marcada sin señal%')), 'motivo');
 select public.anular_marcacion((select id from public.marcaciones where observacion like 'Marcada sin señal%'), 'No vino ese día');
-select public.validar_marcacion((select id from public.marcaciones where observacion like 'Fuera de la obra%'));
+select public.validar_marcacion((select id from public.marcaciones where observacion like 'Fuera de las ubicaciones%'));
 do $$ begin
   if exists (select 1 from public.marcaciones where not verificada and anulada_en is null) then raise exception 'FALLÓ: quedaron marcaciones sin revisar'; end if;
   if (select count(*) from public.obras_qr) <> 1 then raise exception 'FALLÓ: la supervisora no ve el QR'; end if;
@@ -1032,11 +1032,56 @@ do $$ begin
   if (select horas_semana from public.ajustes_asistencia limit 1) <> 9 then raise exception 'FALLÓ: la supervisora cambia el horario'; end if;
 end $$;
 reset role;
-select pg_temp.afirmar((select count(*) from public.auditoria where accion in ('anular_marcacion', 'validar_marcacion') and quien = 'Supervisora A') = 2, 'auditoría de la revisión');
+select pg_temp.afirmar((select count(*) from public.auditoria where accion in ('anular_marcacion', 'rechazar_marcacion', 'autorizar_marcacion') and quien = 'Supervisora A') = 2, 'auditoría de la revisión');
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
 do $$ begin if exists (select 1 from public.marcaciones) or exists (select 1 from public.obras_qr) or exists (select 1 from public.feriados) then raise exception 'FALLÓ: B ve el tarjetero de A'; end if; end $$;
 select pg_temp.esperar_error(format($$select public.asistencia(%L, '2026-11-01', '2026-11-30')$$, (select v from ctx where k = 'A')), 'No tenés permiso');
+reset role;
+
+-- ===== Ubicaciones permitidas y autorización de lo marcado afuera
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a6';
+insert into public.lugares_marcacion (empresa_id, nombre, lat, lng, radio_m) select v, 'Taller central', -31.30, -64.30, 150 from ctx where k = 'A';
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
+-- en el taller (lugar permitido, sin elegir obra): vale y no necesita autorización
+select public.marcar(jsonb_build_object('empresa_id', v, 'tipo', 'entrada', 'lat', -31.3002, 'lng', -64.3001, 'precision_m', 10, 'foto_path', :'fm')) as mt from ctx where k = 'A' \gset
+select pg_temp.afirmar(r->>'autorizacion' is null and r->>'lugar' = 'Taller central' and (r->>'dentro')::boolean, 'marca en lugar permitido ' || r::text) from (select :'mt'::jsonb as r) x;
+-- un día de hace dos días: entrada afuera (pendiente) y salida en la obra → no suma horas hasta autorizarla
+select public.marcar(jsonb_build_object('empresa_id', v, 'tipo', 'entrada', 'obra_id', :'obraA_id', 'lat', -31.6, 'lng', -64.2, 'foto_path', :'fm', 'nota', 'Fui al corralón a buscar material',
+  'cuando', ((current_date - 2) + time '08:00') at time zone 'America/Argentina/Buenos_Aires'))->>'id' as mpend from ctx where k = 'A' \gset
+select public.marcar(jsonb_build_object('empresa_id', v, 'tipo', 'salida', 'obra_id', :'obraA_id', 'lat', -31.4, 'lng', -64.2, 'foto_path', :'fm',
+  'cuando', ((current_date - 2) + time '17:00') at time zone 'America/Argentina/Buenos_Aires')) from ctx where k = 'A';
+select pg_temp.afirmar((select nota from public.marcaciones where id = :'mpend') = 'Fui al corralón a buscar material', 'nota de quien marcó');
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a6';
+select pg_temp.afirmar(coalesce((select sum((x->>'horas')::numeric) from jsonb_array_elements(public.asistencia((select v from ctx where k = 'A'), current_date - 2, current_date - 2)->'dias') x
+  where x->>'miembro_id' = (select id::text from public.miembros where nombre = 'Operario A2')), 0) = 0
+  and exists (select 1 from jsonb_array_elements(public.asistencia((select v from ctx where k = 'A'), current_date - 2, current_date - 2)->'dias') x where (x->>'pendiente')::boolean), 'lo pendiente no suma horas');
+select public.validar_marcacion(:'mpend');
+select pg_temp.afirmar((select sum((x->>'horas')::numeric) from jsonb_array_elements(public.asistencia((select v from ctx where k = 'A'), current_date - 2, current_date - 2)->'dias') x
+  where x->>'miembro_id' = (select id::text from public.miembros where nombre = 'Operario A2')) = 9, 'autorizada suma sus horas');
+select pg_temp.afirmar((select autorizacion = 'autorizada' and autorizada_por is not null from public.marcaciones where id = :'mpend'), 'queda registrado quién autorizó');
+-- la supervisora no puede autorizar su propia marcación afuera; la dueña sí
+select (select empresa_id::text from public.miembros where user_id = auth.uid()) || '/' || auth.uid()::text || '/m.jpg' as fs \gset
+select public.marcar(jsonb_build_object('empresa_id', v, 'lat', -31.9, 'lng', -64.9, 'foto_path', :'fs'))->>'id' as msup from ctx where k = 'A' \gset
+select pg_temp.esperar_error(format($$select public.validar_marcacion(%L)$$, :'msup'), 'propia marcación');
+-- rechazar: queda anulada como rechazada
+select public.marcar(jsonb_build_object('empresa_id', v, 'tipo', 'salida', 'lat', -31.9, 'lng', -64.9, 'foto_path', :'fs'))->>'id' as msup2 from ctx where k = 'A' \gset
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+select public.validar_marcacion(:'msup');
+select public.anular_marcacion(:'msup2', 'No estaba trabajando');
+select pg_temp.afirmar((select autorizacion = 'rechazada' and anulada_en is not null from public.marcaciones where id = :'msup2'), 'rechazo');
+reset role;
+-- el operario no puede cargar lugares permitidos
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
+select pg_temp.esperar_error(format($$insert into public.lugares_marcacion (empresa_id, nombre, lat, lng) values (%L, 'Mi casa', -31, -64)$$, (select v from ctx where k = 'A')), 'row-level security');
 reset role;
 
 \echo TODAS LAS PRUEBAS PASARON

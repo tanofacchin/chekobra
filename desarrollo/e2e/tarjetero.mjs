@@ -81,14 +81,16 @@ try {
 
   // ---------- asistencia: ubicación de la obra (con "estoy en la obra") y cartel QR
   await tab('asistencia'); await ver('Trabajando ahora');
-  await sub('ajustes'); await ver('Obras: ubicación y QR');
+  await sub('ajustes'); await ver('Ubicaciones permitidas para marcar');
   await p.click('[data-act="asUbic"]'); await p.click('[data-act="asUbicAqui"]'); await sleep(1500);
   await p.fill('#ub-rad', '200'); await p.click('[data-act="asUbicOk"]'); await ver('Ubicación de la obra guardada');
+  await p.click('[data-act="asLugarNuevo"]'); await p.fill('#lu-nom', 'Taller central'); await p.click('[data-act="asLugarAqui"]'); await sleep(1500);
+  await p.click('[data-act="asLugarOk"]'); await ver('Lugar permitido agregado'); await ver('para cualquier obra');
   await p.click('[data-act="asCartel"]'); await ver('Cartel QR · Ruta 5'); await p.waitForSelector('.cartel-qr svg');
   await p.screenshot({ path: DIR + 'tarjetero-cartel.png', fullPage: true });
   await p.click('[data-act="asCartelCerrar"]');
   const [qr] = await api(`/rest/v1/obras_qr?empresa_id=eq.${emp.id}&select=token`);
-  paso('ubicación de la obra y cartel QR'); await salir();
+  paso('ubicación de la obra, otro lugar permitido y cartel QR'); await salir();
 
   // ---------- personal de obra: marca entrada desde su celular
   await legajo('301', '111111'); await p.waitForSelector('[data-act="tjMarcar"]');
@@ -110,9 +112,10 @@ try {
   await ctx.setGeolocation(LEJOS);
   await p.click('[data-act="tjMarcar"][data-k="salida"]'); await ver('Ubicación tomada');
   await p.setInputFiles('#tj-selfie', foto); await p.waitForSelector('.tj-foto img');
-  await p.click('[data-act="tjConfirmar"]'); await ver('Queda para que la revise el supervisor', 30000);
+  await ver('Estás fuera de las ubicaciones permitidas'); await p.fill('#tj-nota', 'Fui al corralón');
+  await p.click('[data-act="tjConfirmar"]'); await ver('pendiente de autorización', 30000); await ver('Pendiente de autorización');
   await ctx.setGeolocation(OBRA);
-  paso('operario: entrada con el QR de la obra y salida fuera de la obra (queda para revisar)'); await salir();
+  paso('operario: entrada con el QR de la obra; la salida fuera de la obra queda pendiente de autorización'); await salir();
 
   // ---------- reloj del obrador: PIN equivocado y después la salida de Ana
   await legajo('RELOJ1', '222222'); await p.click('[data-act="rlObra"]'); await p.waitForSelector('#rl-leg');
@@ -132,9 +135,10 @@ try {
   // ---------- la dueña: presentes del día, revisión, horas para sueldos (Excel) y mano de obra en costos
   await duena(); await p.waitForSelector('[data-act="admTab"][data-k="asistencia"]');
   await tab('asistencia'); await ver('Ya se fueron'); await ver('Ana Personal'); await ver('Juan Operario');
-  await ver('para revisar');
+  await ver('para autorizar o revisar');
   await p.screenshot({ path: DIR + 'tarjetero-hoy.png', fullPage: true });
-  await sub('revisar'); await ver('Fuera de la obra'); await p.click('[data-act="asValidar"]'); await ver('No hay nada para revisar');
+  await ver('Pendiente de autorización');
+  await sub('revisar'); await ver('Fuera de las ubicaciones permitidas'); await ver('Fui al corralón'); await p.click('[data-act="asValidar"]'); await ver('ya suma horas'); await ver('No hay marcaciones pendientes');
   await sub('periodo'); await ver('Por persona'); await ver('Ana Personal');
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('[data-act="asExcel"]')]);
   const xls = DIR + 'tarjetero.xlsx'; await dl.saveAs(xls); if (statSync(xls).size < 5000) throw new Error('Excel vacío');
@@ -143,7 +147,7 @@ try {
   await tab('costos'); await p.waitForSelector('[data-act="csAbrir"]'); await p.click('[data-act="csAbrir"]'); await ver('mano de obra del tarjetero');
   await p.screenshot({ path: DIR + 'tarjetero-costos.png', fullPage: true });
   paso('panel: presentes, revisión, Excel para sueldos y mano de obra por obra');
-  await tab('auditoria'); await ver('Confirmó una marcación');
+  await tab('auditoria'); await ver('Autorizó una marcación');
   paso('auditoría: alta del reloj y marcación confirmada');
 
   console.log(`\n${ok} pasos bien · errores en la página: ${errores.length ? errores.join(' | ') : 'ninguno'}`);

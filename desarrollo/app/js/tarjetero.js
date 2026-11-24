@@ -42,15 +42,16 @@ async function leerMio() {
   const t = T(); t.cargando = true;
   try {
     const q = quincena();
-    const [mk, ob, aj, hs] = await Promise.all([
-      sb.from('marcaciones').select('id, tipo, cuando, obra_id, verificada, modo, observacion').eq('miembro_id', S.m.id).is('anulada_en', null).order('cuando', { ascending: false }).limit(20),
-      sb.from('obras').select('id, nombre').eq('empresa_id', E()).eq('activa', true).order('nombre'),
-      sb.from('ajustes_asistencia').select('pedir_foto').eq('empresa_id', E()).maybeSingle(),
+    const [mk, ob, aj, hs, lu] = await Promise.all([
+      sb.from('marcaciones').select('id, tipo, cuando, obra_id, verificada, modo, observacion, autorizacion, lugar, motivo_anulacion').eq('miembro_id', S.m.id).or('anulada_en.is.null,autorizacion.eq.rechazada').order('cuando', { ascending: false }).limit(20),
+      sb.from('obras').select('id, nombre, lat, lng, radio_m').eq('empresa_id', E()).eq('activa', true).order('nombre'),
+      sb.from('ajustes_asistencia').select('pedir_foto, radio_m').eq('empresa_id', E()).maybeSingle(),
       sb.rpc('asistencia', { p_empresa: E(), p_desde: q.desde, p_hasta: q.hasta, p_miembro: S.m.id }),
+      sb.from('lugares_marcacion').select('id, nombre, lat, lng, radio_m, obra_id').eq('empresa_id', E()).eq('activo', true),
     ]);
     if (mk.error) throw mk.error;
-    t.ult = mk.data; t.obras = ob.data || []; t.pedirFoto = aj.data ? aj.data.pedir_foto : true; t.horas = hs.error ? null : { ...hs.data, ...q };
-    ls.set(kUlt(), { ult: t.ult, obras: t.obras, pedirFoto: t.pedirFoto });
+    t.ult = mk.data; t.obras = ob.data || []; t.pedirFoto = aj.data ? aj.data.pedir_foto : true; t.radio = aj.data ? aj.data.radio_m : 300; t.lugares = lu.error ? [] : lu.data; t.horas = hs.error ? null : { ...hs.data, ...q };
+    ls.set(kUlt(), { ult: t.ult, obras: t.obras, pedirFoto: t.pedirFoto, radio: t.radio, lugares: t.lugares });
   } catch (e) {
     const c = ls.get(kUlt(), null);
     if (c) Object.assign(t, c); else { t.ult ||= []; t.obras ||= []; }
@@ -64,7 +65,7 @@ function estado() {
   const t = T();
   const todas = [...(t.pend || []).map(p => ({ tipo: p.payload.tipo, cuando: p.payload.cuando, obra_id: p.payload.obra_id, pendiente: true, rechazo: p.estado === 'rechazado' ? p.error : null })), ...(t.ult || [])]
     .sort((a, b) => new Date(b.cuando) - new Date(a.cuando));
-  const u = todas.find(x => !x.rechazo);
+  const u = todas.find(x => !x.rechazo && x.autorizacion !== 'rechazada');
   const adentro = u && u.tipo === 'entrada' && Date.now() - new Date(u.cuando) < 20 * 3600e3;
   return { u, adentro, todas };
 }
@@ -86,6 +87,20 @@ export function vFranja(grande = false) {
       <b>${adentro ? 'Marcar salida' : 'Marcar entrada'}</b><span>${txt}</span></button>`;
 }
 
+// Dónde está respecto de las ubicaciones permitidas (la obra elegida, o cualquiera, y los otros lugares). Nulo: la empresa no cargó ubicaciones.
+const distM = (a, b, c, d) => { const r = x => x * Math.PI / 180, h = Math.sin(r(c - a) / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d - b) / 2) ** 2; return 2 * 6371000 * Math.asin(Math.sqrt(h)); };
+const fDist = m => m >= 1000 ? `${(m / 1000).toLocaleString('es-AR', { maximumFractionDigits: 1 })} km` : `${Math.round(m)} m`;
+function dondeEstoy(f) {
+  const t = T(); if (!f.gps) return null;
+  const obraSel = f.qr ? null : f.obraId, margen = Math.min(f.gps.acc || 0, 150);
+  const cands = [...(t.obras || []).filter(o => o.lat != null && (!obraSel || o.id === obraSel)).map(o => ({ nombre: o.nombre, obra: o.id, lat: o.lat, lng: o.lng, radio: o.radio_m || t.radio || 300 })),
+    ...(t.lugares || []).filter(l => !l.obra_id || !obraSel || l.obra_id === obraSel).map(l => ({ nombre: l.nombre, obra: l.obra_id, lat: l.lat, lng: l.lng, radio: l.radio_m }))];
+  const control = (t.obras || []).some(o => o.lat != null) || (t.lugares || []).length;
+  if (!control || !cands.length) return null;
+  const xs = cands.map(c => ({ ...c, d: distM(f.gps.lat, f.gps.lng, c.lat, c.lng) })).map(c => ({ ...c, ok: c.d <= c.radio + margen })).sort((a, b) => (b.ok - a.ok) || a.d - b.d);
+  return xs[0];
+}
+
 function vFlujo() {
   const f = T().flujo, obras = T().obras || [];
   const gps = f.gps ? `<span class="chip ok">Ubicación tomada ±${Math.round(f.gps.acc)} m</span>` : f.gpsBusy ? '<span class="chip plain">Buscando GPS…</span>'
@@ -95,6 +110,10 @@ function vFlujo() {
     ${f.qr ? `<div class="okbox small">Escaneaste el QR de la obra${f.qrObra ? ': <b>' + esc(f.qrObra) + '</b>' : ''}.</div>`
       : `<label class="f">Obra<select class="inp" id="tj-obra" data-tj="obraId"><option value="">${f.tipo === 'salida' ? 'La misma de la entrada' : 'Elegí la obra'}</option>${obras.map(o => `<option value="${o.id}" ${f.obraId === o.id ? 'selected' : ''}>${esc(o.nombre)}</option>`).join('')}</select></label>`}
     <div class="row">${gps}</div>
+    ${(() => { const w = dondeEstoy(f); if (!w) return f.gps || f.gpsBusy || f.qr ? '' : (T().obras || []).some(o => o.lat != null) || (T().lugares || []).length ? '<div class="warnbox small">Sin ubicación, la marcación queda <b>pendiente</b> hasta que la autorice el supervisor o el dueño.</div>' : '';
+      if (w.ok) return `<div class="okbox small">Estás en <b>${esc(w.nombre)}</b>: es una ubicación permitida.</div>`;
+      return `<div class="warnbox small"><b>Estás fuera de las ubicaciones permitidas</b> (a ${fDist(w.d)} de ${esc(w.nombre)}). Podés marcar igual, pero queda <b>pendiente</b>: no suma horas hasta que la autorice el supervisor o el dueño.</div>
+        <label class="f">Por qué marcás desde acá <small>Lo ve quien autoriza</small><input class="inp" id="tj-nota" data-tj="nota" value="${esc(f.nota || '')}" maxlength="300" placeholder="Ej.: fui al corralón a buscar material"></label>`; })()}
     <div class="tj-foto">${fotoUrl ? `<img src="${fotoUrl}" alt="Tu foto">` : ''}
       <label class="btn ${f.foto ? 'ghost' : 'primary'}" for="tj-selfie">${f.foto ? 'Sacar otra foto' : T().pedirFoto ? 'Sacate una foto' : 'Foto (opcional)'}</label>
       <input class="vh" type="file" id="tj-selfie" accept="image/*" capture="user" data-file="marca"></div>
@@ -106,7 +125,8 @@ function tomarGps() {
   const f = T().flujo; if (!f) return;
   if (!navigator.geolocation) { f.gpsErr = 'Este teléfono no da la ubicación'; return render(); }
   f.gpsBusy = true; f.gpsErr = ''; render();
-  navigator.geolocation.getCurrentPosition(p => { if (T().flujo !== f) return; f.gpsBusy = false; f.gps = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }; render(); },
+  navigator.geolocation.getCurrentPosition(p => { if (T().flujo !== f) return; f.gpsBusy = false; f.gps = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
+      if (!f.obraId && !f.qr) { const w = dondeEstoy(f); if (w && w.ok && w.obra) f.obraId = w.obra; } render(); },
     e => { if (T().flujo !== f) return; f.gpsBusy = false; f.gpsErr = e.code === 1 ? 'Sin permiso de ubicación' : 'No se encontró señal GPS'; render(); },
     { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
 }
@@ -127,7 +147,7 @@ async function confirmar() {
   const path = f.foto ? `${E()}/${S.user.id}/marca-${f.id}.jpg` : null;
   await cola.agregar({ id: f.id, tipo: 'marca', uid: S.user.id, empresa_id: E(), archivos: f.foto ? [{ path, blob: f.foto, tipo: 'image/jpeg' }] : [],
     payload: { empresa_id: E(), client_id: f.id, tipo: f.tipo, obra_id: f.qr ? null : f.obraId || null, qr: f.qr, cuando: new Date().toISOString(),
-      lat: f.gps ? f.gps.lat : null, lng: f.gps ? f.gps.lng : null, precision_m: f.gps ? Math.round(f.gps.acc) : null, foto_path: path } });
+      nota: (f.nota || '').trim() || null, lat: f.gps ? f.gps.lat : null, lng: f.gps ? f.gps.lng : null, precision_m: f.gps ? Math.round(f.gps.acc) : null, foto_path: path } });
   if (f.obraId) ls.set('co_ultima_obra_' + S.m.id, f.obraId);
   if (f.fotoUrl) URL.revokeObjectURL(f.fotoUrl);
   t.flujo = null;
@@ -137,6 +157,7 @@ async function confirmar() {
 // Respuesta del servidor a una marcación que salió de la bandeja.
 export function alEnviar(ev) {
   const r = ev.respuesta || {};
+  if (r.autorizacion === 'pendiente') { toast('Marcación guardada, pendiente de autorización: ' + r.observacion, 8000); return true; }
   if (r.verificada === false && r.observacion) { toast('Marcación guardada. Queda para que la revise el supervisor: ' + r.observacion, 8000); return true; }
   // La marca recién hecha ya avisó al confirmar; las que salen de la bandeja después de estar sin señal, también se cuentan.
   return Date.now() - (ev.envio.creado || 0) < 15000;
@@ -151,8 +172,8 @@ export function vPersonalObra() {
   const mis = h ? h.dias || [] : [];
   const tot = mis.reduce((s, d) => ({ horas: s.horas + Number(d.horas), al50: s.al50 + Number(d.al50), al100: s.al100 + Number(d.al100), tarde: s.tarde + (d.tarde ? 1 : 0) }), { horas: 0, al50: 0, al100: 0, tarde: 0 });
   const lista = todas.slice(0, 12).map(x => `<div class="li tj-li"><span class="t">${x.tipo === 'entrada' ? 'Entrada' : 'Salida'} · ${fHora(x.cuando)} h</span>
-      ${x.pendiente ? '<span class="chip warn">Esperando señal</span>' : x.verificada === false ? '<span class="chip warn">En revisión</span>' : '<span class="chip ok">Registrada</span>'}
-      <span class="s">${fechaCorta(x.cuando)}${x.obra_id && obraNom(x.obra_id) ? ' · ' + esc(obraNom(x.obra_id)) : ''}${x.modo === 'reloj' ? ' · reloj del obrador' : x.modo === 'qr' ? ' · QR de la obra' : x.modo === 'manual' ? ' · cargada por el supervisor' : ''}</span></div>`).join('');
+      ${x.pendiente ? '<span class="chip warn">Esperando señal</span>' : x.autorizacion === 'rechazada' ? '<span class="chip bad">Rechazada</span>' : x.autorizacion === 'pendiente' ? '<span class="chip warn">Pendiente de autorización</span>' : x.verificada === false ? '<span class="chip warn">En revisión</span>' : '<span class="chip ok">Registrada</span>'}
+      <span class="s">${fechaCorta(x.cuando)}${x.obra_id && obraNom(x.obra_id) ? ' · ' + esc(obraNom(x.obra_id)) : ''}${x.modo === 'reloj' ? ' · reloj del obrador' : x.modo === 'qr' ? ' · QR de la obra' : x.modo === 'manual' ? ' · cargada por el supervisor' : ''}${x.lugar && x.lugar !== obraNom(x.obra_id) ? ' · ' + esc(x.lugar) : ''}${x.autorizacion === 'rechazada' && x.motivo_anulacion ? ' · ' + esc(x.motivo_anulacion) : ''}</span></div>`).join('');
   return `<main class="wrap"><section><p class="eyebrow">${esc(fechaLarga())}</p><h1>Hola, ${esc(S.m.nombre.split(' ')[0])}</h1></section>
     ${vFranja(true)}
     ${h ? `<section class="card"><h2>Esta quincena</h2><p class="small muted">Del ${ddmm(h.desde)} al ${ddmm(h.hasta)}. Lo que ve la administración para tu sueldo.</p>
@@ -270,9 +291,9 @@ async function cargarPeriodo() {
 async function cargarRevisar() {
   const s = AS(), d = new Date(); d.setDate(d.getDate() - 31);
   const { data, error } = await sb.from('marcaciones').select('*, persona:miembros!marcaciones_miembro_id_fkey(nombre, legajo), obra:obras(nombre)')
-    .eq('empresa_id', E()).eq('verificada', false).is('anulada_en', null).gte('cuando', d.toISOString()).order('cuando', { ascending: false }).limit(100);
+    .eq('empresa_id', E()).eq('verificada', false).is('anulada_en', null).gte('cuando', d.toISOString()).order('cuando', { ascending: false }).limit(200);
   if (error) { toast(err(error)); s.rev = []; return render(); }
-  s.rev = data; s.nRevisar = data.length;
+  s.rev = data.sort((a, b) => (b.autorizacion === 'pendiente') - (a.autorizacion === 'pendiente')); s.nRevisar = data.length;
   const paths = data.map(x => x.foto_path).filter(Boolean);
   s.fotos = {};
   if (paths.length) { const { data: u } = await sb.storage.from('evidencias').createSignedUrls(paths, 3600); (u || []).forEach(x => { if (x.signedUrl) s.fotos[x.path] = x.signedUrl; }); }
@@ -280,12 +301,12 @@ async function cargarRevisar() {
 }
 async function cargarAjustes() {
   const s = AS(), y = new Date().getFullYear();
-  const [aj, fe, qr] = await Promise.all([sb.from('ajustes_asistencia').select('*').eq('empresa_id', E()).maybeSingle(),
-    sb.from('feriados').select('*').eq('empresa_id', E()).gte('fecha', `${y}-01-01`).order('fecha'), sb.from('obras_qr').select('obra_id').eq('empresa_id', E())]);
+  const [aj, fe, qr, lu] = await Promise.all([sb.from('ajustes_asistencia').select('*').eq('empresa_id', E()).maybeSingle(),
+    sb.from('feriados').select('*').eq('empresa_id', E()).gte('fecha', `${y}-01-01`).order('fecha'), sb.from('obras_qr').select('obra_id').eq('empresa_id', E()), sb.from('lugares_marcacion').select('*').eq('empresa_id', E()).order('nombre')]);
   const def = { hora_entrada: '08:00', tolerancia_min: 10, horas_semana: 9, horas_sabado: 4, sabado_100_desde: '13:00', descanso_min: 0, radio_m: 300, pedir_foto: true };
   const v = aj.data || def;
   s.aj = { v: { ...v, hora_entrada: String(v.hora_entrada).slice(0, 5), sabado_100_desde: v.sabado_100_desde ? String(v.sabado_100_desde).slice(0, 5) : '' }, existe: !!aj.data, feriados: fe.data || [],
-    conQr: (qr.data || []).map(x => x.obra_id), nuevoFer: { fecha: '', nombre: '' }, err: '' };
+    conQr: (qr.data || []).map(x => x.obra_id), nuevoFer: { fecha: '', nombre: '' }, err: '', lugares: lu.data || [] };
   render();
 }
 
@@ -304,7 +325,7 @@ export function porPersona(x) {
 export function vAsistencia() {
   const s = AS(), a = P();
   if (s.cartel) return '';
-  const sub = [['hoy', 'Hoy'], ['periodo', 'Horas para sueldos'], ['revisar', `Revisar${s.nRevisar ? ` (${s.nRevisar})` : ''}`], ['ajustes', 'Horarios, obras y relojes']]
+  const sub = [['hoy', 'Hoy'], ['periodo', 'Horas para sueldos'], ['revisar', `Autorizar${s.nRevisar ? ` (${s.nRevisar})` : ''}`], ['ajustes', 'Horarios, obras y relojes']]
     .map(([k, l]) => `<button class="tab ${s.vista === k ? 'on' : ''}" data-act="asVista" data-k="${k}">${l}</button>`).join('');
   const body = { hoy: vHoy, periodo: vPeriodo, revisar: vRevisar, ajustes: vAjustes }[s.vista]();
   return `<nav class="tabs sub no-print">${sub}</nav>${body}`;
@@ -323,7 +344,7 @@ function vHoy() {
   const adentro = dias.filter(d => d.adentro), salieron = dias.filter(d => !d.adentro);
   const aus = x.ausencias.filter(q => asignado(q.miembro_id));
   const tarde = dias.filter(d => d.tarde);
-  const chips = d => `${d.tarde ? '<span class="chip warn">Llegó tarde</span>' : ''}${d.fuera ? '<span class="chip warn">Fuera de la obra</span>' : ''}${d.sin_verificar ? '<span class="chip warn">Revisar</span>' : ''}${d.incompleta ? '<span class="chip bad">Falta una marca</span>' : ''}`;
+  const chips = d => `${d.tarde ? '<span class="chip warn">Llegó tarde</span>' : ''}${d.pendiente ? '<span class="chip bad">Pendiente de autorización</span>' : d.fuera ? '<span class="chip warn">Fuera de la obra</span>' : ''}${d.sin_verificar && !d.pendiente ? '<span class="chip warn">Revisar</span>' : ''}${d.incompleta ? '<span class="chip bad">Falta una marca</span>' : ''}`;
   const fila = (d, txt) => `<div class="att" style="grid-template-columns:1fr auto"><div><div class="t">${esc(nom(d.miembro_id))} <span class="small muted">${esc(leg(d.miembro_id))}</span></div>
       <div class="s">${txt}${(d.obras || []).length ? ' · ' + (d.obras || []).map(o => esc(ob(o))).join(', ') : ''}</div></div><div class="row">${chips(d)}</div></div>`;
   const hora = new Date().getHours() * 60 + new Date().getMinutes(), [he, me] = (x.ajustes.hora_entrada || '08:00').split(':').map(Number);
@@ -332,7 +353,7 @@ function vHoy() {
     <div class="kpis"><div class="kpi"><b>${adentro.length}</b><span>Trabajando ahora</span></div><div class="kpi"><b>${salieron.length}</b><span>Ya se fueron</span></div>
       <div class="kpi"><b>${tarde.length}</b><span>Llegaron tarde (después de las ${esc(x.ajustes.hora_entrada)} + ${x.ajustes.tolerancia_min} min)</span></div>
       <div class="kpi"><b>${aus.length}</b><span>${yaEmpezo ? 'No vinieron' : 'Todavía no marcaron'}</span></div></div>
-    ${s.nRevisar ? `<div class="warnbox small">Hay ${s.nRevisar} marcación${s.nRevisar === 1 ? '' : 'es'} para revisar (sin señal, fuera de la obra o del reloj sin PIN). <button class="linkbtn" data-act="asVista" data-k="revisar">Revisar</button></div>` : ''}
+    ${s.nRevisar ? `<div class="warnbox small">Hay ${s.nRevisar} marcación${s.nRevisar === 1 ? '' : 'es'} para autorizar o revisar (fuera de las ubicaciones permitidas, sin señal o del reloj sin PIN). <button class="linkbtn" data-act="asVista" data-k="revisar">Ver</button></div>` : ''}
     <div class="cols"><section class="card"><h2>Trabajando ahora (${adentro.length})</h2>${adentro.length ? `<div>${adentro.map(d => fila(d, `Entró a las <b>${fHora(d.entrada)}</b>${d.ultima && d.ultima !== d.entrada ? ` · volvió a las ${fHora(d.ultima)}` : ''}`)).join('')}</div>` : '<p class="muted">Nadie marcó entrada todavía.</p>'}</section>
       <section class="card"><h2>${yaEmpezo ? 'No vinieron' : 'Todavía no marcaron'} (${aus.length})</h2>${aus.length ? `<div>${aus.map(q => `<div class="att" style="grid-template-columns:1fr auto"><div><div class="t">${esc(nom(q.miembro_id))} <span class="small muted">${esc(leg(q.miembro_id))}</span></div></div>
           <button class="btn sm ghost" data-act="asManual" data-id="${q.miembro_id}">Cargar a mano</button></div>`).join('')}</div>` : '<p class="muted">Vinieron todos.</p>'}
@@ -354,7 +375,7 @@ function vPeriodo() {
   const det = r => `<tr class="det"><td colspan="9"><div class="tabla"><table><thead><tr><th>Día</th><th>Entrada</th><th>Salida</th><th class="n">Horas</th><th class="n">Normales</th><th class="n">50 %</th><th class="n">100 %</th><th></th></tr></thead><tbody>
       ${r.fechas.map(d => d.ausente ? `<tr><td>${diaSem(d.fecha)} ${ddmm(d.fecha)}</td><td colspan="6"><span class="chip bad">Ausente</span></td><td class="no-print"><button class="btn sm ghost" data-act="asManual" data-id="${r.id}" data-f="${d.fecha}">Cargar a mano</button></td></tr>`
         : `<tr><td>${diaSem(d.fecha)} ${ddmm(d.fecha)}</td><td>${d.entrada ? fHora(d.entrada) : '—'}</td><td>${d.salida ? fHora(d.salida) : d.adentro ? 'trabajando' : '—'}</td><td class="n">${fH(d.horas)}</td><td class="n">${fH(d.normales)}</td><td class="n">${fH(d.al50)}</td><td class="n">${fH(d.al100)}</td>
-          <td>${d.tarde ? '<span class="chip warn">Tarde</span>' : ''}${d.incompleta ? '<span class="chip bad">Falta una marca</span>' : ''}${d.sin_verificar ? '<span class="chip warn">Revisar</span>' : ''} <button class="btn sm ghost no-print" data-act="asVerDia" data-id="${r.id}" data-f="${d.fecha}">Marcas</button></td></tr>`).join('')}</tbody></table></div>
+          <td>${d.tarde ? '<span class="chip warn">Tarde</span>' : ''}${d.pendiente ? '<span class="chip bad">Pendiente</span>' : ''}${d.incompleta ? '<span class="chip bad">Falta una marca</span>' : ''}${d.sin_verificar && !d.pendiente ? '<span class="chip warn">Revisar</span>' : ''} <button class="btn sm ghost no-print" data-act="asVerDia" data-id="${r.id}" data-f="${d.fecha}">Marcas</button></td></tr>`).join('')}</tbody></table></div>
       ${s.dia && s.dia.id === r.id ? vMarcasDia() : ''}</td></tr>`;
   const filas = ps.map(r => { const dq = normal(`${r.nombre} ${r.legajo || ''}`), ab = p.abierto === r.id;
     return `<tr data-q="${esc(dq)}" ${q && !dq.includes(q) ? 'hidden' : ''}><td data-l="Persona"><button class="linkbtn" data-act="asAbrir" data-id="${r.id}"><b>${esc(r.nombre)}</b></button> <span class="small muted">${esc(r.legajo || '')} · ${esc(ROL_TXT[r.rol] || r.rol)}</span></td>
@@ -393,14 +414,22 @@ function vManual() {
 function vRevisar() {
   const s = AS();
   if (!s.rev) { una('rev', cargarRevisar); return '<p class="muted">Cargando…</p>'; }
-  return `<section class="card"><h2>Marcaciones para revisar (${s.rev.length})</h2>
-    <p class="small muted">Las que se marcaron sin señal (vale la hora del teléfono), fuera de la obra, o en el reloj sin poder comprobar el PIN. Mirá la foto: si está bien, confirmala; si no, anulala con el motivo. Hasta que la revises, la hora cuenta igual en el período.</p>
-    ${s.rev.length ? `<div class="rev-grid">${s.rev.map(m => `<div class="rev">${m.foto_path && s.fotos[m.foto_path] ? `<a href="${s.fotos[m.foto_path]}" target="_blank" rel="noopener"><img src="${s.fotos[m.foto_path]}" alt="Foto de ${esc(m.persona && m.persona.nombre)}" loading="lazy"></a>` : '<div class="rev-sin">Sin foto</div>'}
-        <div><b>${esc(m.persona ? m.persona.nombre : '—')}</b> <span class="small muted">${esc(m.persona && m.persona.legajo || '')}</span>
-          <div class="small">${m.tipo === 'entrada' ? 'Entrada' : 'Salida'} · ${fFecha(m.cuando)} ${fHora(m.cuando)} h${m.obra ? ' · ' + esc(m.obra.nombre) : ''}</div>
-          <div class="small muted">${esc(m.observacion || '')}${m.lat != null ? ` · <a href="https://www.google.com/maps?q=${m.lat},${m.lng}" target="_blank" rel="noopener">ver en el mapa</a>` : ''}</div>
-          <div class="row">${s.anular && s.anular.id === m.id ? `<input class="inp" id="as-anu" data-asa="motivo" value="${esc(s.anular.motivo)}" placeholder="Motivo de la anulación" style="flex:1 1 160px"><button class="btn sm" data-act="asAnularCancelar">Cancelar</button><button class="btn sm primary" data-act="asAnularOk">Anular</button>`
-            : `<button class="btn sm primary" data-act="asValidar" data-id="${m.id}">Está bien</button><button class="btn sm ghost" data-act="asAnular" data-id="${m.id}">Anular</button>`}</div></div></div>`).join('')}</div>` : '<div class="empty">No hay nada para revisar.</div>'}</section>`;
+  const pend = s.rev.filter(m => m.autorizacion === 'pendiente'), otras = s.rev.filter(m => m.autorizacion !== 'pendiente');
+  const tarjeta = m => { const propia = m.miembro_id === S.m.id, esP = m.autorizacion === 'pendiente';
+    return `<div class="rev">${m.foto_path && s.fotos[m.foto_path] ? `<a href="${s.fotos[m.foto_path]}" target="_blank" rel="noopener"><img src="${s.fotos[m.foto_path]}" alt="Foto de ${esc(m.persona && m.persona.nombre)}" loading="lazy"></a>` : '<div class="rev-sin">Sin foto</div>'}
+      <div><b>${esc(m.persona ? m.persona.nombre : '—')}</b> <span class="small muted">${esc(m.persona && m.persona.legajo || '')}</span>
+        <div class="small">${m.tipo === 'entrada' ? 'Entrada' : 'Salida'} · ${fFecha(m.cuando)} ${fHora(m.cuando)} h${m.obra ? ' · ' + esc(m.obra.nombre) : ''}</div>
+        <div class="small muted">${esc(m.observacion || '')}${m.lat != null ? ` · <a href="https://www.google.com/maps?q=${m.lat},${m.lng}" target="_blank" rel="noopener">ver en el mapa</a>` : ''}</div>
+        ${m.nota ? `<div class="small">“${esc(m.nota)}”</div>` : ''}
+        <div class="row">${s.anular && s.anular.id === m.id ? `<input class="inp" id="as-anu" data-asa="motivo" value="${esc(s.anular.motivo)}" placeholder="Motivo" style="flex:1 1 160px"><button class="btn sm" data-act="asAnularCancelar">Cancelar</button><button class="btn sm primary" data-act="asAnularOk">${esP ? 'Rechazar' : 'Anular'}</button>`
+          : propia ? '<span class="small muted">Es tuya: la tiene que autorizar otra persona.</span>'
+          : `<button class="btn sm primary" data-act="asValidar" data-id="${m.id}">${esP ? 'Autorizar' : 'Está bien'}</button><button class="btn sm ghost" data-act="asAnular" data-id="${m.id}">${esP ? 'Rechazar' : 'Anular'}</button>`}</div></div></div>`; };
+  return `<section class="card"><h2>Pendientes de autorización (${pend.length})</h2>
+    <p class="small muted">Marcadas desde el celular fuera de las ubicaciones permitidas o sin ubicación. <b>No suman horas</b> hasta que las autorice el dueño, administración o un supervisor (nunca quien marcó). Si la rechazás, la persona lo ve con el motivo.</p>
+    ${pend.length ? `<div class="rev-grid">${pend.map(tarjeta).join('')}</div>` : '<div class="empty">No hay marcaciones pendientes.</div>'}</section>
+    <section class="card"><h2>Para revisar (${otras.length})</h2>
+    <p class="small muted">Marcadas sin señal (vale la hora del teléfono) o en el reloj sin poder comprobar el PIN. Estas sí cuentan mientras tanto: mirá la foto y confirmala, o anulala con el motivo.</p>
+    ${otras.length ? `<div class="rev-grid">${otras.map(tarjeta).join('')}</div>` : '<div class="empty">No hay nada para revisar.</div>'}</section>`;
 }
 
 function vAjustes() {
@@ -430,8 +459,19 @@ function vAjustes() {
       ${adm ? `<div class="row"><input class="inp" type="date" id="fer-f" data-fer="fecha" value="${esc(s.aj.nuevoFer.fecha)}" style="width:170px"><input class="inp" id="fer-n" data-fer="nombre" value="${esc(s.aj.nuevoFer.nombre)}" placeholder="Nombre del feriado" style="flex:1 1 160px"><button class="btn sm dark" data-act="asFerAgregar">Agregar</button></div>
         <div class="row"><button class="btn sm ghost" data-act="asFerFijos" data-y="${y}">Feriados fijos de ${y}</button><button class="btn sm ghost" data-act="asFerFijos" data-y="${y + 1}">Feriados fijos de ${y + 1}</button></div>
         <p class="small muted">Carga los nacionales de fecha fija. Carnaval, Semana Santa y los trasladables cambian cada año: agregalos a mano.</p>` : ''}</section>
-    <div class="stack"><section class="card"><h2>Obras: ubicación y QR</h2><p class="small muted">Con la ubicación, Operapto avisa si alguien marca desde el celular lejos de la obra. El cartel QR se imprime y se pega en el obrador: quien lo escanea marca en esa obra.</p>
-      <div>${obras || '<p class="muted">No hay obras activas.</p>'}</div></section>
+    <div class="stack"><section class="card"><h2>Ubicaciones permitidas para marcar</h2><p class="small muted">Se puede marcar en cada obra (dentro de su radio) y en los otros lugares de abajo. Lo que se marque desde el celular fuera de estas ubicaciones, o sin GPS, queda <b>pendiente de autorización</b> del dueño o un supervisor y no suma horas hasta entonces.${a.d.obras.some(o => o.activa && o.lat == null) ? ' <b>Las obras sin ubicación no se controlan</b> (salvo por los otros lugares).' : ''}</p>
+      <h3>Obras</h3><div>${obras || '<p class="muted">No hay obras activas.</p>'}</div>
+      <h3>Otros lugares permitidos</h3><p class="small muted">Taller, depósito, oficina, otro frente de obra… Si lo asociás a una obra, vale solo para quien marca en esa obra.</p>
+      <div>${s.aj.lugares.map(l => `<div class="att" style="grid-template-columns:1fr auto"><div><div class="t">${esc(l.nombre)}${l.activo ? '' : ' <span class="chip">Desactivado</span>'}</div>
+        <div class="s">Radio ${l.radio_m} m${l.obra_id ? ' · solo para ' + esc((a.d.obras.find(o => o.id === l.obra_id) || {}).nombre || 'una obra') : ' · para cualquier obra'} · <a href="https://www.google.com/maps?q=${l.lat},${l.lng}" target="_blank" rel="noopener">ver</a></div></div>
+        <div class="row"><button class="btn sm ghost" data-act="asLugarActivo" data-id="${l.id}">${l.activo ? 'Desactivar' : 'Activar'}</button><button class="btn sm ghost" data-act="asLugarBorrar" data-id="${l.id}">${a.confirm === 'lu' + l.id ? 'Tocá de nuevo para borrar' : 'Borrar'}</button></div></div>`).join('') || '<p class="muted small">Sin otros lugares.</p>'}</div>
+      ${s.lugar ? `<div class="form-grid"><label class="f">Nombre<input class="inp" id="lu-nom" data-lu="nombre" value="${esc(s.lugar.nombre)}" placeholder="Ej.: Taller central" maxlength="80"></label>
+          <label class="f">Latitud<input class="inp num" id="lu-lat" data-lu="lat" value="${esc(s.lugar.lat)}"></label><label class="f">Longitud<input class="inp num" id="lu-lng" data-lu="lng" value="${esc(s.lugar.lng)}"></label>
+          <label class="f">Radio (m)<input class="inp num" type="number" id="lu-rad" data-lu="radio" value="${esc(s.lugar.radio)}"></label>
+          <label class="f">Vale para<select class="inp" id="lu-obra" data-lu="obra"><option value="">Cualquier obra</option>${a.d.obras.filter(o => o.activa).map(o => `<option value="${o.id}" ${s.lugar.obra === o.id ? 'selected' : ''}>Solo ${esc(o.nombre)}</option>`).join('')}</select></label></div>
+        <div class="row"><button class="btn sm ghost" data-act="asLugarAqui">Estoy en el lugar</button><button class="btn sm" data-act="asLugarCancelar">Cancelar</button><button class="btn sm primary" data-act="asLugarOk">Guardar</button></div>`
+      : '<div class="row"><button class="btn sm dark" data-act="asLugarNuevo">Agregar un lugar permitido</button></div>'}
+      <p class="small muted">El cartel QR se imprime y se pega en el obrador: quien lo escanea marca en esa obra.</p></section>
       <section class="card"><h2>Relojes del obrador (${relojes.length})</h2><p class="small muted">Un teléfono o tablet que queda fijo en el obrador: cada persona marca con su legajo y su PIN, y el reloj le saca una foto. Sirve para quien no tiene celular.</p>
         ${relojes.map(m => `<div class="att" style="grid-template-columns:1fr auto"><div><div class="t">${esc(m.nombre)}</div><div class="s">Entra con ${esc(S.m.empresa.slug)} · legajo ${esc(m.legajo || '')}</div></div>${m.activo ? '<span class="chip ok">Activo</span>' : '<span class="chip">Inactivo</span>'}</div>`).join('')}
         <ol class="small"><li>En <button class="linkbtn" data-act="admTab" data-k="personal">Personal y obras</button>, dá de alta a una persona con el rol <b>Reloj del obrador</b> (por ejemplo, legajo RELOJ1).</li><li>En el teléfono del obrador, abrí Operapto y entrá como operario con ese legajo y PIN.</li><li>Elegí la obra y dejalo cargando, a la vista.</li></ol></section></div></div>`;
@@ -474,7 +514,7 @@ async function libroExcel() {
   hoja('Detalle por día', 'Detalle por día', [{ t: 'Fecha', w: 11, f: 'dd/mm/yyyy' }, { t: 'Día', w: 6 }, { t: 'Legajo', w: 10 }, { t: 'Nombre', w: 26 }, { t: 'Entrada', w: 8, f: 'hh:mm' }, { t: 'Salida', w: 8, f: 'hh:mm' },
     { t: 'Horas', w: 9, n: 1, f: H }, { t: 'Normales', w: 9, n: 1, f: H }, { t: 'Al 50 %', w: 9, n: 1, f: H }, { t: 'Al 100 %', w: 9, n: 1, f: H }, { t: 'Observaciones', w: 34 }, { t: 'Obras', w: 28 }],
     x.dias.map(d => [fechaXl(d.fecha), diaSem(d.fecha), nom(d.miembro_id).legajo || '', nom(d.miembro_id).nombre || '', xl(d.entrada), xl(d.salida), +d.horas, +d.normales, +d.al50, +d.al100,
-      [d.tarde && 'Llegó tarde', d.incompleta && 'Falta una marca', d.adentro && 'Sigue trabajando', d.sin_verificar && 'Marca a revisar', d.fuera && 'Marcó fuera de la obra'].filter(Boolean).join(' · '), (d.obras || []).map(ob).join(', ')]));
+      [d.tarde && 'Llegó tarde', d.incompleta && 'Falta una marca', d.adentro && 'Sigue trabajando', d.pendiente && 'Marca pendiente de autorización (no suma horas)', d.sin_verificar && !d.pendiente && 'Marca a revisar', d.fuera && 'Marcó fuera de la obra'].filter(Boolean).join(' · '), (d.obras || []).map(ob).join(', ')]));
   hoja('Ausencias', 'Ausencias', [{ t: 'Fecha', w: 11, f: 'dd/mm/yyyy' }, { t: 'Día', w: 6 }, { t: 'Legajo', w: 10 }, { t: 'Nombre', w: 28 }],
     x.ausencias.map(a => [fechaXl(a.fecha), diaSem(a.fecha), nom(a.miembro_id).legajo || '', nom(a.miembro_id).nombre || '']));
   const buf = await wb.xlsx.writeBuffer();
@@ -528,12 +568,13 @@ export const A = {
     const s = AS(), x = s.anular; if (x.motivo.trim().length < 3) return toast('Escribí el motivo.');
     const { error } = await sb.rpc('anular_marcacion', { p_id: x.id, p_motivo: x.motivo.trim() });
     if (error) return toast(err(error));
-    toast('Marcación anulada.'); s.anular = null; s.rev = null; s.per.datos = null; s.dia = null; cargarAsistencia();
+    toast((s.rev || []).some(m => m.id === x.id && m.autorizacion === 'pendiente') ? 'Marcación rechazada.' : 'Marcación anulada.'); s.anular = null; s.rev = null; s.per.datos = null; s.dia = null; cargarAsistencia();
   },
   asValidar: async b => {
     const { error } = await sb.rpc('validar_marcacion', { p_id: b.dataset.id });
     if (error) return toast(err(error));
-    const s = AS(); s.rev = s.rev.filter(m => m.id !== b.dataset.id); s.nRevisar = s.rev.length; render();
+    const s = AS(), m = s.rev.find(x => x.id === b.dataset.id); s.rev = s.rev.filter(x => x.id !== b.dataset.id); s.nRevisar = s.rev.length; s.per.datos = null; s.hoy = null;
+    toast(m && m.autorizacion === 'pendiente' ? 'Marcación autorizada: ya suma horas.' : 'Marcación confirmada.'); render();
   },
   asAjGuardar: async () => {
     const s = AS(), v = s.aj.v; s.aj.err = '';
@@ -582,6 +623,27 @@ export const A = {
     if (AS().aj && !AS().aj.conQr.includes(b.dataset.id)) AS().aj.conQr.push(b.dataset.id);
   },
   asCartelCerrar: () => { AS().cartel = null; render(); },
+  asIrAutorizar: () => { const a = P(), s = AS(); a.tab = 'asistencia'; s.vista = 'revisar'; s.rev = null; render(); cargarAsistencia(); },
+  asLugarNuevo: () => { AS().lugar = { nombre: '', lat: '', lng: '', radio: '150', obra: '' }; render(); },
+  asLugarCancelar: () => { AS().lugar = null; render(); },
+  asLugarAqui: () => {
+    if (!navigator.geolocation) return toast('Este dispositivo no da la ubicación.');
+    toast('Buscando tu ubicación…');
+    navigator.geolocation.getCurrentPosition(p => { const u = AS().lugar; if (!u) return; u.lat = p.coords.latitude.toFixed(6); u.lng = p.coords.longitude.toFixed(6); render(); toast(`Ubicación tomada (±${Math.round(p.coords.accuracy)} m).`); },
+      () => toast('No se pudo tomar la ubicación.'), { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  },
+  asLugarOk: async () => {
+    const u = AS().lugar, lat = +u.lat, lng = +u.lng, radio = Math.round(+u.radio);
+    if (u.nombre.trim().length < 2) return toast('Escribí el nombre del lugar.');
+    if (u.lat === '' || u.lng === '' || !(lat >= -90 && lat <= 90) || !(lng >= -180 && lng <= 180)) return toast('Cargá la ubicación (o tocá "Estoy en el lugar").');
+    if (!(radio >= 30 && radio <= 5000)) return toast('El radio va de 30 a 5000 metros.');
+    const { error } = await sb.from('lugares_marcacion').insert({ empresa_id: E(), nombre: u.nombre.trim(), lat, lng, radio_m: radio, obra_id: u.obra || null });
+    if (error) return toast(err(error));
+    AS().lugar = null; toast('Lugar permitido agregado.'); cargarAjustes();
+  },
+  asLugarActivo: async b => { const l = AS().aj.lugares.find(x => x.id === b.dataset.id); const { error } = await sb.from('lugares_marcacion').update({ activo: !l.activo }).eq('id', l.id); if (error) return toast(err(error)); cargarAjustes(); },
+  asLugarBorrar: async b => { const a = P(); if (a.confirm !== 'lu' + b.dataset.id) { a.confirm = 'lu' + b.dataset.id; return render(); } a.confirm = null;
+    const { error } = await sb.from('lugares_marcacion').delete().eq('id', b.dataset.id); if (error) return toast(err(error)); cargarAjustes(); },
   asRenovarQr: async b => {
     const a = P(); if (a.confirm !== 'qr' + b.dataset.id) { a.confirm = 'qr' + b.dataset.id; return render(); }
     a.confirm = null;
@@ -592,7 +654,7 @@ export const A = {
 };
 
 export function alEscribir(el, v) {
-  if (el.dataset.tj && S.tj && S.tj.flujo) { S.tj.flujo[el.dataset.tj] = v; return true; }
+  if (el.dataset.tj && S.tj && S.tj.flujo) { S.tj.flujo[el.dataset.tj] = v; if (el.dataset.tj === 'obraId') { el.blur(); render(); } return true; }
   if (el.dataset.rl && S.rl) { S.rl[el.dataset.rl] = v; return true; }
   const a = P(); if (!a || !a.as) return false;
   const s = a.as;
@@ -604,6 +666,7 @@ export function alEscribir(el, v) {
   if (el.dataset.aj && s.aj) { s.aj.v[el.dataset.aj] = v; return true; }
   if (el.dataset.fer && s.aj) { s.aj.nuevoFer[el.dataset.fer] = v; return true; }
   if (el.dataset.ub && s.ubic) { s.ubic[el.dataset.ub] = v; return true; }
+  if (el.dataset.lu && s.lugar) { s.lugar[el.dataset.lu] = v; return true; }
   return false;
 }
 
