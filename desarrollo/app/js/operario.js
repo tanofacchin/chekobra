@@ -6,6 +6,7 @@ import { estadoDoc, nombreDoc } from './mantenimiento.js';
 import { S, render } from './estado.js';
 import { sync } from './main.js';
 import { botonVoz } from './voz.js';
+import * as Va from './vales.js';
 
 const STEPS = ['Equipo y obra', 'Ubicación', 'Foto con el equipo', 'Checklist', 'Firma y envío'];
 const O = () => S.op;
@@ -13,11 +14,12 @@ const O = () => S.op;
 export function reiniciar() {
   S.op = { d: null, cargando: false, err: '', flow: null, resultado: null, cierre: null, detalle: null, confirm: null, cola: [] };
 }
-export const clave = () => { const o = O(); return o ? [o.flow && o.flow.step, !!o.resultado, !!o.cierre, !!o.carga, o.detalle].join(',') : ''; };
+export const clave = () => { const o = O(); return o ? [o.flow && o.flow.step, !!o.resultado, !!o.cierre, !!o.carga, o.detalle, S.va && S.va.ver, !!(S.va && S.va.form)].join(',') : ''; };
 
 export async function cargar() {
   const o = O(); if (!o || o.cargando) return;
   o.cargando = true;
+  Va.cargarVales();
   try { o.d = await cargarOperario(S.m.empresa_id, S.m.id); o.err = ''; }
   catch (e) { o.err = msgError(e); }
   o.cola = await cola.listar().catch(() => []);
@@ -155,6 +157,7 @@ function chipRes(r) { const [t, c] = RES[r] || ['—', '']; return `<span class=
 export function vista() {
   const o = O();
   if (!o.d) return `<main class="wrap">${o.err ? `<div class="badbox">${esc(o.err)}</div><button class="btn" data-act="opRecargar">Reintentar</button>` : '<p class="muted">Cargando equipos…</p>'}</main>`;
+  if (Va.abierto()) return Va.vVer() || Va.vPedir(misEquipos());
   if (o.flow) return vFlow();
   if (o.resultado) return vResultado();
   if (o.cierre) return vCierre();
@@ -194,7 +197,7 @@ function vInicio() {
   const docsHtml = mios.map(({ x, st }) => `<div class="${st.clave === 'vencido' ? 'badbox' : 'warnbox'}"><b>${esc(nombreDoc(x))}:</b> ${esc(st.texto.toLowerCase())}.${st.clave === 'vencido' && x.bloquea ? ' No podés iniciar jornada hasta renovarla; avisale al supervisor.' : ' Avisale al supervisor para renovarla.'}</div>`).join('');
   return `<main class="wrap"><section><p class="eyebrow">${esc(fechaLarga())}</p><h1>Hola, ${esc(S.m.nombre.split(' ')[0])}</h1></section>${docsHtml}
     ${d.offline ? `<div class="warnbox">Sin conexión: estás viendo los datos guardados el ${fFecha(d.actualizado)} a las ${fHora(d.actualizado)}.</div>` : ''}
-    ${rechHtml}${main}<button class="btn block" data-act="opCarga">Registrar carga de combustible</button><h2>Tus últimas jornadas</h2>${lista}</main>`;
+    ${rechHtml}${main}<button class="btn block" data-act="opCarga">Registrar carga de combustible</button>${Va.vOperario()}<h2>Tus últimas jornadas</h2>${lista}</main>`;
 }
 
 /* ------------------------------------------------------------ flujo */
@@ -424,6 +427,9 @@ function vCarga() {
   return `<main class="wrap"><section><p class="eyebrow">Combustible</p><h1>Registrar carga</h1></section>
     <label class="f">Equipo<select class="inp" id="cg-eq" data-cg="equipoId" data-vivo><option value="">Elegí el equipo</option>
       ${d.equipos.map(x => `<option value="${x.id}" ${x.id === c.equipoId ? 'selected' : ''}>${esc(x.codigo)} · ${esc(x.nombre)}</option>`).join('')}</select></label>
+    ${(() => { if (!e) return ''; const vs = Va.valesDe(e.id);
+      if (!vs.length) return Va.exigeVale() ? '<div class="warnbox small">No tenés un vale para este equipo. Podés registrar la carga igual, pero queda <b>observada</b> hasta que la revise el supervisor. <button class="linkbtn" data-act="vaPedir">Pedir vale</button></div>' : '';
+      return `<label class="f">Vale<select class="inp" id="cg-vale" data-cg="vale" data-vivo><option value="">Sin vale</option>${vs.map(v => `<option value="${v.id}" ${c.vale === v.id ? 'selected' : ''}>Vale ${v.numero} · ${esc(v.codigo)} · hasta ${fNum(v.litros_max)} L</option>`).join('')}</select></label>`; })()}
     <div class="form-grid"><label class="f">Litros cargados<input class="inp num" id="cg-l" type="number" inputmode="decimal" step="0.1" data-cg="litros" value="${esc(c.litros)}"></label>
       <label class="f">${e && e.medidor === 'km' ? 'Odómetro (km)' : 'Horómetro (h)'}<input class="inp num" id="cg-m" type="number" inputmode="decimal" step="0.1" data-cg="medidor" value="${esc(c.medidor)}">
         ${e && e.ultimo_medidor != null ? `<small>Último registrado: <span class="num">${fNum(e.ultimo_medidor)} ${u}</span></small>` : ''}</label></div>
@@ -452,7 +458,7 @@ async function guardarCarga() {
   const payload = { client_id: id, equipo_id: e.id, obra_id: ab && ab.equipo_id === e.id ? ab.obra_id : null, cargado_en: new Date().toISOString(),
     litros: +c.litros, medidor: c.medidor === '' ? null : +c.medidor, tanque_lleno: !!c.lleno, origen: c.origen,
     proveedor: c.proveedor || null, precio_litro: c.precio === '' ? null : +c.precio, foto_path: archivos.length ? archivos[0].path : null, notas: c.notas || null,
-    tanque_id: ['surtidor_propio', 'cisterna'].includes(c.origen) && c.tanque ? c.tanque : null };
+    tanque_id: ['surtidor_propio', 'cisterna'].includes(c.origen) && c.tanque ? c.tanque : null, vale_id: c.vale || null };
   await cola.agregar({ id, tipo: 'carga', uid: S.user.id, empresa_id: S.m.empresa_id, payload, archivos });
   if (c.fotoUrl) URL.revokeObjectURL(c.fotoUrl);
   o.carga = null; o.cola = await cola.listar().catch(() => o.cola);
@@ -571,9 +577,11 @@ async function cerrar() {
 
 export const A = {
   opRecargar: () => cargar(),
+  vaCargar: b => { const v = (S.va.lista || []).find(x => x.id === b.dataset.id); S.va.ver = null; A.opCarga(); const c = O().carga, e = eqById(v.equipo_id);
+    if (e) { c.equipoId = e.id; c.medidor = e.ultimo_medidor != null ? e.ultimo_medidor : ''; } c.vale = v.id; if (v.origen) c.origen = v.origen; if (v.proveedor) c.proveedor = v.proveedor; render(); },
   opCarga: () => { const ab = jornadaAbierta(), e = ab && eqById(ab.equipo_id), tqs = O().d.tanques || [];
     const tq = tqs.length === 1 ? tqs[0].id : (tqs.find(t => ab && t.obra_id === ab.obra_id) || {}).id || '';
-    O().carga = { equipoId: e ? e.id : '', litros: '', medidor: e && e.ultimo_medidor != null ? e.ultimo_medidor : '', lleno: true, origen: 'surtidor_propio', tanque: tq, proveedor: '', precio: '', notas: '', foto: null, err: '' }; render(); },
+    O().carga = { equipoId: e ? e.id : '', litros: '', medidor: e && e.ultimo_medidor != null ? e.ultimo_medidor : '', lleno: true, origen: 'surtidor_propio', tanque: tq, proveedor: '', precio: '', notas: '', foto: null, err: '', vale: e && Va.valesDe(e.id)[0] ? Va.valesDe(e.id)[0].id : '' }; render(); },
   opCargaCancelar: () => { const c = O().carga; if (c && c.fotoUrl) URL.revokeObjectURL(c.fotoUrl); O().carga = null; render(); },
   opCargaGuardar: () => guardarCarga(),
   opEscanear: () => abrirEscaner(),
@@ -618,7 +626,7 @@ export function alEscribir(el, v) {
   if (el.dataset.ci && o.cierre) { o.cierre[el.dataset.ci] = v; if (el.dataset.ci === 'falla') render(); return true; }
   if (el.dataset.cg && o.carga) {
     o.carga[el.dataset.cg] = v;
-    if (el.dataset.cg === 'equipoId') { const e = eqById(v); o.carga.medidor = e && e.ultimo_medidor != null ? e.ultimo_medidor : ''; render(); }
+    if (el.dataset.cg === 'equipoId') { const e = eqById(v); o.carga.medidor = e && e.ultimo_medidor != null ? e.ultimo_medidor : ''; const vs = Va.valesDe(v); o.carga.vale = vs.length ? vs[0].id : ''; render(); }
     if (el.dataset.cg === 'origen') render();
     return true;
   }

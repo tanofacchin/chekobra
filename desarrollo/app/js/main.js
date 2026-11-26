@@ -10,6 +10,7 @@ import { dictar } from './voz.js';
 import * as Seg from './seguridad.js';
 import * as Imp from './importar.js';
 import * as Tj from './tarjetero.js';
+import * as Va from './vales.js';
 
 const MARK = (n = 26) => `<svg width="${n}" height="${n}" viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="5" fill="var(--accent)"/><path d="M7 13.5l4 4 8-9" fill="none" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
@@ -149,7 +150,7 @@ async function entrar(m) {
   S.m = m; ls.set('co_membresia', m.id); S.modoOperario = false;
   Op.reiniciar(); Adm.reiniciar(); Tal.reiniciar();
   // Consentimiento de privacidad (Ley 25.326): sin aceptarlo no se puede usar la app.
-  S.tj = null; S.rl = null;
+  S.tj = null; S.rl = null; S.va = null;
   if (m.rol !== 'reloj' && await privacidadPendiente(m.empresa_id, m.id)) { S.vista = 'privacidad'; S.priv = {}; render(); return; }
   S.vista = 'app';
   // Vuelta desde John Deere después de autorizar (?jd=ok | ?jd=error&msg=...)
@@ -192,6 +193,8 @@ async function sync() {
   const r = await sincronizar(sb, ev => {
     if (ev.tipo === 'enviado' && ev.envio.tipo === 'checklist') Op.alEnviar(ev);
     if (ev.tipo === 'enviado' && ev.envio.tipo === 'marca' && Tj.alEnviar(ev)) avisado = true;
+    if (ev.tipo === 'enviado' && ev.envio.tipo === 'carga' && ev.respuesta && ev.respuesta.control === 'observada') { avisado = true; toast('Carga registrada. Queda observada para que la revise el supervisor: ' + ev.respuesta.alertas.map(x => x.t).join(' · '), 9000); }
+    if (ev.tipo === 'enviado' && ev.envio.tipo === 'carga' && S.va) Va.cargarVales();
     if (ev.tipo === 'rechazado') { toast('Un registro fue rechazado: ' + ev.envio.error, 7000); if (ev.envio.tipo === 'checklist') Op.alRechazar(ev); }
   }).catch(() => null);
   const l = await cola.listar().catch(() => []);
@@ -293,7 +296,7 @@ const FORMS = {
 
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
-  const f = A[b.dataset.act] || Op.A[b.dataset.act] || Adm.A[b.dataset.act] || Tal.A[b.dataset.act] || Tj.A[b.dataset.act];
+  const f = A[b.dataset.act] || Op.A[b.dataset.act] || Adm.A[b.dataset.act] || Tal.A[b.dataset.act] || Tj.A[b.dataset.act] || Va.A[b.dataset.act];
   if (f) { e.preventDefault(); f(b, e); }
 });
 document.addEventListener('submit', e => {
@@ -305,7 +308,7 @@ document.addEventListener('input', e => {
   else if (el.dataset.priv) S.priv.ok = v;
   else if (el.dataset.o) S.onb[el.dataset.o] = v;
   else if (Seg.alEscribir(el, v)) { /* código del segundo factor */ }
-  else (Tj.alEscribir(el, v) || Tal.alEscribir(el, v) || Op.alEscribir(el, v) || Adm.alEscribir(el, v));
+  else (Va.alEscribir(el, v) || Tj.alEscribir(el, v) || Tal.alEscribir(el, v) || Op.alEscribir(el, v) || Adm.alEscribir(el, v));
 });
 document.addEventListener('change', e => { if (e.target.dataset.file === 'importar') Imp.alArchivo(e.target); else if (e.target.dataset.file === 'marca') Tj.alArchivo(e.target); else if (e.target.dataset.file === 'ot') Tal.alArchivo(e.target); else if (e.target.dataset.file) Op.alArchivo(e.target); });
 

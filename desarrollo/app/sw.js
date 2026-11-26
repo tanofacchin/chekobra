@@ -1,8 +1,8 @@
 // Service worker: guarda la app en el teléfono para que abra sin señal.
 // Los datos (Supabase) nunca se cachean acá: la app maneja su propia copia y su bandeja de salida.
-const VERSION = 'operapto-v24';
+const VERSION = 'operapto-v25';
 const ARCHIVOS = ['./', 'index.html', 'manifest.webmanifest', 'css/app.css', 'vendor/supabase-2.118.0.js',
-  'js/main.js', 'js/estado.js', 'js/util.js', 'js/datos.js', 'js/cola.js', 'js/operario.js', 'js/admin.js', 'js/config.js', 'js/politica.js', 'js/editor.js', 'js/etiquetas.js', 'js/mantenimiento.js', 'js/indicadores.js', 'js/reportes.js', 'js/excel.js', 'js/combustible.js', 'js/taller.js', 'js/costos.js', 'js/mapa.js', 'js/resumen.js', 'js/voz.js', 'js/seguridad.js', 'js/auditoria.js', 'js/caterpillar.js', 'js/deposito.js', 'js/importar.js', 'js/tarjetero.js', 'vendor/simplewebauthn-browser-13.2.2.js',
+  'js/main.js', 'js/estado.js', 'js/util.js', 'js/datos.js', 'js/cola.js', 'js/operario.js', 'js/admin.js', 'js/config.js', 'js/politica.js', 'js/editor.js', 'js/etiquetas.js', 'js/mantenimiento.js', 'js/indicadores.js', 'js/reportes.js', 'js/excel.js', 'js/combustible.js', 'js/taller.js', 'js/costos.js', 'js/mapa.js', 'js/resumen.js', 'js/voz.js', 'js/seguridad.js', 'js/auditoria.js', 'js/caterpillar.js', 'js/deposito.js', 'js/importar.js', 'js/tarjetero.js', 'js/vales.js', 'vendor/simplewebauthn-browser-13.2.2.js',
   'vendor/qrcode-generator-1.4.4.js', 'vendor/jsqr-1.4.0.js', 'privacidad.html',
   'icons/icono.svg', 'icons/icono-192.png', 'icons/icono-512.png'];
 

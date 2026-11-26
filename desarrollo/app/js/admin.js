@@ -41,7 +41,7 @@ export async function cargar() {
   try {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
     const desde30 = new Date(); desde30.setDate(desde30.getDate() - 29);
-    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg, tq, ar, cp, lf, mp] = await Promise.all([
+    const [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg, tq, ar, cp, lf, mp, co2, vp] = await Promise.all([
       sb.from('equipos').select('*').eq('empresa_id', E()).order('codigo'),
       sb.from('miembros').select('id, nombre, legajo, rol, activo, user_id, intentos_fallidos, bloqueado_en, recibir_avisos').eq('empresa_id', E()).order('nombre'),
       sb.from('obras').select('*').eq('empresa_id', E()).order('nombre'),
@@ -65,12 +65,14 @@ export async function cargar() {
       esAdmin() ? sb.from('costos_personal').select('miembro_id, costo_hora').eq('empresa_id', E()) : Promise.resolve({ data: [] }),
       sb.rpc('lecturas_diferentes', { p_empresa: E(), p_dias: 7 }),
       sb.from('marcaciones').select('id', { count: 'exact', head: true }).eq('empresa_id', E()).eq('autorizacion', 'pendiente').is('anulada_en', null),
+      sb.from('cargas_combustible').select('id', { count: 'exact', head: true }).eq('empresa_id', E()).eq('control', 'observada'),
+      sb.from('vales_combustible').select('id', { count: 'exact', head: true }).eq('empresa_id', E()).eq('estado', 'pedido'),
     ]);
     for (const r of [eq, mi, ob, pl, fa, ab, jh, tc, tu, ta, co, no, sv, dc, cb, ot, fr, asg]) if (r.error) throw r.error;
     a.d = { equipos: eq.data, miembros: mi.data, obras: ob.data, plantillas: vigentes(pl.data, E()), fallas: fa.data, abiertas: ab.data, hoy: jh.data,
       jd: tc.data.find(c => c.proveedor === 'john_deere') || null, cat: tc.data.find(c => c.proveedor === 'caterpillar') || null, tele: Object.fromEntries(tu.data.map(l => [l.equipo_id, l])), alertasTele: ta.data,
       consent: Object.fromEntries(co.data.map(c => [c.miembro_id, c.aceptado_en])), avisos: no.data, services: sv.data, docs: dc.data, combustible: cb.data, ordenes: ot.data, repetidas: fr.data, asig: asg.data, tanques: tq.error ? [] : tq.data, articulos: ar.error ? [] : ar.data,
-      costoPersonal: Object.fromEntries((cp.data || []).map(x => [x.miembro_id, x.costo_hora])), lecturas: lf.error ? [] : lf.data, marcasPendientes: mp.count || 0 };
+      costoPersonal: Object.fromEntries((cp.data || []).map(x => [x.miembro_id, x.costo_hora])), lecturas: lf.error ? [] : lf.data, marcasPendientes: mp.count || 0, cargasObservadas: co2.count || 0, valesPedidos: vp.count || 0 };
     if (a.tab === 'mantenimiento' && !a.mt) Mt.cargarMant();
     if (a.tab === 'indicadores' && !(a.ind && a.ind.datos)) Ind.cargarIndicadores();
     if (a.tab === 'combustible' && !(a.cb && a.cb.datos)) Cb.cargarCombustible();
@@ -179,6 +181,8 @@ function vResumen() {
   d.alertasTele.forEach(x => { const e = d.equipos.find(q => q.id === x.equipo_id); att.push([x.tipo === 'sin_checklist' ? 'bad' : 'warn', `${TIT[x.tipo]} · ${e ? e.codigo : ''}`, `${x.detalle} · ${fFecha(x.fecha + 'T12:00:00')} · dato de telemetría`, x.jornada_id ? `<button class="btn sm" data-act="admVer" data-id="${x.jornada_id}">Ver</button>` : '']); });
   Tal.alertasTaller(d.ordenes).forEach(x => att.push(x));
   d.repetidas.forEach(r => att.push(['warn', `Falla repetida · ${r.codigo}`, `${r.texto} · ${textoRepetida(r)}`, `<button class="btn sm" data-act="equipoFicha" data-id="${r.equipo_id}">Historial</button>`]));
+  if (d.cargasObservadas) att.push(['warn', `${d.cargasObservadas} carga${d.cargasObservadas === 1 ? '' : 's'} de combustible observada${d.cargasObservadas === 1 ? '' : 's'}`, 'No pasaron los controles (vale, cupo, consumo, precio). Aprobalas o marcalas como irregulares.', '<button class="btn sm" data-act="vaIrPanel">Revisar</button>']);
+  if (d.valesPedidos) att.push(['warn', `${d.valesPedidos} pedido${d.valesPedidos === 1 ? '' : 's'} de vale de combustible`, 'Pasan el cupo o el equipo ya tiene otro vale abierto.', '<button class="btn sm" data-act="vaIrPanel">Ver</button>']);
   if (d.marcasPendientes) att.push(['bad', `${d.marcasPendientes} marcación${d.marcasPendientes === 1 ? '' : 'es'} fuera de las ubicaciones permitidas`, 'No suman horas hasta que las autorice el dueño o un supervisor.', '<button class="btn sm" data-act="asIrAutorizar">Autorizar</button>']);
   if (d.sug2fa) att.push(['warn', 'Tu cuenta no tiene verificación en dos pasos', 'Recomendada para quien administra la empresa: con la huella, una app del celular o un código por correo.', `<button class="btn sm" data-act="admTab" data-k="personal">Activar</button>`]);
   alertasFlota().forEach(x => att.push(x));

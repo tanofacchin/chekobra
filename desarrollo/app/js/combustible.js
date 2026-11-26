@@ -3,6 +3,7 @@
 import { esc, fFecha, fHora, fNum, unidad, dayKey, uuid, toast, msgError } from './util.js';
 import { sb } from './datos.js';
 import { S, render, esAdmin } from './estado.js';
+import * as Va from './vales.js';
 
 const T = () => S.adm;
 const E = () => S.m.empresa_id;
@@ -23,7 +24,7 @@ export async function cargarCombustible() {
   const hasta = new Date(new Date(f.hasta + 'T00:00:00').getTime() + 864e5).toISOString();
   const [cons, cargas, stock, movs, emp] = await Promise.all([
     sb.rpc('consumo_combustible', { p_empresa: E(), p_desde: f.desde, p_hasta: f.hasta }),
-    sb.from('cargas_combustible').select('*, equipo:equipos(codigo, nombre, medidor), quien:miembros(nombre), obra:obras(nombre), tanque:tanques(nombre)').eq('empresa_id', E())
+    sb.from('cargas_combustible').select('*, equipo:equipos(codigo, nombre, medidor), quien:miembros!cargas_combustible_miembro_id_fkey(nombre), obra:obras(nombre), tanque:tanques(nombre)').eq('empresa_id', E())
       .gte('cargado_en', new Date(f.desde + 'T00:00:00').toISOString()).lt('cargado_en', hasta).order('cargado_en', { ascending: false }).limit(1000),
     sb.rpc('stock_tanques', { p_empresa: E() }),
     sb.from('movimientos_tanque').select('*, quien:miembros(nombre)').eq('empresa_id', E()).order('fecha', { ascending: false }).limit(300),
@@ -64,7 +65,18 @@ export function alertasTanques(ts) {
 }
 
 /* ------------------------------------------------------------ vista */
+// Pestañas internas: cargas y consumo · vales y controles · cupos y ajustes.
+function subnav() {
+  const a = T(), k = a.cbSub || 'cargas', n = Va.pendientesPanel();
+  return `<nav class="tabs sub no-print">${[['cargas', 'Cargas y consumo'], ['vales', `Vales y controles${n ? ` (${n})` : ''}`], ['cupos', 'Cupos y ajustes']]
+    .map(([v, l]) => `<button class="tab ${k === v ? 'on' : ''}" data-act="cbSub" data-k="${v}">${l}</button>`).join('')}</nav>`;
+}
 export function vCombustible() {
+  const a = T();
+  if (a.cbSub && a.cbSub !== 'cargas') return subnav() + Va.vPanel(a.cbSub);
+  return subnav() + vCargasConsumo();
+}
+function vCargasConsumo() {
   const a = T(), f = filtro(), x = f.datos, d = a.d;
   const opt = (v, l, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
   const filtros = `<section class="card"><div class="filters cb-filtros">
@@ -172,7 +184,7 @@ function vConsumo(x) {
 function vCargas(cargas, x) {
   const a = T(), max = a.cbMas ? cargas.length : 50;
   return `<section class="card"><h2>Cargas (${cargas.length})</h2>${cargas.length ? `<div class="tabla tabla-cel"><table><thead><tr><th>Fecha</th><th>Equipo</th><th>Obra</th><th>Cargó</th><th class="n">Litros</th><th class="n">Medidor</th><th>De dónde</th><th class="n">$/L</th><th>Foto</th></tr></thead><tbody>
-      ${cargas.slice(0, max).map(c => { const { p, est } = precioDe(c, x); return `<tr><td data-l="Fecha">${fFecha(c.cargado_en)} ${fHora(c.cargado_en)}</td><td data-l="Equipo"><b>${esc(c.equipo.codigo)}</b></td><td data-l="Obra">${esc(c.obra ? c.obra.nombre : '—')}</td><td data-l="Cargó">${esc(c.quien ? c.quien.nombre : '—')}</td>
+      ${cargas.slice(0, max).map(c => { const { p, est } = precioDe(c, x); return `<tr><td data-l="Fecha">${fFecha(c.cargado_en)} ${fHora(c.cargado_en)}</td><td data-l="Equipo"><b>${esc(c.equipo.codigo)}</b>${c.control !== 'ok' ? ` <span class="chip ${c.control === 'rechazada' ? 'bad' : c.control === 'observada' ? 'warn' : 'ok'}" title="${esc((c.alertas || []).map(x => x.t).join(' · '))}">${{ observada: 'Observada', aprobada: 'Aprobada', rechazada: 'Irregular' }[c.control]}</span>` : ''}</td><td data-l="Obra">${esc(c.obra ? c.obra.nombre : '—')}</td><td data-l="Cargó">${esc(c.quien ? c.quien.nombre : '—')}</td>
         <td class="n" data-l="Litros">${fNum(c.litros)}${c.tanque_lleno ? '' : ' <span class="small muted">(parcial)</span>'}</td><td class="n" data-l="Medidor">${c.medidor != null ? fNum(c.medidor) + ' ' + unidad(c.equipo.medidor) : '—'}</td>
         <td data-l="De dónde">${esc(c.tanque ? c.tanque.nombre : ORIGEN[c.origen])}${c.proveedor ? ' · ' + esc(c.proveedor) : ''}</td>
         <td class="n" data-l="$/L">${p == null ? '<span class="muted">sin precio</span>' : est ? `<span class="muted" title="Precio estimado">~${fNum(p)}</span>` : fNum(p)}</td><td data-l="Foto">${x.urls[c.foto_path] ? `<a href="${x.urls[c.foto_path]}" target="_blank" rel="noopener">Ver</a>` : '—'}</td></tr>`; }).join('')}</tbody></table></div>
@@ -219,6 +231,7 @@ async function insertarMov(m) {
   return error;
 }
 export const A = {
+  cbSub: b => { const a = T(); a.cbSub = b.dataset.k; if (a.va) a.va.vales = null; render(); },
   cbNueva: () => { const tqs = (filtro().datos && filtro().datos.tanques || []).filter(t => t.activo); T().cbMovForm = null;
     T().cbNueva = { equipo_id: '', cuando: ahoraLocal(), litros: '', medidor: '', origen: 'surtidor_propio', tanque: tqs.length === 1 ? tqs[0].id : '', obra: '', precio: '', lleno: true, err: '' }; render(); scrollTo(0, 0); },
   cbNuevaCancelar: () => { T().cbNueva = null; render(); },

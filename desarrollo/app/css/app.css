@@ -533,3 +533,16 @@ button.tl-it{cursor:pointer}button.tl-it:hover .t{text-decoration:underline}
   .cartel-qr{width:150mm}
   .rev-grid{grid-template-columns:1fr 1fr}
 }
+
+/* ---- vales de combustible ---- */
+.vale-li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.vale-li:last-child{border-bottom:0}
+.vale-li .chip{margin-top:4px}
+.vale-ver{align-items:center;text-align:center}
+.vale-cod{font-size:clamp(2.6rem,14vw,4rem);font-weight:800;letter-spacing:.18em;background:var(--accent);color:var(--accent-ink);border-radius:14px;padding:8px 18px}
+.vale-qr{width:min(70vw,240px);background:#fff;padding:8px;border-radius:12px}
+.vale-qr svg{width:100%;height:auto;display:block}
+.vale-ver .kv{text-align:left}
+.alertas-carga{margin:6px 0;padding-left:18px;font-size:.9rem}
+.alertas-carga li{margin:2px 0}
+.nivel.cupo{display:block;width:100%;max-width:120px;margin-left:auto}

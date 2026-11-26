@@ -27,7 +27,7 @@ export async function jornadasParaExcel(f) {
 }
 
 export async function cargasParaExcel(f) {
-  let q = sb.from('cargas_combustible').select('*, equipo:equipos(id, codigo, nombre, medidor), quien:miembros(nombre), obra:obras(nombre)')
+  let q = sb.from('cargas_combustible').select('*, equipo:equipos(id, codigo, nombre, medidor), quien:miembros!cargas_combustible_miembro_id_fkey(nombre), obra:obras(nombre)')
     .eq('empresa_id', S.m.empresa_id).order('cargado_en', { ascending: true }).limit(5000);
   if (f.desde) q = q.gte('cargado_en', new Date(f.desde + 'T00:00:00').toISOString());
   if (f.hasta) q = q.lt('cargado_en', new Date(new Date(f.hasta + 'T00:00:00').getTime() + 864e5).toISOString());

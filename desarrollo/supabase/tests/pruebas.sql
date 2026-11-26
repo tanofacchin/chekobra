@@ -1084,4 +1084,57 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
 select pg_temp.esperar_error(format($$insert into public.lugares_marcacion (empresa_id, nombre, lat, lng) values (%L, 'Mi casa', -31, -64)$$, (select v from ctx where k = 'A')), 'row-level security');
 reset role;
 
+-- ===== Combustible: vales, cupos y controles automáticos
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+insert into public.equipos (empresa_id, codigo, nombre, plantilla_clave, ultimo_medidor, capacidad_tanque, consumo_referencia, cupo_dia_l)
+  select v, 'CB-01', 'Cargadora de prueba', 'excavadora', 1000, 300, 20, 250 from ctx where k = 'A' returning id \gset cb_
+reset role;
+update public.empresas set precio_gasoil = 1000 where id = (select v from ctx where k = 'A');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a3';
+-- pedido dentro del cupo y sin otro vale abierto: se aprueba solo; el segundo queda pedido
+select public.pedir_vale(jsonb_build_object('equipo_id', :'cb_id', 'litros', 200, 'origen', 'estacion', 'motivo', 'Arranque de la semana')) as v1 \gset
+select pg_temp.afirmar(r->>'estado' = 'emitido' and (r->>'aprobado_solo')::boolean and r->>'codigo' ~ '^[A-HJ-NP-Z2-9]{6}$', 'vale aprobado solo ' || r::text) from (select :'v1'::jsonb as r) x;
+select public.pedir_vale(jsonb_build_object('equipo_id', :'cb_id', 'litros', 100))->>'id' as v2 \gset
+select pg_temp.afirmar((select estado from public.vales_combustible where id = :'v2') = 'pedido', 'con otro vale abierto queda pedido');
+select pg_temp.esperar_error(format($$select public.aprobar_vale(%L)$$, :'v2'), 'No tenés permiso');
+select pg_temp.esperar_error(format($$insert into public.vales_combustible (empresa_id, numero, codigo, equipo_id, litros_max) values (%L, 99, 'ABCDEF', %L, 10)$$, (select v from ctx where k = 'A'), :'cb_id'), 'permission denied');
+-- carga con el vale: sin alertas y el vale queda usado
+select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', :'cb_id', 'litros', 200, 'medidor', 1010, 'origen', 'estacion',
+  'vale_codigo', (:'v1'::jsonb)->>'codigo', 'cargado_en', greatest(public.inicio_periodo('day'), now() - interval '3 hours'))) as c1 \gset
+select pg_temp.afirmar(r->>'control' = 'ok', 'carga con vale ' || r::text) from (select :'c1'::jsonb as r) x;
+select pg_temp.afirmar((select estado = 'usado' and carga_id is not null from public.vales_combustible where id = ((:'v1'::jsonb)->>'id')::uuid), 'vale usado');
+-- otra carga enseguida, con el mismo vale, sin trabajar casi nada y a precio alto: observada con varias alertas
+select public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', :'cb_id', 'litros', 100, 'medidor', 1012, 'origen', 'estacion',
+  'vale_codigo', (:'v1'::jsonb)->>'codigo', 'precio_litro', 1300, 'cargado_en', greatest(public.inicio_periodo('day') + interval '1 second', now() - interval '2 hours'))) as c2 \gset
+select pg_temp.afirmar(r->>'control' = 'observada' and (select array_agg(a->>'k' order by a->>'k') from jsonb_array_elements(r->'alertas') a) @> array['consumo_alto', 'cupo_dia', 'precio_alto', 'vale_usado'], 'controles ' || r::text) from (select :'c2'::jsonb as r) x;
+-- el operario no controla cargas
+select pg_temp.esperar_error(format($$select public.controlar_carga(%L, true)$$, (:'c2'::jsonb)->>'carga_id'), 'No tenés permiso');
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a6';
+select public.aprobar_vale(:'v2', 80);
+select pg_temp.afirmar((select estado = 'emitido' and litros_max = 80 and vence_en > now() from public.vales_combustible where id = :'v2'), 'supervisora aprueba el pedido');
+select pg_temp.esperar_error(format($$select public.controlar_carga(%L, false, '')$$, (:'c2'::jsonb)->>'carga_id'), 'motivo');
+select public.controlar_carga(((:'c2'::jsonb)->>'carga_id')::uuid, false, 'Se investiga: no coincide con las horas');
+select pg_temp.afirmar((select control = 'rechazada' from public.cargas_combustible where id = ((:'c2'::jsonb)->>'carga_id')::uuid), 'carga rechazada');
+-- exigir vale: la carga de la supervisora sin vale queda observada y no la puede aprobar ella misma
+insert into public.ajustes_combustible (empresa_id, exigir_vale) select v, true from ctx where k = 'A';
+select (public.registrar_carga(jsonb_build_object('client_id', gen_random_uuid(), 'equipo_id', :'cb_id', 'litros', 30, 'origen', 'surtidor_propio')))->>'carga_id' as c3 \gset
+select pg_temp.afirmar((select control = 'observada' and alertas @> '[{"k":"sin_vale"}]' from public.cargas_combustible where id = :'c3'), 'sin vale queda observada');
+select pg_temp.esperar_error(format($$select public.controlar_carga(%L, true)$$, :'c3'), 'propia carga');
+reset role;
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
+select public.controlar_carga(:'c3', true, 'Carga de emergencia');
+select pg_temp.esperar_error(format($$select public.anular_vale(%L, '')$$, :'v2'), 'motivo');
+select public.anular_vale(:'v2', 'Ya no hace falta');
+reset role;
+select pg_temp.afirmar((select count(*) from public.auditoria where accion in ('aprobar_vale', 'rechazar_carga', 'aprobar_carga', 'anular_vale')) = 4, 'auditoría de vales y controles');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000b1';
+do $$ begin if exists (select 1 from public.vales_combustible) or exists (select 1 from public.ajustes_combustible) then raise exception 'FALLÓ: B ve vales de A'; end if; end $$;
+reset role;
+
 \echo TODAS LAS PRUEBAS PASARON
