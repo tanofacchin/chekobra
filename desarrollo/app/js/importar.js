@@ -12,7 +12,8 @@ const ROLES = { operario: 'operario', operaria: 'operario', mecanico: 'mecanico'
 const ROL_TXT = { operario: 'Operario', mecanico: 'Mecánico', supervisor: 'Supervisor', personal: 'Personal de obra' };
 const COLS = {
   Equipos: [{ t: 'Código', w: 12 }, { t: 'Nombre (marca y modelo)', w: 32 }, { t: 'Tipo de checklist', w: 28 }, { t: 'Horómetro u odómetro actual', w: 16, n: 1 },
-    { t: 'N.º de serie / PIN', w: 22 }, { t: 'Patente', w: 12 }, { t: 'Tarifa por hora ($)', w: 14, n: 1 }, { t: 'Tarifa por día ($)', w: 14, n: 1 }],
+    { t: 'N.º de serie / PIN', w: 22 }, { t: 'Patente', w: 12 }, { t: 'Tarifa por hora ($)', w: 14, n: 1 }, { t: 'Tarifa por día ($)', w: 14, n: 1 },
+    { t: 'Capacidad del tanque (L)', w: 14, n: 1 }, { t: 'Consumo de referencia (L/h o L/100 km)', w: 18, n: 1 }, { t: 'Cupo de combustible por día (L)', w: 16, n: 1 }, { t: 'Cupo de combustible por mes (L)', w: 16, n: 1 }],
   Personal: [{ t: 'Nombre y apellido', w: 30 }, { t: 'Legajo', w: 12 }, { t: 'Rol', w: 14 }, { t: 'PIN (6 números, opcional)', w: 18 }],
   Obras: [{ t: 'Nombre de la obra', w: 40 }, { t: 'Presupuesto mensual ($, opcional)', w: 22, n: 1 }],
 };
@@ -25,22 +26,23 @@ async function modelo() {
   [['Planilla para cargar datos en Operapto'], [''], ['1. Completá las hojas Equipos, Personal y Obras (podés dejar vacía la que no uses).'],
     ['2. No cambies los títulos de la primera fila.'], ['3. "Tipo de checklist": elegilo de la lista (son las plantillas disponibles).'],
     ['4. Rol: Operario, Mecánico, Supervisor o Personal de obra (solo marca entrada y salida). Si no ponés PIN, Operapto genera uno y te lo muestra al importar.'],
-    ['5. Subí el archivo en Operapto: Personal y obras → Importar desde Excel. Antes de cargar, te muestra qué está bien y qué hay que corregir.']]
+    ['5. Equipos: la capacidad del tanque, el consumo de referencia y los cupos son opcionales, pero sin ellos no se controlan los vales ni el consumo de combustible.'],
+    ['6. Subí el archivo en Operapto: Personal y obras → Importar desde Excel. Antes de cargar, te muestra qué está bien y qué hay que corregir.']]
     .forEach((r, i) => { ay.getRow(i + 1).values = r; });
   ay.getCell('A1').font = { bold: true, size: 14 }; ay.getColumn(1).width = 110;
   const lst = wb.addWorksheet('Listas', { state: 'hidden' });
   pls.forEach((p, i) => { lst.getCell(`A${i + 1}`).value = p.nombre; });
-  ['Operario', 'Mecánico', 'Supervisor'].forEach((r, i) => { lst.getCell(`B${i + 1}`).value = r; });
+  ['Operario', 'Mecánico', 'Supervisor', 'Personal de obra'].forEach((r, i) => { lst.getCell(`B${i + 1}`).value = r; });
   for (const [hoja, cols] of Object.entries(COLS)) {
     const ws = wb.addWorksheet(hoja, { views: [{ state: 'frozen', ySplit: 1 }] });
     encabezadoExcel(ws, 1, cols);
     for (let r = 2; r <= 300; r++) {
       if (hoja === 'Equipos') ws.getCell(`C${r}`).dataValidation = { type: 'list', allowBlank: true, formulae: [`Listas!$A$1:$A$${pls.length}`] };
-      if (hoja === 'Personal') { ws.getCell(`C${r}`).dataValidation = { type: 'list', allowBlank: true, formulae: ['Listas!$B$1:$B$3'] }; ws.getCell(`D${r}`).numFmt = '@'; ws.getCell(`B${r}`).numFmt = '@'; }
+      if (hoja === 'Personal') { ws.getCell(`C${r}`).dataValidation = { type: 'list', allowBlank: true, formulae: ['Listas!$B$1:$B$4'] }; ws.getCell(`D${r}`).numFmt = '@'; ws.getCell(`B${r}`).numFmt = '@'; }
     }
   }
   // Ejemplos en la hoja de instrucciones (no en las de datos: se importarían si alguien se olvida de borrarlos).
-  [[''], ['Ejemplos de cómo queda cada fila:'], ['Equipos:  EX-01 | Excavadora John Deere 210G | ' + (pls.find(p => p.clave === 'excavadora') || pls[0]).nombre + ' | 4800 | 1FF210GXAKF123456 | | 38000 |'],
+  [[''], ['Ejemplos de cómo queda cada fila:'], ['Equipos:  EX-01 | Excavadora John Deere 210G | ' + (pls.find(p => p.clave === 'excavadora') || pls[0]).nombre + ' | 4800 | 1FF210GXAKF123456 | | 38000 | | 400 | 18 | 250 | 4000'],
     ['Personal: Juan Pérez | 101 | Operario | (vacío: se genera el PIN)'], ['Obras:    Ruta 5 - Tramo Norte | 5000000']].forEach(r => ay.addRow(r));
   const buf = await wb.xlsx.writeBuffer();
   return new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -62,8 +64,8 @@ async function leer(file) {
   const pls = Object.values(d.plantillas), plDe = t => { const q = normal(t); return pls.find(p => normal(p.nombre) === q || p.clave === q); };
   const codigos = new Set(d.equipos.map(e => e.codigo)), legajos = new Set(d.miembros.map(m => (m.legajo || '').toLowerCase())), obras = new Set(d.obras.map(o => normal(o.nombre)));
   const vistos = { cod: new Set(), leg: new Set(), obra: new Set() };
-  const equipos = filas(hoja('Equipos'), 8).map(({ fila, v }) => {
-    const r = { fila, codigo: texto(v[0]).toUpperCase().replace(/\s+/g, '-'), nombre: texto(v[1]), tipo: texto(v[2]), med: numero(v[3]), serie: texto(v[4]), patente: texto(v[5]).toUpperCase(), th: numero(v[6]), td: numero(v[7]), err: [] };
+  const equipos = filas(hoja('Equipos'), 12).map(({ fila, v }) => {
+    const r = { fila, codigo: texto(v[0]).toUpperCase().replace(/\s+/g, '-'), nombre: texto(v[1]), tipo: texto(v[2]), med: numero(v[3]), serie: texto(v[4]), patente: texto(v[5]).toUpperCase(), th: numero(v[6]), td: numero(v[7]), cap: numero(v[8]), cons: numero(v[9]), cupoDia: numero(v[10]), cupoMes: numero(v[11]), err: [] };
     const pl = plDe(r.tipo); r.plantilla = pl;
     if (!/^[A-Z0-9-]{2,16}$/.test(r.codigo)) r.err.push('código inválido (letras, números o guiones)');
     else if (codigos.has(r.codigo)) r.err.push('ya existe un equipo con ese código');
@@ -72,6 +74,7 @@ async function leer(file) {
     if (r.nombre.length < 2) r.err.push('falta el nombre');
     if (!pl) r.err.push(r.tipo ? `no hay un checklist "${r.tipo}"` : 'falta el tipo de checklist');
     for (const [k, l] of [['med', 'horómetro u odómetro'], ['th', 'tarifa por hora'], ['td', 'tarifa por día']]) if (Number.isNaN(r[k]) || r[k] < 0) r.err.push(`${l} no es un número`);
+    for (const [k, l] of [['cap', 'capacidad del tanque'], ['cons', 'consumo de referencia'], ['cupoDia', 'cupo por día'], ['cupoMes', 'cupo por mes']]) if (Number.isNaN(r[k]) || r[k] === 0 || r[k] < 0) r.err.push(`${l}: tiene que ser un número mayor a cero (o vacío)`);
     return r;
   });
   const personal = filas(hoja('Personal'), 4).map(({ fila, v }) => {
@@ -113,7 +116,8 @@ async function importar() {
   const eq = x.equipos.filter(r => !r.err.length);
   if (eq.length) {
     const { error } = await sb.from('equipos').insert(eq.map(r => ({ empresa_id: E(), codigo: r.codigo, nombre: r.nombre, plantilla_clave: r.plantilla.clave, medidor: r.plantilla.medidor,
-      ultimo_medidor: r.med, serie: r.serie || null, patente: r.patente || null, tarifa_hora: r.plantilla.medidor === 'km' ? null : r.th, tarifa_dia: r.td })));
+      ultimo_medidor: r.med, serie: r.serie || null, patente: r.patente || null, tarifa_hora: r.plantilla.medidor === 'km' ? null : r.th, tarifa_dia: r.td,
+      capacidad_tanque: r.cap, consumo_referencia: r.cons, cupo_dia_l: r.cupoDia, cupo_mes_l: r.cupoMes })));
     if (error) res.errores.push('Equipos: ' + msgError(error)); else res.equipos = eq.length;
   }
   const pe = x.personal.filter(r => !r.err.length);
